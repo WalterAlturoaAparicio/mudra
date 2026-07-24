@@ -1,0 +1,26 @@
+installed:
+  - speckit-clarify
+  - speckit-plan
+  - speckit-tasks
+  - speckit-analyze
+settings:
+  auto_execute_hooks: true
+hooks:
+  after_specify:
+    - extension: speckit-clarify
+      command: speckit.clarify.run
+      enabled: true
+      optional: false
+      description: "Trigger clarifying validation pass"
+  after_plan:
+    - extension: speckit-tasks
+      command: speckit.tasks.run
+      enabled: true
+      optional: false
+      description: "Generate and extract development tasks"
+  after_tasks:
+    - extension: speckit-analyze
+      command: speckit.analyze.run
+      enabled: true
+      optional: false
+      description: "Analyze updated structural architecture"

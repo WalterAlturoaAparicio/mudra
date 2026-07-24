@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Mudra data artifacts (recorded landmark samples — never committed by default)
+datasets/poses/*/
+datasets/sequences/*/
+recordings/*/
+!**/.gitkeep
+
+# ML model assets (auto-downloaded on first run by resolve_model_path)
+assets/*.task
+
+# Environment / secrets
+.env
+.env.*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/
+.idea/

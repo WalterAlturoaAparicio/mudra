@@ -1,0 +1,65 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mudra"
+version = "0.1.0"
+description = "AI-powered hand gesture recognition engine (computer vision)."
+readme = "README.md"
+requires-python = ">=3.14"
+license = { text = "MIT" }
+authors = [{ name = "Mudra contributors" }]
+keywords = ["hand-tracking", "gesture-recognition", "mediapipe", "computer-vision"]
+
+# Phase 1 (live camera) runtime dependencies ONLY.
+# scipy / pandas / matplotlib are intentionally excluded until the phase that
+# first needs them (dataset analysis, plotting, model training) — see the
+# project constitution (v1.1.0), "Dependency footprint".
+dependencies = [
+    "mediapipe",
+    "opencv-python",
+    "numpy",
+    "pydantic>=2",
+    "rich",
+    "typer",
+    "loguru",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "ruff",
+]
+
+[project.scripts]
+# `mudra` and `mudra run` resolve to the same Typer app as `python -m app.main`.
+mudra = "app.main:app"
+
+[project.urls]
+Homepage = "https://github.com/mudra/mudra"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+src = ["app", "tests"]
+
+[tool.ruff.lint]
+# Sensible, non-fussy default set: pycodestyle errors/warnings, pyflakes,
+# isort, pyupgrade, bugbear, and pydocstyle (Google convention).
+select = ["E", "W", "F", "I", "UP", "B", "D"]
+ignore = ["D203", "D213"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D"]
+"**/__init__.py" = ["D104"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

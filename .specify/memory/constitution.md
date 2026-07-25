@@ -1,22 +1,22 @@
 <!--
 SYNC IMPACT REPORT
 ==================
-Version change: 1.0.0 → 1.1.0
-Rationale: Architectural refinements adopted before Phase-1 implementation:
-(a) dataset redesigned from one-JSON-per-pose to append-only sample collections
-under per-identity directories; (b) poses gain a stable `pose_id` identity that
-datasets/recognition/gameplay reference instead of display names; (c) CLI
-formalized as a multi-command app with a `mudra run` == `python -m app.main`
-callback. MINOR: materially expanded/redefined guidance + persisted-schema change,
-no principle removed.
+Version change: 1.1.0 → 1.2.0
+Rationale: Mudra becomes a multi-application monorepo. The Python engine is no
+longer the only application: `apps/capture` (Flutter/Android) collects pose
+datasets on mobile. MINOR — a new mandatory section plus materially expanded
+technology guidance; all six principles are retained unchanged in intent, with
+Principle II clarified to bind every application in the repository.
 
-Modified in this amendment (1.1.0):
-  - Principle III — pose identity now anchored on `pose_id` (display_name/aliases
-    are mutable labels).
-  - Technology & Code Quality Standards — persistence layout (collection-based,
-    append-only samples), CLI command surface, and Phase-1 dependency footprint.
+Modified in this amendment (1.2.0):
+  - Principle II — explicitly binds every application in the monorepo, including
+    mobile capture; reference images are UI guidance assets, never dataset content.
+  - Technology & Code Quality Standards — split into engine (Python) and capture
+    (Dart/Flutter) standards; layout rules scoped per application.
+  - NEW section: Monorepo & Cross-Application Boundaries — the versioned pose-sample
+    JSON schema is the ONLY contract between applications; no shared code coupling.
 
-Baseline (1.0.0) principle mapping:
+Baseline principle mapping (unchanged since 1.0.0):
   - I. Architecture-First & Modular Boundaries
   - II. Coordinates, Never Images
   - III. Extensibility by Design (Recognition-Ready)
@@ -25,14 +25,15 @@ Baseline (1.0.0) principle mapping:
   - VI. Scope Discipline (Milestone-Bounded YAGNI)
 
 Templates requiring updates:
-  - ✅ .specify/templates/plan-template.md — no edit required (gate derived at plan time).
+  - ✅ .specify/templates/plan-template.md — no edit required (Language/Testing/Project
+    Type are already language-agnostic placeholders; gate derived at plan time).
   - ✅ .specify/templates/spec-template.md — no mandatory-section conflict.
   - ✅ .specify/templates/tasks-template.md — no conflict.
   - ✅ .specify/templates/checklist-template.md — no conflict.
 
-Deferred / follow-up TODOs: none. README.md and docs/ do not yet exist; they
-MUST be authored to reflect these principles (tracked as project work, not a
-constitution placeholder).
+Deferred / follow-up TODOs:
+  - ⚠ README.md — add the monorepo layout (engine at root, apps/capture) when the
+    capture application lands; tracked as project work, not a constitution placeholder.
 -->
 
 # Mudra Constitution
@@ -70,9 +71,15 @@ MediaPipe provides it) together with metadata. All persisted artifacts (poses an
 MUST be human-readable JSON — no binary or opaque formats. Every hand carries exactly 21
 landmarks; handedness, confidence, and hand count are metadata, not pixel data.
 
+This principle binds **every application in the monorepo**, desktop and mobile alike. A
+capture application MAY display reference imagery to guide the user, but such images are UI
+guidance assets shipped with the app; they MUST NOT be written into, referenced by, or
+derived into any dataset artifact. Camera frames MUST leave memory as landmarks only.
+
 **Rationale**: Coordinate-only storage keeps datasets small, privacy-preserving, diffable,
 portable across models, and independent of camera resolution or lighting — the properties a
-reusable gesture library depends on.
+reusable gesture library depends on. A mobile app collecting data in the wild is exactly
+where the temptation to "just save the frame" appears, so the rule is stated there explicitly.
 
 ### III. Extensibility by Design (Recognition-Ready)
 
@@ -136,6 +143,11 @@ is stable.
 
 ## Technology & Code Quality Standards
 
+Standards below are grouped by application. Principles I–VI apply to all of them; only the
+concrete language, layout, and tooling differ.
+
+### Engine (Python, repository root)
+
 - **Language**: Python 3.14, using modern idioms (type parameter syntax, `match`, pathlib,
   `from __future__` not required at this version).
 - **Dependency footprint**: the project keeps its runtime footprint as small as possible.
@@ -152,7 +164,8 @@ is stable.
   `detection/`, `normalization/`, `recording/`, `recognition/`, `dataset/`, `models/`,
   `visualization/`, `ui/`, `utils/`, `config/`; plus `assets/`, `datasets/poses/`,
   `datasets/sequences/`, `recordings/`, `tests/`, `scripts/`, `docs/`. Deviations require an
-  amendment.
+  amendment. The engine remains at the repository root; sibling applications live under
+  `apps/`.
 - **CLI**: Mudra is a **multi-command** Typer application. The official command surface is
   `run`, `record-pose`, `record-sequence`, `dataset info`, `dataset validate`, `camera info`,
   and `doctor` (implemented incrementally; only `run` exists in Phase 1). A Typer callback
@@ -171,13 +184,59 @@ is stable.
   installation, running, folder structure, roadmap, contributing guidelines, and coding
   standards, and MUST stay consistent with this constitution.
 
+### Capture applications (Dart / Flutter, `apps/capture/`)
+
+- **Language & framework**: Dart with Flutter (latest stable channel). Android is the first
+  target; the architecture MUST keep platform-specific code behind interfaces so iOS can be
+  added without changing domain, application, or presentation layers.
+- **Clean architecture layers** are mandatory and dependencies point inward only:
+  `domain/` (entities, value objects, repository interfaces — no framework imports),
+  `application/` (use cases and state orchestration — no widgets, no plugins),
+  `infrastructure/` (camera, platform channels, filesystem, serialization — implements domain
+  interfaces), `presentation/` (widgets and screens only). Business logic inside widgets is
+  prohibited; a widget MAY read state and dispatch intent, nothing more. Feature-first
+  grouping within a layer is preferred once a layer holds more than one feature.
+- **Typed, immutable models**: every structured value is an immutable Dart class with typed
+  fields and value equality — never a raw `Map`. Public classes, methods, and top-level
+  functions carry doc comments. Magic numbers and duplicated logic are prohibited.
+- **Configuration**, including the pose catalog, MUST be data (asset/config files) loaded and
+  validated at runtime, never hardcoded into widgets — the Principle V rule, restated for
+  Flutter.
+- **Tests**: `flutter test` MUST cover the domain layer, the application/use-case layer, and
+  JSON serialization round-trips against the shared schema. Platform-channel and camera code
+  is isolated behind interfaces precisely so the rest stays testable without a device.
+- **Static analysis**: `flutter analyze` MUST be clean; analyzer rules live in
+  `analysis_options.yaml` and are part of the definition of done.
+
+## Monorepo & Cross-Application Boundaries
+
+Mudra is a monorepo containing multiple applications that share a data format, not a codebase.
+
+- **Layout**: the Python engine occupies the repository root (`app/`, `tests/`, `datasets/`);
+  every sibling application lives in its own directory under `apps/` (e.g. `apps/capture/`)
+  with its own toolchain, dependencies, tests, and README.
+- **The ONLY contract between applications is the versioned pose-sample JSON schema**
+  (`schema_version`, currently 1), documented in the owning feature's `contracts/`. An
+  application MUST NOT import, vendor, or reach into another application's source. Datasets
+  produced by any application MUST be consumable by the engine with zero manual processing.
+- **Schema changes are cross-application events**: altering the persisted schema is at minimum
+  a MINOR constitution event, MUST bump `schema_version` when incompatible, MUST preserve the
+  ability to read prior append-only samples, and MUST be reflected in every application that
+  reads or writes it before merge.
+- **No premature shared packages**: duplication of a small value object across applications is
+  preferred over a shared library introduced speculatively. A shared package is justified only
+  when the same logic has independently appeared in two applications and drifted.
+- **Application independence**: no application may depend on another being installed, running,
+  or reachable. Exchange happens through exported dataset artifacts on disk.
+
 ## Development Workflow & Scope Governance
 
 - **Phase gating**: work proceeds through the four foundation phases in order. A phase is
   "done" only when it is runnable, tested where Principle IV requires, and documented.
 - **Design review**: any change that introduces or alters a module boundary, an interface, or
   the persisted JSON schema MUST be reviewed against Principles I–III before merge, because
-  these are the hardest things to change later.
+  these are the hardest things to change later. Adding a new application to `apps/` is such a
+  change and requires the same review.
 - **Data-format changes are versioned**: the JSON schema for poses and sequences carries a
   schema version field; changing it is at minimum a MINOR event and MUST preserve the
   ability to read prior append-only samples.
@@ -207,4 +266,4 @@ against this document. Any justified deviation MUST be recorded in the plan's Co
 Tracking with the simpler alternative that was rejected and why. Unjustified complexity is
 grounds for rejection.
 
-**Version**: 1.1.0 | **Ratified**: 2026-07-24 | **Last Amended**: 2026-07-24
+**Version**: 1.2.0 | **Ratified**: 2026-07-24 | **Last Amended**: 2026-07-24

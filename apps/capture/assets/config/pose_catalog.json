@@ -1,0 +1,135 @@
+{
+  "catalog_version": 1,
+  "defaults": {
+    "target_sample_count": 500,
+    "required_hands": 1
+  },
+  "poses": [
+    {
+      "pose_id": "bird",
+      "display_name": "Bird",
+      "description": "Both hands together, fingers interlocked, index fingers and thumbs extended.",
+      "reference_image": "assets/poses/bird.png",
+      "required_hands": 2
+    },
+    {
+      "pose_id": "dog",
+      "display_name": "Dog",
+      "description": "Both hands stacked, one fist resting on the flat of the other hand.",
+      "reference_image": "assets/poses/dog.png",
+      "required_hands": 2
+    },
+    {
+      "pose_id": "domain_expansion",
+      "display_name": "Domain Expansion",
+      "description": "Both hands forming a wide circle in front of the chest.",
+      "reference_image": "assets/poses/domain_expansion.png",
+      "required_hands": 2
+    },
+    {
+      "pose_id": "dragon",
+      "display_name": "Dragon",
+      "description": "Both hands interlocked, index fingers extended upward.",
+      "reference_image": "assets/poses/dragon.png",
+      "required_hands": 2
+    },
+    {
+      "pose_id": "hare",
+      "display_name": "Hare",
+      "description": "Both hands joined, middle and ring fingers folded, index fingers raised.",
+      "reference_image": "assets/poses/hare.png",
+      "required_hands": 2
+    },
+    {
+      "pose_id": "hi",
+      "display_name": "Hi",
+      "description": "One open palm raised toward the camera, fingers together.",
+      "reference_image": "assets/poses/hi.png",
+      "required_hands": 1
+    },
+    {
+      "pose_id": "horse",
+      "display_name": "Horse",
+      "description": "Both hands together, fingertips meeting, palms slightly apart.",
+      "reference_image": "assets/poses/horse.png",
+      "required_hands": 2
+    },
+    {
+      "pose_id": "militar_hi",
+      "display_name": "Military Salute",
+      "description": "One hand flat at the brow, fingers together, palm angled down.",
+      "reference_image": "assets/poses/militar_hi.png",
+      "required_hands": 1
+    },
+    {
+      "pose_id": "monkey",
+      "display_name": "Monkey",
+      "description": "Both hands clasped, one thumb crossed over the other.",
+      "reference_image": "assets/poses/monkey.png",
+      "required_hands": 2
+    },
+    {
+      "pose_id": "ok",
+      "display_name": "OK",
+      "description": "One hand with thumb and index finger forming a circle, other fingers extended.",
+      "reference_image": "assets/poses/ok.png",
+      "required_hands": 1
+    },
+    {
+      "pose_id": "ox",
+      "display_name": "Ox",
+      "description": "Both hands joined with middle fingers extended and crossed.",
+      "reference_image": "assets/poses/ox.png",
+      "required_hands": 2
+    },
+    {
+      "pose_id": "peace",
+      "display_name": "Peace",
+      "description": "One hand with index and middle fingers extended in a V.",
+      "reference_image": "assets/poses/peace.png",
+      "required_hands": 1
+    },
+    {
+      "pose_id": "ram",
+      "display_name": "Ram",
+      "description": "Both hands joined, index and middle fingers of both hands extended together.",
+      "reference_image": "assets/poses/ram.png",
+      "required_hands": 2
+    },
+    {
+      "pose_id": "rat",
+      "display_name": "Rat",
+      "description": "Both hands joined with the little fingers interlocked.",
+      "reference_image": "assets/poses/rat.png",
+      "required_hands": 2
+    },
+    {
+      "pose_id": "snake",
+      "display_name": "Snake",
+      "description": "Both palms pressed flat together, fingers aligned.",
+      "reference_image": "assets/poses/snake.png",
+      "required_hands": 2
+    },
+    {
+      "pose_id": "tiger",
+      "display_name": "Tiger",
+      "description": "Both hands together, fingers interlocked, thumbs and index fingers raised.",
+      "reference_image": "assets/poses/tiger.png",
+      "required_hands": 2
+    },
+    {
+      "pose_id": "tp",
+      "display_name": "TP",
+      "description": "Both hands forming a T shape, one vertical against the other horizontal.",
+      "reference_image": "assets/poses/tp.png",
+      "required_hands": 2
+    },
+    {
+      "pose_id": "wild_boar",
+      "display_name": "Wild Boar",
+      "description": "Both hands joined, fingers curled inward, knuckles meeting.",
+      "reference_image": "assets/poses/wild_boar.png",
+      "required_hands": 2
+    }
+  ]
+}

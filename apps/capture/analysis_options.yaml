@@ -1,0 +1,33 @@
+# Static analysis for Mudra Capture.
+#
+# Constitution v1.2.0 (capture standards) makes a clean `flutter analyze` part of
+# the definition of done, so these rules are gates, not suggestions.
+
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  errors:
+    # A dropped Future in a capture session silently loses samples.
+    unawaited_futures: error
+  exclude:
+    - "**/*.g.dart"
+    - "**/*.freezed.dart"
+
+linter:
+  rules:
+    # Immutability and typed models (Principle IV).
+    - prefer_final_locals
+    - prefer_final_in_for_each
+    - avoid_dynamic_calls
+    - always_declare_return_types
+    - avoid_positional_boolean_parameters
+    - use_super_parameters
+
+    # Async correctness.
+    - unawaited_futures
+    - avoid_void_async
+
+    # Readability and consistency.
+    - directives_ordering
+    - sort_child_properties_last
+    - slash_for_doc_comments

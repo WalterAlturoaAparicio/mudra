@@ -185,10 +185,26 @@ Each sample is human-readable, indented JSON:
   (debugging and future analytics); it is `null` for samples captured without a countdown.
 - Full field-by-field reference: [`specs/002-pose-recorder/contracts/json-schema.md`](specs/002-pose-recorder/contracts/json-schema.md).
 
+## Monorepo
+
+Mudra is a monorepo of applications that share a **data format, not a codebase** (constitution
+v1.2.0, "Monorepo & Cross-Application Boundaries"):
+
+| Application | Location | Purpose |
+|---|---|---|
+| **Mudra Engine** | repository root (`app/`) | Python: live camera, detection, normalization, pose recording, and the dataset format itself |
+| **Mudra Capture** | [`apps/capture/`](apps/capture/) | Flutter/Android: collects hand-pose datasets in volume on a phone and exports them for the engine |
+
+The **only** contract between them is the pose-sample JSON schema (`schema_version` 1). Neither
+imports the other's code. A dataset exported by Capture unzips straight into `datasets/poses/`
+and the engine reads it with zero manual processing.
+
 ## Folder Structure
 
 ```
 mudra/
+├── apps/
+│   └── capture/        # Mudra Capture — Flutter/Android dataset collector
 ├── app/
 │   ├── camera/         # VideoSource interface + OpenCV capture
 │   ├── config/         # Pydantic configuration + loader

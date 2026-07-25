@@ -1,0 +1,56 @@
+name: capture
+description: "Mudra Capture - hand pose dataset collector"
+# Private application inside the Mudra monorepo; never published to pub.dev.
+publish_to: 'none'
+
+# Version feeds `metadata.versions.application` as "mudra-capture/<version>"
+# (see specs/003-mobile-pose-capture/contracts/sample-json.md).
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.9.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State management + dependency injection. Chosen over bloc/provider because it
+  # gives typed DI with per-test overrides, which is what makes the whole app
+  # testable without an Android device (research D8).
+  flutter_riverpod: ^2.6.1
+
+  # Camera permission, including the permanently-denied case (research D11).
+  permission_handler: ^11.3.1
+
+  # Streaming ZIP export; pure Dart, no extra platform bindings (research D7).
+  archive: ^3.6.1
+
+  # Hands the finished archive to the system share sheet (FR-035).
+  share_plus: ^10.1.4
+
+  # Resolves application-private storage for the dataset root.
+  path_provider: ^2.1.5
+
+  # sample_uuid / session_uuid generation.
+  uuid: ^4.5.1
+
+  # Device manufacturer/model/OS for the startup record and export manifest.
+  device_info_plus: ^11.2.0
+
+  # sha256 checksums for the export manifest (FR-047).
+  crypto: ^3.0.6
+
+  # Package version for the startup record and sample metadata.
+  package_info_plus: ^8.1.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/config/
+    - assets/poses/

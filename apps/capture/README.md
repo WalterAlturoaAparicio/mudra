@@ -54,7 +54,7 @@ Swift + AVFoundation and requires **no change** to any other layer.
 
 ## The contract with the engine
 
-The **only** thing shared with the Python engine is the pose-sample JSON schema
+The **only** thing shared with the Python engine (`apps/engine/`) is the pose-sample JSON schema
 (`schema_version` 1). No shared code, no imports, no runtime dependency.
 
 - Samples land at `datasets/poses/<pose_id>/sample_NNNNNN.json`, exactly the engine's layout.

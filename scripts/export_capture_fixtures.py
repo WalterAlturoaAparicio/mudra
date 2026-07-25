@@ -18,13 +18,12 @@ from __future__ import annotations
 
 import json
 import math
-from datetime import UTC, datetime
 from pathlib import Path
 
-from app.config.models import NormalizationConfig
-from app.dataset.serializer import PoseSerializer
-from app.models.landmarks import Handedness, HandLandmarks, Landmark
-from app.models.pose import (
+from engine.config.models import NormalizationConfig
+from engine.dataset.serializer import PoseSerializer
+from engine.models.landmarks import Handedness, HandLandmarks, Landmark
+from engine.models.pose import (
     CaptureTiming,
     HandMeta,
     HandSample,
@@ -33,7 +32,7 @@ from app.models.pose import (
     PoseMetadata,
     PoseSample,
 )
-from app.normalization.translation_scale import TranslationScaleNormalizer
+from engine.normalization.translation_scale import TranslationScaleNormalizer
 
 FIXTURES = Path("apps/capture/test/fixtures")
 TIMESTAMP = "2026-07-24T13:20:00.123456+00:00"
@@ -101,7 +100,9 @@ def write_normalization_fixture(normalizer: TranslationScaleNormalizer) -> None:
     print(f"wrote {path} ({len(payload['cases'])} cases)")
 
 
-def write_sample_fixtures(serializer: PoseSerializer, normalizer: TranslationScaleNormalizer) -> None:
+def write_sample_fixtures(
+    serializer: PoseSerializer, normalizer: TranslationScaleNormalizer
+) -> None:
     """Write full engine-serialized samples: one-handed and two-handed."""
     right = HandSample(
         handedness=Handedness.RIGHT,

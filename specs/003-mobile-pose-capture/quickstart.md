@@ -140,7 +140,7 @@ cp -r /tmp/capture_import/datasets/poses/* datasets/poses/
 # 3. Load every sample with the engine's own serializer
 python - <<'PY'
 from pathlib import Path
-from app.dataset.serializer import PoseSerializer
+from engine.dataset.serializer import PoseSerializer
 
 serializer = PoseSerializer()
 paths = sorted(Path("datasets/poses").rglob("sample_*.json"))

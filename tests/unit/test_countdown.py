@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from app.core.countdown import CountdownNotRunningError, CountdownTimer
+from engine.core.countdown import CountdownNotRunningError, CountdownTimer
 
 
 class FakeClock:

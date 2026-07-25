@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.models.topology import HAND_CONNECTIONS, HAND_LANDMARK_COUNT, LandmarkIndex
+from engine.models.topology import HAND_CONNECTIONS, HAND_LANDMARK_COUNT, LandmarkIndex
 
 
 def test_landmark_count_is_21() -> None:

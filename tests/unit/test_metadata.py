@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from app.config.models import CameraConfig, NormalizationConfig, RecordingConfig
-from app.models.landmarks import FrameDetection, Handedness
-from app.models.pose import Pose, VersionInfo
-from app.normalization.translation_scale import TranslationScaleNormalizer
-from app.recording.recorder import PoseRecorderService
-from app.recording.validation import PoseValidationService
+from engine.config.models import CameraConfig, NormalizationConfig, RecordingConfig
+from engine.models.landmarks import FrameDetection, Handedness
+from engine.models.pose import Pose, VersionInfo
+from engine.normalization.translation_scale import TranslationScaleNormalizer
+from engine.recording.recorder import PoseRecorderService
+from engine.recording.validation import PoseValidationService
 
 from tests.unit.factories import make_hand_detection
 from tests.unit.test_recorder import FakeRepository

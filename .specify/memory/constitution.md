@@ -1,6 +1,27 @@
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 1.2.0 → 1.3.0
+Rationale: the monorepo layout is now symmetrical. The Python engine moved from the
+repository root (`app/`) to `apps/engine/`, alongside `apps/capture/`, and its
+package is imported as `engine`. MINOR — a declared layout is redefined and the CLI
+entry point changes; no principle is added, removed, or weakened.
+
+Modified in this amendment (1.3.0):
+  - Technology & Code Quality Standards, Engine section — project layout is now
+    `apps/engine/` (was `app/`); `python -m engine.main` replaces `python -m app.main`.
+  - Monorepo & Cross-Application Boundaries — every application, engine included,
+    lives under `apps/`; shared repository-level concerns (tests, datasets, assets,
+    scripts, specs, pyproject) stay at the root.
+
+Templates requiring updates:
+  - ✅ .specify/templates/* — no path assumptions; no edit required.
+
+Deferred / follow-up TODOs:
+  - specs/001-live-camera-detection and specs/002-pose-recorder retain `app/` paths as
+    point-in-time records of what was built then; they are deliberately NOT rewritten.
+
+--- previous report (1.1.0 → 1.2.0) -------------------------------------------
 Version change: 1.1.0 → 1.2.0
 Rationale: Mudra becomes a multi-application monorepo. The Python engine is no
 longer the only application: `apps/capture` (Flutter/Android) collects pose
@@ -160,16 +181,16 @@ concrete language, layout, and tooling differ.
   can be replaced. It MUST surface both hands, handedness, per-hand confidence, and the 21
   landmarks. The live view MUST draw landmarks in real time and display FPS, handedness, and
   confidence.
-- **Project layout** follows the agreed structure: `app/` with `core/`, `camera/`,
+- **Project layout** follows the agreed structure: `apps/engine/` with `core/`, `camera/`,
   `detection/`, `normalization/`, `recording/`, `recognition/`, `dataset/`, `models/`,
-  `visualization/`, `ui/`, `utils/`, `config/`; plus `assets/`, `datasets/poses/`,
-  `datasets/sequences/`, `recordings/`, `tests/`, `scripts/`, `docs/`. Deviations require an
-  amendment. The engine remains at the repository root; sibling applications live under
-  `apps/`.
+  `visualization/`, `ui/`, `utils/`, `config/`; plus the repository-level `assets/`,
+  `datasets/poses/`, `datasets/sequences/`, `recordings/`, `tests/`, `scripts/`, `docs/`.
+  Deviations require an amendment. The package is imported as `engine` (e.g.
+  `from engine.core.live_app import LiveApp`).
 - **CLI**: Mudra is a **multi-command** Typer application. The official command surface is
   `run`, `record-pose`, `record-sequence`, `dataset info`, `dataset validate`, `camera info`,
   and `doctor` (implemented incrementally; only `run` exists in Phase 1). A Typer callback
-  makes `python -m app.main` (no subcommand) execute the exact same logic as `mudra run`, so
+  makes `python -m engine.main` (no subcommand) execute the exact same logic as `mudra run`, so
   both entry points stay consistent. `mudra run` MUST launch the live application with clean,
   deterministic shutdown (camera released, resources closed).
 - **Persistence layout**: datasets are organized as append-only **sample collections**, one
@@ -212,9 +233,11 @@ concrete language, layout, and tooling differ.
 
 Mudra is a monorepo containing multiple applications that share a data format, not a codebase.
 
-- **Layout**: the Python engine occupies the repository root (`app/`, `tests/`, `datasets/`);
-  every sibling application lives in its own directory under `apps/` (e.g. `apps/capture/`)
-  with its own toolchain, dependencies, tests, and README.
+- **Layout**: **every application lives under `apps/`** — `apps/engine/` (Python) and
+  `apps/capture/` (Flutter) — each with its own toolchain, dependencies, and README. Concerns
+  that belong to the repository rather than to one application (`tests/`, `datasets/`,
+  `assets/`, `scripts/`, `specs/`, `pyproject.toml`) stay at the root. No application
+  occupies the root.
 - **The ONLY contract between applications is the versioned pose-sample JSON schema**
   (`schema_version`, currently 1), documented in the owning feature's `contracts/`. An
   application MUST NOT import, vendor, or reach into another application's source. Datasets
@@ -266,4 +289,4 @@ against this document. Any justified deviation MUST be recorded in the plan's Co
 Tracking with the simpler alternative that was rejected and why. Unjustified complexity is
 grounds for rejection.
 
-**Version**: 1.2.0 | **Ratified**: 2026-07-24 | **Last Amended**: 2026-07-24
+**Version**: 1.3.0 | **Ratified**: 2026-07-24 | **Last Amended**: 2026-07-24

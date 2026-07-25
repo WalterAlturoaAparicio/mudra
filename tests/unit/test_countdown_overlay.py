@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import numpy as np
-from app.config.models import VisualizationConfig
-from app.models.countdown import CountdownTick
-from app.visualization.countdown_overlay import CountdownOverlayRenderer
-from app.visualization.renderer import CountdownRenderer
+from engine.config.models import VisualizationConfig
+from engine.models.countdown import CountdownTick
+from engine.visualization.countdown_overlay import CountdownOverlayRenderer
+from engine.visualization.renderer import CountdownRenderer
 
 
 def _tick(remaining: float = 3.0, total: float = 3.0) -> CountdownTick:

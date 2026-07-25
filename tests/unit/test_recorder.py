@@ -5,11 +5,11 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 import pytest
-from app.config.models import CameraConfig, RecordingConfig
-from app.models.landmarks import FrameDetection, HandLandmarks
-from app.models.pose import Pose, PoseSample, SampleRef, VersionInfo
-from app.recording.recorder import PoseRecorderService
-from app.recording.validation import CaptureValidationError, PoseValidationService
+from engine.config.models import CameraConfig, RecordingConfig
+from engine.models.landmarks import FrameDetection, HandLandmarks
+from engine.models.pose import Pose, PoseSample, SampleRef, VersionInfo
+from engine.recording.recorder import PoseRecorderService
+from engine.recording.validation import CaptureValidationError, PoseValidationService
 
 from tests.unit.factories import make_frame_detection, make_hand_landmarks
 

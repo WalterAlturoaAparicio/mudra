@@ -6,8 +6,8 @@ import dataclasses
 import json
 
 import pytest
-from app.dataset.serializer import SCHEMA_VERSION, PoseSchemaError, PoseSerializer
-from app.models.pose import CaptureTiming
+from engine.dataset.serializer import SCHEMA_VERSION, PoseSchemaError, PoseSerializer
+from engine.models.pose import CaptureTiming
 
 from tests.unit.factories import make_pose_sample
 

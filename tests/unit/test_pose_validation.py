@@ -5,9 +5,15 @@ from __future__ import annotations
 import math
 
 import pytest
-from app.config.models import RecordingConfig
-from app.models.landmarks import FrameDetection, HandDetection, Handedness, HandLandmarks, Landmark
-from app.recording.validation import CaptureValidationError, PoseValidationService
+from engine.config.models import RecordingConfig
+from engine.models.landmarks import (
+    FrameDetection,
+    HandDetection,
+    Handedness,
+    HandLandmarks,
+    Landmark,
+)
+from engine.recording.validation import CaptureValidationError, PoseValidationService
 
 from tests.unit.factories import make_frame_detection, make_hand_detection, make_hand_landmarks
 

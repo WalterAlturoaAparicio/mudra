@@ -2,8 +2,14 @@
 
 from __future__ import annotations
 
-from app.models.landmarks import FrameDetection, HandDetection, Handedness, HandLandmarks, Landmark
-from app.models.pose import (
+from engine.models.landmarks import (
+    FrameDetection,
+    HandDetection,
+    Handedness,
+    HandLandmarks,
+    Landmark,
+)
+from engine.models.pose import (
     HandMeta,
     HandSample,
     NormalizationInfo,

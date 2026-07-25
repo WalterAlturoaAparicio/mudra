@@ -6,8 +6,8 @@ import json
 from pathlib import Path
 
 import pytest
-from app.config.loader import load_config
-from app.config.models import AppConfig, DetectionConfig, RecordingConfig
+from engine.config.loader import load_config
+from engine.config.models import AppConfig, DetectionConfig, RecordingConfig
 from pydantic import ValidationError
 
 

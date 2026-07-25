@@ -7,16 +7,16 @@ from io import StringIO
 
 import numpy as np
 import pytest
-from app.config.models import CameraConfig, RecordingConfig
-from app.core.countdown import CountdownTimer
-from app.core.recording_port import RecordingController
-from app.models.landmarks import FrameDetection, Handedness
-from app.models.pose import VersionInfo
-from app.recording import controller as controller_module
-from app.recording.controller import PoseRecordingController
-from app.recording.recorder import PoseRecorderService
-from app.recording.state import RecordingState
-from app.recording.validation import PoseValidationService
+from engine.config.models import CameraConfig, RecordingConfig
+from engine.core.countdown import CountdownTimer
+from engine.core.recording_port import RecordingController
+from engine.models.landmarks import FrameDetection, Handedness
+from engine.models.pose import VersionInfo
+from engine.recording import controller as controller_module
+from engine.recording.controller import PoseRecordingController
+from engine.recording.recorder import PoseRecorderService
+from engine.recording.state import RecordingState
+from engine.recording.validation import PoseValidationService
 from rich.console import Console
 
 from tests.unit.factories import make_frame_detection, make_hand_detection

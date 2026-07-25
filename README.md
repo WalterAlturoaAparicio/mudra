@@ -36,14 +36,14 @@ backend can be replaced independently.
 
 | Layer | Package | Phase 1 role |
 |-------|---------|--------------|
-| Capture | `app/camera` | `VideoSource` Protocol + `OpenCVCameraSource` |
-| Detection | `app/detection` | `HandDetector` Protocol + `MediaPipeHandDetector` (Tasks `HandLandmarker`) |
-| Domain model | `app/models` | Neutral value objects (`Landmark`, `HandLandmarks`, `HandDetection`, `FrameDetection`) + hand topology |
-| Rendering | `app/visualization` | `FrameRenderer` Protocol + `OpenCVOverlayRenderer` |
-| Orchestration | `app/core` | `LiveApp` loop + `FpsMeter` |
-| Config | `app/config` | Pydantic `AppConfig` + loader |
-| CLI | `app/ui` | Multi-command Typer app |
-| Utilities | `app/utils` | Loguru logging setup |
+| Capture | `apps/engine/camera` | `VideoSource` Protocol + `OpenCVCameraSource` |
+| Detection | `apps/engine/detection` | `HandDetector` Protocol + `MediaPipeHandDetector` (Tasks `HandLandmarker`) |
+| Domain model | `apps/engine/models` | Neutral value objects (`Landmark`, `HandLandmarks`, `HandDetection`, `FrameDetection`) + hand topology |
+| Rendering | `apps/engine/visualization` | `FrameRenderer` Protocol + `OpenCVOverlayRenderer` |
+| Orchestration | `apps/engine/core` | `LiveApp` loop + `FpsMeter` |
+| Config | `apps/engine/config` | Pydantic `AppConfig` + loader |
+| CLI | `apps/engine/ui` | Multi-command Typer app |
+| Utilities | `apps/engine/utils` | Loguru logging setup |
 
 The detector is deliberately behind a Protocol: Phase 1 uses MediaPipe's Tasks
 `HandLandmarker`, but any other backend can be dropped in without touching capture,
@@ -70,7 +70,7 @@ downloaded automatically if it is not already present.
 ## Running
 
 ```bash
-python -m app.main        # opens the webcam and shows live hand detection
+python -m engine.main     # opens the webcam and shows live hand detection
 # equivalent to:
 mudra run
 ```
@@ -124,8 +124,8 @@ The overlay's color, caption, hint, digit size, and backdrop dimming are configu
 `visualization` (`countdown_color`, `countdown_prompt`, `countdown_hint`, `countdown_digit_scale`,
 `countdown_dim`).
 
-The countdown itself (`app/core/countdown.py`) is a generic, non-blocking timer polled once per
-frame — no `sleep()` anywhere — paired with a generic state machine (`app/core/state_machine.py`)
+The countdown itself (`apps/engine/core/countdown.py`) is a generic, non-blocking timer polled once per
+frame — no `sleep()` anywhere — paired with a generic state machine (`apps/engine/core/state_machine.py`)
 and a workflow-agnostic overlay, so sequence recording, calibration, and benchmark workflows can
 reuse all three unchanged.
 
@@ -192,7 +192,7 @@ v1.2.0, "Monorepo & Cross-Application Boundaries"):
 
 | Application | Location | Purpose |
 |---|---|---|
-| **Mudra Engine** | repository root (`app/`) | Python: live camera, detection, normalization, pose recording, and the dataset format itself |
+| **Mudra Engine** | [`apps/engine/`](apps/engine/) | Python: live camera, detection, normalization, pose recording, and the dataset format itself |
 | **Mudra Capture** | [`apps/capture/`](apps/capture/) | Flutter/Android: collects hand-pose datasets in volume on a phone and exports them for the engine |
 
 The **only** contract between them is the pose-sample JSON schema (`schema_version` 1). Neither
@@ -204,20 +204,20 @@ and the engine reads it with zero manual processing.
 ```
 mudra/
 ├── apps/
+│   ├── engine/         # Mudra Engine — Python package, imported as `engine`
+│   │   ├── camera/         # VideoSource interface + OpenCV capture
+│   │   ├── config/         # Pydantic configuration + loader
+│   │   ├── core/           # LiveApp loop, FPS meter, countdown timer, state machine, recording port
+│   │   ├── dataset/        # PoseRepository interface + JSON repository + serializer
+│   │   ├── detection/      # HandDetector interface + MediaPipe backend
+│   │   ├── models/         # Neutral value objects, hand topology, pose domain
+│   │   ├── normalization/  # Normalizer interface + translation-scale implementation
+│   │   ├── recording/      # Validation, recorder service, state machine, interactive controller
+│   │   ├── ui/             # Typer CLI
+│   │   ├── utils/          # Logging
+│   │   ├── visualization/  # Renderer interfaces + OpenCV landmark and countdown overlays
+│   │   └── main.py         # `python -m engine.main` entry point
 │   └── capture/        # Mudra Capture — Flutter/Android dataset collector
-├── app/
-│   ├── camera/         # VideoSource interface + OpenCV capture
-│   ├── config/         # Pydantic configuration + loader
-│   ├── core/           # LiveApp loop, FPS meter, countdown timer, state machine, recording port
-│   ├── dataset/        # PoseRepository interface + JSON repository + serializer
-│   ├── detection/      # HandDetector interface + MediaPipe backend
-│   ├── models/         # Neutral value objects, hand topology, pose domain
-│   ├── normalization/  # Normalizer interface + translation-scale implementation
-│   ├── recording/      # Validation, recorder service, state machine, interactive controller
-│   ├── ui/             # Typer CLI
-│   ├── utils/          # Logging
-│   ├── visualization/  # Renderer interfaces + OpenCV landmark and countdown overlays
-│   └── main.py         # `python -m app.main` entry point
 ├── assets/             # ML model assets (auto-downloaded; git-ignored)
 ├── datasets/
 │   ├── poses/          # append-only per-pose sample collections (Phase 2)

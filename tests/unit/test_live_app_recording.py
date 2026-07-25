@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from app.camera.source import Frame
-from app.config.models import AppConfig
-from app.core import live_app as live_app_module
-from app.core.fps_meter import FpsMeter
-from app.core.live_app import LiveApp
-from app.core.recording_port import RecordingController
-from app.models.countdown import CountdownTick
-from app.models.landmarks import FrameDetection
+from engine.camera.source import Frame
+from engine.config.models import AppConfig
+from engine.core import live_app as live_app_module
+from engine.core.fps_meter import FpsMeter
+from engine.core.live_app import LiveApp
+from engine.core.recording_port import RecordingController
+from engine.models.countdown import CountdownTick
+from engine.models.landmarks import FrameDetection
 
 from tests.unit.factories import make_frame_detection
 

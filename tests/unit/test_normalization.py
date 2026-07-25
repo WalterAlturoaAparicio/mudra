@@ -5,9 +5,9 @@ from __future__ import annotations
 import math
 
 import pytest
-from app.config.models import NormalizationConfig
-from app.models.landmarks import HandLandmarks, Landmark
-from app.normalization.translation_scale import TranslationScaleNormalizer
+from engine.config.models import NormalizationConfig
+from engine.models.landmarks import HandLandmarks, Landmark
+from engine.normalization.translation_scale import TranslationScaleNormalizer
 
 from tests.unit.factories import make_hand_landmarks
 

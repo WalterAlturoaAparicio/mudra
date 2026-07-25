@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app.config.models import DatasetConfig
-from app.dataset.json_repository import JsonPoseRepository
-from app.dataset.serializer import PoseSerializer
+from engine.config.models import DatasetConfig
+from engine.dataset.json_repository import JsonPoseRepository
+from engine.dataset.serializer import PoseSerializer
 
 from tests.unit.factories import make_pose_sample
 

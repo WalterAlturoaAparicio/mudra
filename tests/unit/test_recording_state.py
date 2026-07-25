@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import pytest
-from app.core.state_machine import InvalidStateTransitionError
-from app.recording.state import RecordingState, RecordingStateMachine
+from engine.core.state_machine import InvalidStateTransitionError
+from engine.recording.state import RecordingState, RecordingStateMachine
 
 
 def test_starts_idle_and_inactive() -> None:

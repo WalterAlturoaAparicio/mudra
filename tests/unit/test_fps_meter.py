@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from app.core.fps_meter import FpsMeter
+from engine.core.fps_meter import FpsMeter
 
 
 def test_requires_window_of_at_least_two() -> None:

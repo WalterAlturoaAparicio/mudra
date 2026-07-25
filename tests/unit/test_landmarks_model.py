@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import pytest
-from app.models.landmarks import (
+from engine.models.landmarks import (
     FrameDetection,
     HandDetection,
     Handedness,
     HandLandmarks,
     Landmark,
 )
-from app.models.topology import HAND_LANDMARK_COUNT
+from engine.models.topology import HAND_LANDMARK_COUNT
 
 
 def _make_points(count: int = HAND_LANDMARK_COUNT) -> tuple[Landmark, ...]:

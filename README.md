@@ -84,8 +84,106 @@ Options:
 | `--log-level LEVEL` | `TRACE`…`ERROR` (default `INFO`) |
 | `--no-mirror` | Disable the selfie (mirrored) preview |
 
-Exit any time with **`q`**, **`Esc`**, or by closing the window — the camera is released
-cleanly.
+Keys while running:
+
+| Key | Action |
+|-----|--------|
+| **`R`** | Start the countdown, then record the pose (Phase 2 — see below) |
+| **`q`** / **`Esc`** | Cancel a running countdown; otherwise exit |
+| close window | Exit; the camera is released cleanly |
+
+## Recording poses (Phase 2)
+
+The Pose Recorder builds a reusable, append-only dataset of hand poses. While the live camera is
+running, press **`R`**:
+
+1. A **countdown starts** (3 seconds by default) and a large `Recording pose in 3 / 2 / 1` overlay
+   appears. The preview keeps running — it is never frozen — so you can watch yourself and place
+   **both** hands, which is impossible when one hand is stuck on the keyboard. Press `q` or `Esc`
+   during the countdown to cancel; nothing is written.
+2. At zero the frame is captured automatically and freezes with a **RECORDING** indicator.
+3. The capture is validated (at least one hand, exactly 21 landmarks each, finite values). Invalid
+   captures are rejected with a clear reason and nothing is written.
+4. You are prompted in the terminal for a **`pose_id`** (the permanent identifier — lowercase
+   letters, digits, and underscores, e.g. `open_palm`) and, optionally, a `display_name` and
+   `description`. Press Enter on a blank `pose_id` to cancel.
+5. One sample is appended to that pose's collection and the live camera resumes. Existing samples
+   are never overwritten.
+
+### Countdown settings
+
+The countdown length is configuration, not code. Set `recording.recording_countdown_seconds` in a
+JSON config file and pass it with `--config`:
+
+```json
+{ "recording": { "recording_countdown_seconds": 5 } }
+```
+
+`0` captures on the very next frame (the old press-and-capture behaviour); the maximum is `60`.
+The overlay's color, caption, hint, digit size, and backdrop dimming are configurable under
+`visualization` (`countdown_color`, `countdown_prompt`, `countdown_hint`, `countdown_digit_scale`,
+`countdown_dim`).
+
+The countdown itself (`app/core/countdown.py`) is a generic, non-blocking timer polled once per
+frame — no `sleep()` anywhere — paired with a generic state machine (`app/core/state_machine.py`)
+and a workflow-agnostic overlay, so sequence recording, calibration, and benchmark workflows can
+reuse all three unchanged.
+
+### Dataset layout
+
+```
+datasets/poses/
+├── open_palm/
+│   ├── sample_000001.json
+│   ├── sample_000002.json
+│   └── ...
+└── closed_fist/
+    └── sample_000001.json
+```
+
+Each `pose_id` accumulates its own append-only, sequentially numbered samples across sessions and
+contributors. Only landmark coordinates and metadata are ever stored — **never images**.
+
+### Sample JSON (schema v1)
+
+Each sample is human-readable, indented JSON:
+
+```json
+{
+  "schema_version": 1,
+  "pose_id": "open_palm",
+  "display_name": "Open Palm",
+  "description": "Right hand fully open.",
+  "sample_uuid": "550e8400-e29b-41d4-a716-446655440000",
+  "sample_number": "sample_000001",
+  "timestamp": "2026-07-24T13:20:00.123456+00:00",
+  "normalization": { "strategy": "translation_scale", "version": "1.0" },
+  "metadata": {
+    "timestamp": "...",
+    "camera": { "index": 0, "width": 1280, "height": 720 },
+    "versions": { "application": "0.1.0", "mediapipe": "0.10.35" },
+    "num_hands": 1,
+    "hands": [ { "handedness": "right", "confidence": 0.98 } ],
+    "capture": {
+      "countdown_start_time": "2026-07-24T13:19:57.100000+00:00",
+      "capture_time": "2026-07-24T13:20:00.123456+00:00",
+      "countdown_seconds": 3.0
+    }
+  },
+  "hands": [
+    { "handedness": "right", "confidence": 0.98, "raw": [ ... 21 ... ], "normalized": [ ... 21 ... ] }
+  ]
+}
+```
+
+- **`sample_uuid`** is the immutable, globally-unique internal id (used by future
+  databases/sync); **`sample_number`** is the sequential, filesystem-friendly stem.
+- Each hand stores **both** `raw` detector landmarks and `normalized` landmarks (translation +
+  scale: wrist at origin, scaled by hand span). Persisting raw lets the normalization strategy
+  change later without re-recording.
+- **`metadata.capture`** records when the countdown was armed and when the shutter actually fired
+  (debugging and future analytics); it is `null` for samples captured without a countdown.
+- Full field-by-field reference: [`specs/002-pose-recorder/contracts/json-schema.md`](specs/002-pose-recorder/contracts/json-schema.md).
 
 ## Folder Structure
 
@@ -94,16 +192,19 @@ mudra/
 ├── app/
 │   ├── camera/         # VideoSource interface + OpenCV capture
 │   ├── config/         # Pydantic configuration + loader
-│   ├── core/           # LiveApp loop, FPS meter
+│   ├── core/           # LiveApp loop, FPS meter, countdown timer, state machine, recording port
+│   ├── dataset/        # PoseRepository interface + JSON repository + serializer
 │   ├── detection/      # HandDetector interface + MediaPipe backend
-│   ├── models/         # Neutral value objects + hand topology
+│   ├── models/         # Neutral value objects, hand topology, pose domain
+│   ├── normalization/  # Normalizer interface + translation-scale implementation
+│   ├── recording/      # Validation, recorder service, state machine, interactive controller
 │   ├── ui/             # Typer CLI
 │   ├── utils/          # Logging
-│   ├── visualization/  # FrameRenderer interface + OpenCV overlay
+│   ├── visualization/  # Renderer interfaces + OpenCV landmark and countdown overlays
 │   └── main.py         # `python -m app.main` entry point
 ├── assets/             # ML model assets (auto-downloaded; git-ignored)
 ├── datasets/
-│   ├── poses/          # (Phase 2+) append-only per-pose sample collections
+│   ├── poses/          # append-only per-pose sample collections (Phase 2)
 │   └── sequences/      # (Phase 3+) append-only per-sequence sample collections
 ├── recordings/         # (future) raw recordings
 ├── tests/              # pytest unit tests
@@ -113,9 +214,10 @@ mudra/
 
 ## Future Roadmap
 
-- **Phase 2 — Pose Recorder**: freeze a detection, name it, append a JSON sample to
-  `datasets/poses/<pose_id>/`. Poses carry a stable `pose_id` (plus `display_name`,
-  `aliases`, `description`).
+- **Phase 1 — Live Camera** ✅: real-time detection, landmark overlay, FPS/handedness/confidence.
+- **Phase 2 — Pose Recorder** ✅: press **R** to count down, capture, validate, name (`pose_id`),
+  and append a human-readable JSON sample to `datasets/poses/<pose_id>/`; raw + normalized
+  landmarks, immutable `sample_uuid`, append-only, never images.
 - **Phase 3 — Sequence Recorder**: capture ordered frames into
   `datasets/sequences/<sequence_id>/`; sequences reference pose identities.
 - **Phase 4 — Dataset Builder**: append-only collections that grow across people, hand

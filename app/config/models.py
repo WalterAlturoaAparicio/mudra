@@ -15,6 +15,9 @@ __all__ = [
     "DetectionConfig",
     "VisualizationConfig",
     "LoggingConfig",
+    "NormalizationConfig",
+    "DatasetConfig",
+    "RecordingConfig",
     "AppConfig",
 ]
 
@@ -78,6 +81,27 @@ class VisualizationConfig(BaseModel):
     )
     landmark_radius: int = Field(default=3, gt=0, description="Landmark point radius in pixels.")
     connection_thickness: int = Field(default=2, gt=0, description="Skeleton line thickness.")
+    countdown_color: tuple[int, int, int] = Field(
+        default=(0, 215, 255), description="BGR color for the countdown overlay (amber)."
+    )
+    countdown_prompt: str = Field(
+        default="Recording pose in", description="Caption drawn above the countdown digit."
+    )
+    countdown_hint: str = Field(
+        default="q / Esc to cancel", description="Hint drawn below the countdown digit."
+    )
+    countdown_digit_scale: float = Field(
+        default=0.4,
+        gt=0.0,
+        le=1.0,
+        description="Countdown digit height as a fraction of the frame height.",
+    )
+    countdown_dim: float = Field(
+        default=0.35,
+        ge=0.0,
+        le=1.0,
+        description="How much to darken the live frame behind the countdown (0 = none).",
+    )
 
 
 class LoggingConfig(BaseModel):
@@ -93,6 +117,51 @@ class LoggingConfig(BaseModel):
     )
 
 
+class NormalizationConfig(BaseModel):
+    """Landmark normalization settings (Phase 2)."""
+
+    algorithm: str = Field(
+        default="translation_scale", description="Normalization strategy identifier."
+    )
+    origin_index: int = Field(
+        default=0, ge=0, le=20, description="Landmark used as the translation origin (wrist)."
+    )
+    scale_index: int = Field(
+        default=9, ge=0, le=20, description="Landmark whose distance from origin sets the scale."
+    )
+
+
+class DatasetConfig(BaseModel):
+    """Dataset location and file-format settings (Phase 2)."""
+
+    root: str = Field(default="datasets", description="Dataset root directory.")
+    poses_dirname: str = Field(default="poses", description="Sub-directory for pose collections.")
+    json_indent: int = Field(default=2, ge=0, description="JSON indentation for saved samples.")
+    filename_prefix: str = Field(default="sample_", description="Sample filename prefix.")
+    filename_digits: int = Field(
+        default=6, ge=1, description="Zero-padded width of the sample number."
+    )
+
+
+class RecordingConfig(BaseModel):
+    """Pose recording behaviour settings (Phase 2)."""
+
+    record_key: str = Field(default="r", description="Key that enters pose-recording mode.")
+    pose_id_pattern: str = Field(
+        default=r"^[a-z0-9_]+$", description="Allowed pose_id pattern (folder-safe)."
+    )
+    pose_id_max_length: int = Field(default=64, gt=0, description="Maximum pose_id length.")
+    recording_countdown_seconds: float = Field(
+        default=3.0,
+        ge=0.0,
+        le=60.0,
+        description=(
+            "Seconds to count down after the record key before the pose is captured, "
+            "leaving both hands free to pose. 0 captures on the next frame."
+        ),
+    )
+
+
 class AppConfig(BaseModel):
     """Root application configuration composed of all sub-configs."""
 
@@ -100,3 +169,6 @@ class AppConfig(BaseModel):
     detection: DetectionConfig = Field(default_factory=DetectionConfig)
     visualization: VisualizationConfig = Field(default_factory=VisualizationConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
+    normalization: NormalizationConfig = Field(default_factory=NormalizationConfig)
+    dataset: DatasetConfig = Field(default_factory=DatasetConfig)
+    recording: RecordingConfig = Field(default_factory=RecordingConfig)

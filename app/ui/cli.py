@@ -46,12 +46,25 @@ def _run_live(
     points behave identically. Exits the process with the app's return code.
     """
     # Deferred imports: keep the CLI importable without OpenCV/MediaPipe.
+    import mediapipe
+    from rich.console import Console
+
+    from app import __version__ as app_version
     from app.camera.opencv_source import OpenCVCameraSource
     from app.config.loader import load_config
+    from app.core.countdown import CountdownTimer
     from app.core.fps_meter import FpsMeter
-    from app.core.live_app import LiveApp
+    from app.core.live_app import WINDOW_NAME, LiveApp
+    from app.dataset.json_repository import JsonPoseRepository
+    from app.dataset.serializer import PoseSerializer
     from app.detection.mediapipe_detector import MediaPipeHandDetector
+    from app.models.pose import VersionInfo
+    from app.normalization.translation_scale import TranslationScaleNormalizer
+    from app.recording.controller import PoseRecordingController
+    from app.recording.recorder import PoseRecorderService
+    from app.recording.validation import PoseValidationService
     from app.utils.logging import configure_logging
+    from app.visualization.countdown_overlay import CountdownOverlayRenderer
     from app.visualization.opencv_overlay import OpenCVOverlayRenderer
 
     overrides: dict[str, object] = {}
@@ -70,7 +83,39 @@ def _run_live(
     renderer = OpenCVOverlayRenderer(config.visualization)
     fps_meter = FpsMeter(window=max(config.camera.target_fps, 2))
 
-    live_app = LiveApp(source, detector, renderer, config, fps_meter)
+    # Pose-recording stack (Phase 2), wired behind the RecordingController port.
+    versions = VersionInfo(
+        application=app_version, mediapipe=getattr(mediapipe, "__version__", None)
+    )
+    validator = PoseValidationService(config.recording)
+    normalizer = TranslationScaleNormalizer(config.normalization)
+    repository = JsonPoseRepository(config.dataset, PoseSerializer())
+    recorder = PoseRecorderService(
+        validator=validator,
+        normalizer=normalizer,
+        repository=repository,
+        versions=versions,
+        camera=config.camera,
+    )
+    recording_controller = PoseRecordingController(
+        recorder=recorder,
+        validator=validator,
+        config=config.recording,
+        console=Console(),
+        window_name=WINDOW_NAME,
+        countdown=CountdownTimer(config.recording.recording_countdown_seconds),
+    )
+    countdown_renderer = CountdownOverlayRenderer(config.visualization)
+
+    live_app = LiveApp(
+        source,
+        detector,
+        renderer,
+        config,
+        fps_meter,
+        recording_controller,
+        countdown_renderer,
+    )
     raise typer.Exit(live_app.run())
 
 
@@ -94,5 +139,9 @@ def run(
     log_level: _LogLevelOption = None,
     no_mirror: _NoMirrorOption = False,
 ) -> None:
-    """Open the webcam and show live hand detection with a landmark overlay."""
+    """Open the webcam and show live hand detection with a landmark overlay.
+
+    Press R to record a pose after a countdown (q/Esc cancels it); q/Esc/close-window
+    to exit.
+    """
     _run_live(camera, config, log_level, no_mirror)

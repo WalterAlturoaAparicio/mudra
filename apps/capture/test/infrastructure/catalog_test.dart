@@ -79,14 +79,16 @@ void main() {
 
     test('single-hand gestures are declared one-handed', () {
       final catalog = AssetPoseCatalogSource.parseCatalog(shipped, config);
-      for (final id in ['hi', 'militar_hi', 'ok', 'peace']) {
+      // 'tp' is one hand's index and middle fingers on the forehead — a
+      // one-handed seal, unlike the two-handed group below.
+      for (final id in ['hi', 'militar_hi', 'ok', 'peace', 'tp']) {
         expect(catalog.byId(id)!.requiredHands, 1, reason: id);
       }
     });
 
     test('hand seals are declared two-handed', () {
       final catalog = AssetPoseCatalogSource.parseCatalog(shipped, config);
-      for (final id in ['dragon', 'tiger', 'domain_expansion', 'tp']) {
+      for (final id in ['dragon', 'tiger', 'domain_expansion']) {
         expect(catalog.byId(id)!.requiredHands, 2, reason: id);
       }
     });

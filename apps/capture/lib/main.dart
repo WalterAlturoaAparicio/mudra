@@ -8,6 +8,8 @@ library;
 import 'dart:async';
 
 import 'package:capture/application/catalog/pose_progress_notifier.dart';
+import 'package:capture/infrastructure/platform/platform_adapters.dart'
+    show lockAppOrientation;
 import 'package:capture/presentation/design/design.dart';
 import 'package:capture/presentation/home/home_screen.dart';
 import 'package:capture/shared/di/providers.dart';
@@ -16,6 +18,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Portrait-only, on every screen — not only the capture session's own,
+  // stricter lock (FR-049). No page's layout is designed for landscape.
+  await lockAppOrientation();
 
   final container = ProviderContainer();
 

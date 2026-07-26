@@ -62,6 +62,24 @@ class CameraPermissions {
   Future<bool> openSettings() => openAppSettings();
 }
 
+/// The only orientation Mudra Capture ever presents, on every screen.
+///
+/// The whole app is portrait-only: the capture layout, the preview's aspect
+/// handling, and every stored sample's frame geometry all assume it, so there
+/// is no page where landscape is a supported state.
+const List<DeviceOrientation> supportedDeviceOrientations = [
+  DeviceOrientation.portraitUp,
+];
+
+/// Locks the whole application to [supportedDeviceOrientations].
+///
+/// Called once from `main()`, before the first frame. Kept here rather than
+/// called directly from the composition root so `main.dart` never needs to
+/// import a platform channel itself — that stays confined to
+/// `infrastructure/` (enforced by `test/architecture/layer_boundaries_test.dart`).
+Future<void> lockAppOrientation() =>
+    SystemChrome.setPreferredOrientations(supportedDeviceOrientations);
+
 /// Locks orientation while a capture session runs (FR-049/FR-050).
 ///
 /// Frame geometry must not change underneath a session: landmark coordinates
@@ -69,9 +87,9 @@ class CameraPermissions {
 /// silently change what the numbers mean.
 class SystemOrientationController implements OrientationController {
   /// Creates an orientation controller.
-  SystemOrientationController({this.orientations = const [
-    DeviceOrientation.portraitUp,
-  ]});
+  SystemOrientationController({
+    this.orientations = supportedDeviceOrientations,
+  });
 
   /// The orientations allowed while locked.
   final List<DeviceOrientation> orientations;
@@ -88,7 +106,11 @@ class SystemOrientationController implements OrientationController {
   @override
   Future<void> unlock() async {
     _lockedOrientation = null;
-    await SystemChrome.setPreferredOrientations(DeviceOrientation.values);
+    // Restore the app-wide portrait-only constraint, not every orientation:
+    // the capture screen's lock is *stricter* than the rest of the app, never
+    // the only thing preventing landscape. Setting `DeviceOrientation.values`
+    // here would briefly re-enable landscape everywhere on the way out.
+    await SystemChrome.setPreferredOrientations(supportedDeviceOrientations);
   }
 
   @override

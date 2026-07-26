@@ -120,9 +120,9 @@
     {
       "pose_id": "tp",
       "display_name": "TP",
-      "description": "Both hands forming a T shape, one vertical against the other horizontal.",
+      "description": "One hand placing index and middle fingers on forehead.",
       "reference_image": "assets/poses/tp.png",
-      "required_hands": 2
+      "required_hands": 1
     },
     {
       "pose_id": "wild_boar",

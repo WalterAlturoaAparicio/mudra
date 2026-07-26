@@ -59,7 +59,6 @@ ThemeData buildCaptureTheme() {
       secondary: Palette.countdown,
       surface: Palette.surface,
     ),
-    textTheme: base.textTheme.apply(fontSizeFactor: 1.05),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
         minimumSize: const Size.fromHeight(72),
@@ -194,38 +193,56 @@ class PoseReferenceImage extends StatelessWidget {
   }
 
   Widget _placeholder(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: EdgeInsets.all(compact ? Spacing.sm : Spacing.lg),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.back_hand_outlined,
-              size: compact ? 28 : 56,
-              color: Colors.white24,
-            ),
-            SizedBox(height: compact ? Spacing.xs : Spacing.md),
-            Text(
-              displayName,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: compact ? 14 : 22,
-                fontWeight: FontWeight.w700,
+    // The placeholder must never break the screen (FR-005): a long
+    // description combined with a small container (a 56px list thumbnail, a
+    // narrow phone) can need more height than is available. LayoutBuilder +
+    // a scrollable min-height box absorbs that instead of overflowing —
+    // content still centers exactly as before whenever it fits, and only
+    // scrolls in the rare case it does not, rather than asserting.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: Center(
+              child: Padding(
+                padding: EdgeInsets.all(compact ? Spacing.sm : Spacing.lg),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.back_hand_outlined,
+                      size: compact ? 28 : 56,
+                      color: Colors.white24,
+                    ),
+                    SizedBox(height: compact ? Spacing.xs : Spacing.md),
+                    Text(
+                      displayName,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: compact ? 14 : 22,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    if (!compact && description.isNotEmpty) ...[
+                      const SizedBox(height: Spacing.sm),
+                      Text(
+                        description,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white60,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
               ),
             ),
-            if (!compact && description.isNotEmpty) ...[
-              const SizedBox(height: Spacing.sm),
-              Text(
-                description,
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.white60, fontSize: 14),
-              ),
-            ],
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }

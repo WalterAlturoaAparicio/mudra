@@ -88,7 +88,69 @@ engine's schema v1 intact.
 **Traceability check**: every new FR has at least one task (T070–T081) and, where user-observable, a
 quickstart row (2b, 21–28) and a success criterion (SC-013…SC-017).
 
+### Revision R1 re-validation (2026-07-25)
+
+R1 folded the former specification 004 into this one — camera lifecycle, preview aspect ratio, capture
+modes, lens switching, conditional countdown, session loop, camera metadata, layout, stability, and the
+camera abstraction. All 16 items still pass (16/16 → 16/16); no regressions. The spec grew from 55 to
+116 functional requirements (119 counting lettered sub-requirements) and from 17 to 32 success criteria.
+
+Five clarifications were resolved during the revision and are recorded in *Clarifications → Session
+2026-07-25*. Two earlier clarification answers are annotated as superseded rather than deleted, so the
+record of what was believed when remains intact.
+
+**Requirement-completeness note on E1**: the *HIGH E1* finding above was originally closed by making
+front-camera capture mandatory. R1 permits the rear lens, so that closure is restated rather than
+reversed — FR-053–FR-058 convert non-canonical captures before storage, which preserves the
+anti-corruption guarantee E1 demanded while allowing both lenses. FR-044 retains the rejection rule for
+configurations that genuinely cannot be recorded correctly.
+
+**Consistency gaps introduced by R1** — status after `/speckit-plan` (2026-07-26):
+
+- ✅ `plan.md` — regenerated for R1: Constitution Check re-evaluated against v1.3.0, R1 design
+  section, capability phases H–N, and the six hardware-only criteria called out explicitly.
+- ✅ `research.md` — decisions **D14–D22** added, each naming the existing behaviour it replaces. D1
+  and D12 carry superseded pointers rather than being rewritten.
+- ✅ `data-model.md` — canonical-convention wording adopted throughout, `raw` → `canonicalRaw`
+  (FR-056), new camera domain, camera-session lifecycle, failure taxonomy, conversion rules, and the
+  revised take state machine.
+- ✅ `contracts/sample-json.md` — carries all five additive fields, the redefined meaning of `raw`,
+  and the placement rationale.
+- ✅ `contracts/camera-channel.md` — **new**, covering lens selection (FR-065–FR-070), total release
+  (FR-086), and true preview dimensions (FR-099). `contracts/platform-channel.md` is now a superseded
+  redirect with no implementable content.
+- ✅ `contracts/interfaces.md` — `CameraSource`/`CameraSession`, `CameraSessionController`,
+  `CanonicalViewConverter`, the camera-failure taxonomy, and the lifecycle log events.
+- ✅ `quickstart.md` — validation rows 29–44, a dedicated hardware-only camera-lifecycle section
+  (L1–L6), and the SC-028 throughput comparison.
+- ✅ `tasks.md` — regenerated: baseline phases 1–7 kept as the record of merged work, R1 phases 8–16
+  added (T082–T138), and T037/T037a marked superseded and replaced by T098/T099.
+
+### R1.1 post-analysis re-validation (2026-07-26)
+
+The cross-artifact analysis pass produced 0 CRITICAL and 1 HIGH finding; all six were accepted and
+applied. All 16 checklist items still pass (16/16 → 16/16). Requirement and criterion counts are
+unchanged (119 FRs, 32 SCs) — R1.1 revised wording and scope, it did not add requirements.
+
+| Finding | Severity | Resolution |
+|---|---|---|
+| **E1** Countdown/confirmation controls built in a P3 phase that P1 and P2 stories depend on | HIGH | Ordering fixed: T111a (confirmation, Phase 10/P1) and T115a (countdown, Phase 11/P2); T130 now only positions the finished bar |
+| **C1** FR-115 had zero tasks | MEDIUM | FR-115 extended to require **automatic** enforcement; T133a adds the layer-boundary architecture test |
+| **F1** Orientation unhandled between takes | MEDIUM | **FR-049 revised**: locked for the whole capture session, restored on leaving. T086a implements it. The only behaviour change in R1.1 |
+| **A1** "Session" used for three scopes, two named | MEDIUM | Glossary → *The three sessions*; FR-071 now states that re-entry without a mode change does not re-initialize; T082a renames the colliding types |
+| **C2** SC-030 verified only implicitly | MEDIUM | FR-116 extended to the complete pipeline; T091 extended and T133b adds the end-to-end no-hardware integration test |
+| **C3** SC-023 untracked | LOW | Added as quickstart manual row 47 |
+
+**Requirement-completeness note**: `session_uuid` still identifies a **recording session**. A1 renamed
+a concept in prose, never a persisted field — `schema_version` stays `1` and no fixture changes.
+- ⏳ **Engine-side follow-ups**, both disclosed rather than resolved, and neither gating this feature:
+  (1) `PoseSerializer` re-emits only the keys it knows, so a load-then-resave drops all five additive
+  fields — verified by reading `apps/engine/dataset/serializer.py`, which uses explicit key lookup on
+  plain dataclasses and therefore *reads* R1 samples correctly today; (2) the engine's documentation
+  of `HandSample.raw` is stale now that FR-056 redefines its meaning without renaming it.
+
 ## Notes
 
 - Items marked incomplete require spec updates before `/speckit-clarify` or `/speckit-plan`.
-- All items pass; spec, plan, and tasks are consistent and ready for implementation.
+- All 16 checklist items pass. The **spec and every design artifact are consistent and ready**;
+  `tasks.md` is the last artifact predating R1 and needs regeneration before implementation.

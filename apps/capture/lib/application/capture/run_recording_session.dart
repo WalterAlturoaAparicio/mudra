@@ -1,19 +1,33 @@
-/// The capture session use case — the heart of the application.
+/// The recording-session use case — the heart of the application.
 ///
-/// One press of Record runs: mint a `session_uuid` → lock orientation →
-/// countdown (preview stays live) → capture window → validate every frame →
-/// normalize the accepted ones → persist them in one pass → record the session
-/// → unlock orientation → report the result.
+/// One press of Record runs: mint a `session_uuid` → **countdown, when enabled**
+/// (the preview stays live) → capture window → validate every frame → normalize
+/// the accepted ones → persist them in one pass → record the take → report the
+/// result.
+///
+/// Three R1 properties shape it:
+///
+/// - the countdown is **conditional** (FR-010). When disabled it is skipped
+///   entirely rather than run with a zero duration, so capture begins on the
+///   press;
+/// - it consumes the camera controller's **canonical** frame stream, so it never
+///   sees or reasons about which lens produced a frame (FR-053);
+/// - it does **not own the camera**. A take is abandoned when the camera is
+///   released, never the other way round (FR-094), and orientation is locked by
+///   the capture screen for the whole capture session rather than per take
+///   (FR-049).
 ///
 /// It touches no widget and no plugin, which is exactly why the whole recording
-/// behaviour is testable on the host with a fake landmark source.
+/// behaviour is testable on the host with a fake camera.
 library;
 
 import 'dart:async';
 
 import 'package:capture/application/capture/session_ticker.dart';
-import 'package:capture/domain/capture/capture_session.dart';
-import 'package:capture/domain/capture/capture_state.dart';
+import 'package:capture/domain/camera/camera.dart';
+import 'package:capture/domain/camera/capture_settings.dart';
+import 'package:capture/domain/capture/recording_session.dart';
+import 'package:capture/domain/capture/recording_state.dart';
 import 'package:capture/domain/landmarks/landmarks.dart';
 import 'package:capture/domain/ports/ports.dart';
 import 'package:capture/domain/poses/pose_catalog.dart';
@@ -22,11 +36,10 @@ import 'package:capture/shared/config/capture_config.dart';
 import 'package:capture/shared/errors/failures.dart';
 import 'package:capture/shared/time/iso_timestamp.dart';
 
-/// Runs one capture session and reports its state as it advances.
-class RunCaptureSession {
+/// Runs one recording session and reports its state as it advances.
+class RunRecordingSession {
   /// Creates the use case with its collaborators.
-  RunCaptureSession({
-    required HandLandmarkSource source,
+  RunRecordingSession({
     required SampleValidator validator,
     required LandmarkNormalizer normalizer,
     required SampleRepository repository,
@@ -36,10 +49,8 @@ class RunCaptureSession {
     required CaptureConfig config,
     required AppLogger logger,
     required String applicationVersion,
-    OrientationController? orientation,
     SessionTicker ticker = const PeriodicSessionTicker(),
-  })  : _source = source,
-        _validator = validator,
+  })  : _validator = validator,
         _normalizer = normalizer,
         _repository = repository,
         _sessionStore = sessionStore,
@@ -48,10 +59,8 @@ class RunCaptureSession {
         _config = config,
         _logger = logger,
         _applicationVersion = applicationVersion,
-        _orientation = orientation,
         _ticker = ticker;
 
-  final HandLandmarkSource _source;
   final SampleValidator _validator;
   final LandmarkNormalizer _normalizer;
   final SampleRepository _repository;
@@ -61,77 +70,77 @@ class RunCaptureSession {
   final CaptureConfig _config;
   final AppLogger _logger;
   final String _applicationVersion;
-  final OrientationController? _orientation;
   final SessionTicker _ticker;
 
   bool _cancelRequested = false;
   bool _running = false;
+  SessionEndReason _abandonReason = SessionEndReason.cancelled;
 
-  /// Whether a session is currently in flight.
+  /// Whether a take is currently in flight.
   bool get isRunning => _running;
 
-  /// Requests cancellation of the running session; nothing will be written.
-  void cancel() => _cancelRequested = true;
+  /// Requests cancellation of the running take; nothing will be written.
+  void cancel() {
+    _abandonReason = SessionEndReason.cancelled;
+    _cancelRequested = true;
+  }
 
-  /// Runs a full session for [pose], emitting each state as it is entered.
+  /// Abandons the running take because the camera went away (FR-068/FR-094).
+  ///
+  /// Every no-save exit — cancel, orientation change, camera release, lens
+  /// switch, mode change — routes through this one operation, so "nothing
+  /// partial is ever written" is a single code path rather than six.
+  void abandon(SessionEndReason reason) {
+    _abandonReason = reason;
+    _cancelRequested = true;
+  }
+
+  /// Runs a full take for [pose], emitting each state as it is entered.
   ///
   /// The returned stream always ends in [SummaryState], [CancelledState], or
   /// [FailedState] — never mid-workflow — and never throws into its listener.
-  Stream<CaptureSessionState> run(
-    PoseDefinition pose,
-    LandmarkSourceSession session,
-  ) async* {
+  Stream<RecordingSessionState> run(
+    PoseDefinition pose, {
+    required CameraSessionInfo camera,
+    required CaptureSettings settings,
+    required Stream<LandmarkFrame> frames,
+  }) async* {
     if (_running) return;
     _running = true;
     _cancelRequested = false;
+    _abandonReason = SessionEndReason.cancelled;
 
     final sessionUuid = _uuid.create();
     final startedAt = _clock.nowUtc();
     final countdownStartedIso = formatEngineTimestamp(startedAt);
+    final countdown = settings.countdown;
 
-    _logger.info('Capture session started.', {
+    _logger.info('Recording session started.', {
       'session_uuid': sessionUuid,
       'pose_id': pose.poseId,
-      'countdown_seconds': _config.countdownSeconds,
+      'mode': settings.mode.wireValue,
+      'lens': settings.lens.wireValue,
+      'countdown_enabled': settings.countdownEnabled,
+      'countdown_seconds': settings.recordedCountdownSeconds,
       'required_hands': pose.requiredHands,
     });
 
-    StreamSubscription<void>? orientationSub;
-    var orientationChanged = false;
-
     try {
-      if (_config.lockOrientationDuringSession && _orientation != null) {
-        await _orientation.lock();
-        orientationSub = _orientation.unexpectedChanges.listen((_) {
-          orientationChanged = true;
-        });
-      }
+      // -- countdown: skipped entirely when disabled (FR-010) ------------------
+      if (settings.countdownEnabled && countdown > Duration.zero) {
+        yield CountdownState(remaining: countdown, total: countdown);
 
-      // -- countdown: the preview keeps rendering; nothing is captured yet ----
-      yield CountdownState(
-        remaining: _config.countdown,
-        total: _config.countdown,
-      );
-
-      await for (final elapsed in _ticker.ticks(_config.tickInterval)) {
-        if (_cancelRequested) {
-          yield* _cancelled(sessionUuid, pose, startedAt, SessionEndReason.cancelled);
-          return;
-        }
-        if (orientationChanged) {
-          yield* _cancelled(
-            sessionUuid,
-            pose,
-            startedAt,
-            SessionEndReason.orientationChanged,
+        await for (final elapsed in _ticker.ticks(_config.tickInterval)) {
+          if (_cancelRequested) {
+            yield* _abandoned(sessionUuid, pose, _abandonReason);
+            return;
+          }
+          if (elapsed >= countdown) break;
+          yield CountdownState(
+            remaining: countdown - elapsed,
+            total: countdown,
           );
-          return;
         }
-        if (elapsed >= _config.countdown) break;
-        yield CountdownState(
-          remaining: _config.countdown - elapsed,
-          total: _config.countdown,
-        );
       }
 
       // -- capture window: every frame is validated, accepted or discarded ----
@@ -141,22 +150,13 @@ class RunCaptureSession {
       var endReason = SessionEndReason.completed;
       Duration observedWindow = Duration.zero;
 
-      final frames = StreamQueueLike(_source.frames);
+      final buffer = FrameBuffer(frames);
       try {
         await for (final elapsed in _ticker.ticks(_config.tickInterval)) {
           observedWindow = elapsed;
 
           if (_cancelRequested) {
-            yield* _cancelled(sessionUuid, pose, startedAt, SessionEndReason.cancelled);
-            return;
-          }
-          if (orientationChanged) {
-            yield* _cancelled(
-              sessionUuid,
-              pose,
-              startedAt,
-              SessionEndReason.orientationChanged,
-            );
+            yield* _abandoned(sessionUuid, pose, _abandonReason);
             return;
           }
 
@@ -164,7 +164,7 @@ class RunCaptureSession {
           // checked *inside* the drain: a single tick can carry more frames than
           // the limit allows, and accepting them all would overshoot silently.
           var limitHit = false;
-          for (final frame in frames.drain()) {
+          for (final frame in buffer.drain()) {
             if (drafts.length >= _config.maxSamplesPerSession) {
               limitHit = true;
               break;
@@ -184,14 +184,15 @@ class RunCaptureSession {
               _buildSample(
                 frame: frame,
                 pose: pose,
-                session: session,
+                camera: camera,
+                settings: settings,
                 sessionUuid: sessionUuid,
                 countdownStartedIso: countdownStartedIso,
               ),
             );
           }
 
-          // FR-051: the cap finalizes the session normally, keeping everything
+          // FR-051: the cap finalizes the take normally, keeping everything
           // already accepted — it is a stop condition, not an error.
           if (limitHit || drafts.length >= _config.maxSamplesPerSession) {
             endReason = SessionEndReason.limitReached;
@@ -207,7 +208,7 @@ class RunCaptureSession {
           );
         }
       } finally {
-        frames.close();
+        buffer.close();
       }
 
       // -- persist -----------------------------------------------------------
@@ -216,7 +217,7 @@ class RunCaptureSession {
       final refs = await _repository.saveAll(drafts);
       final finishedAt = _clock.nowUtc();
 
-      final record = CaptureSession(
+      final record = RecordingSession(
         sessionUuid: sessionUuid,
         poseId: pose.poseId,
         startedAt: startedAt,
@@ -229,7 +230,7 @@ class RunCaptureSession {
         await _sessionStore.record(record);
       }
 
-      final result = CaptureResult(
+      final result = RecordingResult(
         sessionUuid: sessionUuid,
         poseId: pose.poseId,
         accepted: refs.length,
@@ -240,7 +241,7 @@ class RunCaptureSession {
         refs: refs,
       );
 
-      _logger.info('Capture session finished.', {
+      _logger.info('Recording session finished.', {
         'session_uuid': sessionUuid,
         'pose_id': pose.poseId,
         'accepted': result.accepted,
@@ -250,14 +251,14 @@ class RunCaptureSession {
 
       yield SummaryState(result);
     } on Failure catch (failure) {
-      _logger.error('Capture session failed.', {
+      _logger.error('Recording session failed.', {
         'session_uuid': sessionUuid,
         'pose_id': pose.poseId,
         'failure': failure.message,
       });
       yield FailedState(failure);
     } on Object catch (error) {
-      _logger.error('Capture session failed unexpectedly.', {
+      _logger.error('Recording session failed unexpectedly.', {
         'session_uuid': sessionUuid,
         'error': '$error',
       });
@@ -268,21 +269,16 @@ class RunCaptureSession {
         ),
       );
     } finally {
-      await orientationSub?.cancel();
-      if (_config.lockOrientationDuringSession && _orientation != null) {
-        await _orientation.unlock();
-      }
       _running = false;
     }
   }
 
-  Stream<CaptureSessionState> _cancelled(
+  Stream<RecordingSessionState> _abandoned(
     String sessionUuid,
     PoseDefinition pose,
-    DateTime startedAt,
     SessionEndReason reason,
   ) async* {
-    _logger.info('Capture session ended without saving.', {
+    _logger.info('Recording session ended without saving.', {
       'session_uuid': sessionUuid,
       'pose_id': pose.poseId,
       'end_reason': reason.wireValue,
@@ -293,17 +289,24 @@ class RunCaptureSession {
   PoseSample _buildSample({
     required LandmarkFrame frame,
     required PoseDefinition pose,
-    required LandmarkSourceSession session,
+    required CameraSessionInfo camera,
+    required CaptureSettings settings,
     required String sessionUuid,
     required String countdownStartedIso,
   }) {
+    assert(
+      frame.isCanonical,
+      'Frames reaching the sample builder must already be canonical (FR-053). '
+      'Conversion happens once, at the camera seam.',
+    );
+
     final timestamp = formatEngineTimestamp(_clock.nowUtc());
     final hands = [
       for (final hand in frame.hands)
         HandSample(
           handedness: hand.handedness,
           confidence: hand.confidence,
-          raw: hand.landmarks,
+          canonicalRaw: hand.landmarks,
           normalized: _normalizer.normalize(hand.landmarks),
         ),
     ];
@@ -322,10 +325,10 @@ class RunCaptureSession {
       ),
       metadata: SampleMetadata(
         timestamp: timestamp,
-        cameraIndex: session.lensFacing,
+        cameraIndex: camera.platformLensId,
         cameraWidth: frame.frameWidth,
         cameraHeight: frame.frameHeight,
-        mediapipeVersion: session.mediapipeVersion,
+        mediapipeVersion: camera.detectorVersion,
         applicationVersion: _applicationVersion,
         numHands: hands.length,
         hands: [
@@ -335,9 +338,15 @@ class RunCaptureSession {
         capture: CaptureTiming(
           captureTime: timestamp,
           countdownStartTime: countdownStartedIso,
-          countdownSeconds: _config.countdownSeconds,
+          countdownSeconds: settings.recordedCountdownSeconds,
+          countdownEnabled: settings.countdownEnabled,
           sessionUuid: sessionUuid,
         ),
+        // FR-085: the configuration active at the instant of capture, so takes
+        // before and after a lens or mode change each report their own. FR-058:
+        // this reports what was *used*, even for a sample whose coordinates were
+        // converted into the canonical convention on the way to disk.
+        camera: camera.metadataWith(countdownEnabled: settings.countdownEnabled),
       ),
       hands: hands,
     );
@@ -347,11 +356,11 @@ class RunCaptureSession {
 /// Buffers a frame stream so a tick can drain everything that arrived since the
 /// previous one.
 ///
-/// Frames arrive faster than the session advances; draining per tick keeps the
-/// session loop simple without dropping anything the detector produced.
-class StreamQueueLike {
+/// Frames arrive faster than the take advances; draining per tick keeps the loop
+/// simple without dropping anything the detector produced.
+class FrameBuffer {
   /// Subscribes to [stream] immediately and buffers what it emits.
-  StreamQueueLike(Stream<LandmarkFrame> stream) {
+  FrameBuffer(Stream<LandmarkFrame> stream) {
     _subscription = stream.listen(_buffer.add);
   }
 

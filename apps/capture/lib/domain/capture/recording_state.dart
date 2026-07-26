@@ -1,18 +1,42 @@
-/// The capture session state machine and its result type.
+/// The recording-session state machine and its result type.
 ///
-/// `idle → countdown → capturing → saving → summary → idle`, with `cancelled`
-/// and `failed` as alternative terminal states. The preview keeps rendering
-/// throughout — no state here ever blocks (FR-011).
+/// One press of Record runs:
+///
+/// ```text
+///                     countdown enabled
+/// idle ──press Record──┬──► countdown ──reaches zero──┐
+///                      │                              ▼
+///                      └──────────────────────────► capturing ──window ends──► saving ──► summary
+///                             countdown disabled          │                                  │
+///                             (FR-010)                    │                       dismissed / confirm off
+///                             │                           │                                  │
+///                             └────── cancel ─────────────┴──► cancelled ────────────────────┤
+///                                                         └──► failed ─────────────────────► idle
+/// ```
+///
+/// Two properties matter and both are R1:
+///
+/// - the countdown is **conditional** — with it disabled, [CountdownState] is
+///   never entered at all (FR-010);
+/// - **no terminal state releases the camera or leaves the screen**. Every
+///   terminal state returns to [IdleState] on the same screen with the camera
+///   still held, so the next take needs no reacquisition (FR-076). Leaving is an
+///   explicit user action, never a consequence of finishing a take.
+///
+/// The preview keeps rendering throughout — no state here ever blocks (FR-011).
+///
+/// Named `CaptureSessionState` before revision R1.1; renamed because "capture
+/// session" now names the screen-level scope, not a take.
 library;
 
-import 'package:capture/domain/capture/capture_session.dart';
+import 'package:capture/domain/capture/recording_session.dart';
 import 'package:capture/domain/samples/pose_sample.dart';
 import 'package:capture/shared/errors/failures.dart';
 
-/// The outcome of one capture session, as shown to the user.
-class CaptureResult {
-  /// Creates a capture result.
-  CaptureResult({
+/// The outcome of one recording session, as shown to the user.
+class RecordingResult {
+  /// Creates a recording result.
+  RecordingResult({
     required this.sessionUuid,
     required this.poseId,
     required this.accepted,
@@ -24,7 +48,7 @@ class CaptureResult {
   })  : rejectionCounts = Map.unmodifiable(rejectionCounts),
         refs = List.unmodifiable(refs);
 
-  /// The session that produced this result.
+  /// The take that produced this result.
   final String sessionUuid;
 
   /// The pose that was collected.
@@ -42,7 +66,7 @@ class CaptureResult {
   /// How long the capture window actually ran.
   final Duration duration;
 
-  /// How the session ended.
+  /// How the take ended.
   final SessionEndReason endReason;
 
   /// Handles to what was written.
@@ -54,7 +78,7 @@ class CaptureResult {
   /// Whether anything at all was stored.
   bool get isEmpty => accepted == 0;
 
-  /// Whether the session stopped because the configured cap was reached.
+  /// Whether the take stopped because the configured cap was reached.
   bool get hitLimit => endReason == SessionEndReason.limitReached;
 
   /// The most common rejection reason, or `null` when nothing was rejected.
@@ -74,24 +98,32 @@ class CaptureResult {
   }
 }
 
-/// The state of the capture workflow at one instant.
-sealed class CaptureSessionState {
+/// The state of one take at one instant.
+sealed class RecordingSessionState {
   /// Base constructor.
-  const CaptureSessionState();
+  const RecordingSessionState();
 
-  /// Whether a session is in flight (countdown, capturing, or saving).
+  /// Whether a take is in flight (countdown, capturing, or saving).
   bool get isActive =>
       this is CountdownState || this is CapturingState || this is SavingState;
+
+  /// Whether this state ends the take.
+  bool get isTerminal =>
+      this is SummaryState || this is CancelledState || this is FailedState;
 }
 
-/// Nothing is happening; Record is enabled.
-class IdleState extends CaptureSessionState {
+/// Nothing is happening; Record is enabled and the camera is live.
+class IdleState extends RecordingSessionState {
   /// Creates the idle state.
   const IdleState();
 }
 
 /// Counting down before capture; the preview stays live (FR-011).
-class CountdownState extends CaptureSessionState {
+///
+/// **Skipped entirely** when the countdown is disabled for the capture session
+/// (FR-010) — this state is never entered, rather than entered with a zero
+/// duration.
+class CountdownState extends RecordingSessionState {
   /// Creates a countdown state.
   const CountdownState({required this.remaining, required this.total});
 
@@ -116,7 +148,7 @@ class CountdownState extends CaptureSessionState {
 }
 
 /// Capturing frames automatically; accepted/discarded tallies update live.
-class CapturingState extends CaptureSessionState {
+class CapturingState extends RecordingSessionState {
   /// Creates a capturing state.
   const CapturingState({
     required this.elapsed,
@@ -145,7 +177,7 @@ class CapturingState extends CaptureSessionState {
 }
 
 /// Persisting the buffered samples.
-class SavingState extends CaptureSessionState {
+class SavingState extends RecordingSessionState {
   /// Creates a saving state.
   const SavingState({required this.accepted});
 
@@ -153,26 +185,30 @@ class SavingState extends CaptureSessionState {
   final int accepted;
 }
 
-/// The session finished; its result is on screen.
-class SummaryState extends CaptureSessionState {
+/// The take finished; its result is on screen.
+///
+/// Blocks the next take until dismissed when take confirmation is on (FR-077);
+/// otherwise the screen passes straight through to [IdleState] while still
+/// conveying the result (FR-078). Either way the camera stays acquired.
+class SummaryState extends RecordingSessionState {
   /// Creates a summary state.
   const SummaryState(this.result);
 
-  /// What the session produced.
-  final CaptureResult result;
+  /// What the take produced.
+  final RecordingResult result;
 }
 
-/// The session was aborted; nothing was written.
-class CancelledState extends CaptureSessionState {
+/// The take was abandoned; nothing was written.
+class CancelledState extends RecordingSessionState {
   /// Creates a cancelled state.
   const CancelledState(this.reason);
 
-  /// Why the session ended.
+  /// Why the take ended.
   final SessionEndReason reason;
 }
 
-/// The session failed; nothing partial was written.
-class FailedState extends CaptureSessionState {
+/// The take failed; nothing partial was written.
+class FailedState extends RecordingSessionState {
   /// Creates a failed state.
   const FailedState(this.failure);
 

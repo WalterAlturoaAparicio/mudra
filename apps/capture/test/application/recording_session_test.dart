@@ -7,9 +7,11 @@ library;
 
 import 'dart:io';
 
-import 'package:capture/application/capture/run_capture_session.dart';
-import 'package:capture/domain/capture/capture_session.dart';
-import 'package:capture/domain/capture/capture_state.dart';
+import 'package:capture/application/capture/run_recording_session.dart';
+import 'package:capture/domain/camera/camera.dart';
+import 'package:capture/domain/camera/capture_settings.dart';
+import 'package:capture/domain/capture/recording_session.dart';
+import 'package:capture/domain/capture/recording_state.dart';
 import 'package:capture/domain/normalization/translation_scale_normalizer.dart';
 import 'package:capture/domain/validation/pose_sample_validator.dart';
 import 'package:capture/infrastructure/storage/file_sample_repository.dart';
@@ -20,42 +22,51 @@ import '../support/fakes.dart';
 import '../support/sample_factories.dart';
 
 /// Whether the session has reached one of its terminal states.
-bool _isTerminal(CaptureSessionState state) =>
+bool _isTerminal(RecordingSessionState state) =>
     state is SummaryState || state is CancelledState || state is FailedState;
 
 void main() {
   late Directory root;
   late FileSampleRepository repository;
-  late FakeHandLandmarkSource source;
+  late FakeCameraSource source;
+  late FakeCameraSession camera;
   late ManualSessionTicker ticker;
   late FakeClock clock;
   late InMemorySessionStore sessions;
   late RecordingLogger logger;
-  late FakeOrientationController orientation;
 
   const config = CaptureConfig();
+  // Self Capture defaults: front lens, mirrored, 3-second countdown on.
+  final settings = CaptureSettings.fromProfile(
+    CaptureMode.selfCapture,
+    config.selfCaptureProfile,
+  );
 
   setUp(() async {
     root = await Directory.systemTemp.createTemp('mudra_capture_session_');
     repository = FileSampleRepository(rootPath: root.path, config: config);
-    source = FakeHandLandmarkSource();
+    source = FakeCameraSource();
+    camera = await source.open(
+      const CameraRequest(
+        lens: LensPosition.front,
+        analysisWidth: 640,
+        analysisHeight: 480,
+      ),
+    ) as FakeCameraSession;
     ticker = ManualSessionTicker();
     clock = FakeClock();
     sessions = InMemorySessionStore();
     logger = RecordingLogger();
-    orientation = FakeOrientationController();
   });
 
   tearDown(() async {
     await ticker.close();
-    await orientation.close();
-    await source.dispose();
+    await camera.close();
     if (root.existsSync()) await root.delete(recursive: true);
   });
 
-  RunCaptureSession buildUseCase({CaptureConfig? overrideConfig}) =>
-      RunCaptureSession(
-        source: source,
+  RunRecordingSession buildUseCase({CaptureConfig? overrideConfig}) =>
+      RunRecordingSession(
         validator: const PoseSampleValidator(),
         normalizer: const TranslationScaleNormalizer(),
         repository: repository,
@@ -65,13 +76,12 @@ void main() {
         config: overrideConfig ?? config,
         logger: logger,
         applicationVersion: 'mudra-capture/0.1.0',
-        orientation: orientation,
         ticker: ticker,
       );
 
   /// Runs a whole session, feeding [frameCount] frames during the window.
-  Future<List<CaptureSessionState>> runSession({
-    required RunCaptureSession useCase,
+  Future<List<RecordingSessionState>> runSession({
+    required RunRecordingSession useCase,
     int frameCount = 25,
     bool valid = true,
     int handsPerFrame = 1,
@@ -79,11 +89,10 @@ void main() {
     CaptureConfig? cfg,
   }) async {
     final effective = cfg ?? config;
-    final states = <CaptureSessionState>[];
-    final sourceSession = await source.start();
+    final states = <RecordingSessionState>[];
 
     final subscription = useCase
-        .run(makePose(), sourceSession)
+        .run(makePose(), camera: camera.info, settings: settings, frames: camera.frames)
         .listen(states.add);
 
     // Countdown: the preview keeps rendering, nothing is captured.
@@ -125,9 +134,8 @@ void main() {
 
   test('the countdown emits states without capturing anything', () async {
     final useCase = buildUseCase();
-    final states = <CaptureSessionState>[];
-    final sourceSession = await source.start();
-    final sub = useCase.run(makePose(), sourceSession).listen(states.add);
+    final states = <RecordingSessionState>[];
+    final sub = useCase.run(makePose(), camera: camera.info, settings: settings, frames: camera.frames).listen(states.add);
 
     await ticker.advance(const Duration(milliseconds: 500));
     // Frames arriving during the countdown must not become samples.
@@ -145,9 +153,8 @@ void main() {
 
   test('countdown display counts 3, 2, 1', () async {
     final useCase = buildUseCase();
-    final states = <CaptureSessionState>[];
-    final sourceSession = await source.start();
-    final sub = useCase.run(makePose(), sourceSession).listen(states.add);
+    final states = <RecordingSessionState>[];
+    final sub = useCase.run(makePose(), camera: camera.info, settings: settings, frames: camera.frames).listen(states.add);
 
     await ticker.advance(const Duration(milliseconds: 1500));
     await ticker.advance(const Duration(milliseconds: 1000));
@@ -182,9 +189,8 @@ void main() {
 
   test('accepted + discarded equals frames observed (FR-021)', () async {
     final useCase = buildUseCase();
-    final states = <CaptureSessionState>[];
-    final sourceSession = await source.start();
-    final sub = useCase.run(makePose(), sourceSession).listen(states.add);
+    final states = <RecordingSessionState>[];
+    final sub = useCase.run(makePose(), camera: camera.info, settings: settings, frames: camera.frames).listen(states.add);
 
     await ticker.advanceBy(config.countdown);
     source.emitAll([
@@ -209,9 +215,8 @@ void main() {
 
   test('cancelling during the countdown writes nothing (FR-016)', () async {
     final useCase = buildUseCase();
-    final states = <CaptureSessionState>[];
-    final sourceSession = await source.start();
-    final sub = useCase.run(makePose(), sourceSession).listen(states.add);
+    final states = <RecordingSessionState>[];
+    final sub = useCase.run(makePose(), camera: camera.info, settings: settings, frames: camera.frames).listen(states.add);
 
     await ticker.advance(const Duration(milliseconds: 500));
     useCase.cancel();
@@ -226,36 +231,36 @@ void main() {
     await sub.cancel();
   });
 
-  test('orientation change aborts and writes nothing (FR-050, SC-016)', () async {
-    final useCase = buildUseCase();
-    final states = <CaptureSessionState>[];
-    final sourceSession = await source.start();
-    final sub = useCase.run(makePose(), sourceSession).listen(states.add);
+  test('an abandoned take writes nothing (FR-050/FR-068/FR-094, SC-016)',
+      () async {
+    // Orientation is now locked for the whole capture screen (FR-049), and the
+    // screen abandons the take when it changes anyway. What this unit owns is
+    // narrower and is what matters for the dataset: **whatever** the reason, an
+    // abandoned take persists nothing.
+    for (final reason in [
+      SessionEndReason.orientationChanged,
+      SessionEndReason.cameraReleased,
+      SessionEndReason.cancelled,
+    ]) {
+      final useCase = buildUseCase();
+      final states = <RecordingSessionState>[];
+      final sub = useCase
+          .run(makePose(),
+              camera: camera.info, settings: settings, frames: camera.frames)
+          .listen(states.add);
 
-    await ticker.advance(const Duration(milliseconds: 200));
-    orientation.rotate();
-    await Future<void>.delayed(Duration.zero);
-    await ticker.advance(const Duration(milliseconds: 100));
+      await ticker.advance(const Duration(milliseconds: 200));
+      useCase.abandon(reason);
+      await ticker.advance(const Duration(milliseconds: 100));
+      await pumpUntil(() => states.any(_isTerminal));
 
-    final cancelled = states.whereType<CancelledState>().single;
-    expect(cancelled.reason, SessionEndReason.orientationChanged);
-    expect(await repository.count('peace'), 0);
-    expect(sessions.recorded, isEmpty);
+      final cancelled = states.whereType<CancelledState>().single;
+      expect(cancelled.reason, reason);
+      expect(await repository.count('peace'), 0);
+      expect(sessions.recorded, isEmpty);
 
-    await ticker.close();
-    await sub.cancel();
-  });
-
-  test('orientation is locked for the session and always released', () async {
-    await runSession(useCase: buildUseCase());
-
-    expect(orientation.lockCount, 1);
-    expect(
-      orientation.unlockCount,
-      1,
-      reason: 'the lock must be released on every exit path',
-    );
-    expect(orientation.locked, isFalse);
+      await sub.cancel();
+    }
   });
 
   test('the sample limit finalizes the session normally (FR-051)', () async {
@@ -279,9 +284,8 @@ void main() {
 
   test('two-handed poses only keep two-handed frames (SC-012)', () async {
     final useCase = buildUseCase();
-    final states = <CaptureSessionState>[];
-    final sourceSession = await source.start();
-    final sub = useCase.run(makeTwoHandedPose(), sourceSession).listen(states.add);
+    final states = <RecordingSessionState>[];
+    final sub = useCase.run(makeTwoHandedPose(), camera: camera.info, settings: settings, frames: camera.frames).listen(states.add);
 
     await ticker.advanceBy(config.countdown);
     source.emitAll([makeFrame(), makeFrame(), makeTwoHandFrame()]);

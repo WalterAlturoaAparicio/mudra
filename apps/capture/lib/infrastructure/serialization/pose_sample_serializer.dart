@@ -5,13 +5,31 @@
 /// `PoseSerializer` exactly; see
 /// `specs/003-mobile-pose-capture/contracts/sample-json.md`.
 ///
-/// The one addition this application makes is `metadata.capture.session_uuid`:
-/// additive, optional, inside an existing block, tolerated when absent, so a
-/// reader that ignores it still reads every sample (FR-045/FR-052).
+/// Five values this application adds are **additive, optional, and inside blocks
+/// the engine already reads**, so a reader that ignores them still reads every
+/// sample (FR-052):
+///
+/// | Field | Block | Requirement |
+/// |---|---|---|
+/// | `session_uuid` | `metadata.capture` | FR-045 |
+/// | `countdown_enabled` | `metadata.capture` | FR-083 |
+/// | `position` | `metadata.camera` | FR-081 |
+/// | `mirrored_preview` | `metadata.camera` | FR-082 |
+/// | `lens_facing` | `metadata.camera` | FR-084 |
+///
+/// The engine reconstructs these blocks by explicit key lookup on plain frozen
+/// dataclasses — no strict-shape validation — so unknown keys are ignored rather
+/// than rejected, and it loads these samples today unmodified.
+///
+/// **Name/key divergence, on purpose**: the Dart field is `canonicalRaw` and the
+/// emitted key is `raw` (FR-056/FR-057). Renaming the key would be a schema
+/// change; renaming only the field is a terminology correction. A test pins
+/// this so nobody "fixes" it later.
 library;
 
 import 'dart:convert';
 
+import 'package:capture/domain/camera/camera.dart';
 import 'package:capture/domain/landmarks/landmarks.dart';
 import 'package:capture/domain/samples/pose_sample.dart';
 
@@ -108,6 +126,16 @@ class PoseSampleSerializer {
       'index': metadata.cameraIndex,
       'width': metadata.cameraWidth,
       'height': metadata.cameraHeight,
+      // Additive camera record (FR-081/FR-082/FR-084). `lens_facing` duplicates
+      // `index` by construction: `index` is an engine-owned field Capture fills
+      // with a lens constant by local convention, while FR-084 asks for the
+      // platform's identifier independently of that convention. A test asserts
+      // the two agree, so the redundancy cannot drift into a contradiction.
+      if (metadata.camera != null) ...{
+        'position': metadata.camera!.position.wireValue,
+        'mirrored_preview': metadata.camera!.mirroredPreview,
+        'lens_facing': metadata.camera!.platformLensId,
+      },
     },
     'versions': {
       'application': metadata.applicationVersion,
@@ -127,7 +155,8 @@ class PoseSampleSerializer {
       'countdown_start_time': capture.countdownStartTime,
       'capture_time': capture.captureTime,
       'countdown_seconds': capture.countdownSeconds,
-      // Additive field: engine readers ignore it, Capture readers use it.
+      // Additive fields: engine readers ignore them, Capture readers use them.
+      'countdown_enabled': capture.countdownEnabled,
       if (capture.sessionUuid != null) 'session_uuid': capture.sessionUuid,
     };
   }
@@ -139,13 +168,37 @@ class PoseSampleSerializer {
       captureTime: data['capture_time']! as String,
       countdownStartTime: data['countdown_start_time'] as String?,
       countdownSeconds: _asDouble(data['countdown_seconds'] ?? 0),
+      // Absent on pre-R1 samples: infer from the recorded length rather than
+      // guessing `false`, so an old sample with a 3-second countdown still
+      // reads as having had one (FR-052).
+      countdownEnabled: (data['countdown_enabled'] as bool?) ??
+          (_asDouble(data['countdown_seconds'] ?? 0) > 0),
       sessionUuid: data['session_uuid'] as String?,
+    );
+  }
+
+  /// Rebuilds the additive camera record.
+  ///
+  /// Returns `null` for samples recorded before revision R1, so the new fields
+  /// are **absent rather than wrong** (FR-052, SC-026).
+  CameraMetadata? _cameraFromMap(
+    Map<String, Object?> camera,
+    CaptureTiming? capture,
+  ) {
+    final position = camera['position'] as String?;
+    if (position == null) return null;
+    return CameraMetadata(
+      position: LensPosition.fromWire(position),
+      mirroredPreview: (camera['mirrored_preview'] as bool?) ?? false,
+      platformLensId: (camera['lens_facing'] as int?) ?? camera['index']! as int,
+      countdownEnabled: capture?.countdownEnabled ?? false,
     );
   }
 
   SampleMetadata _metadataFromMap(Map<String, Object?> data) {
     final camera = _asMap(data['camera'], 'metadata.camera');
     final versions = _asMap(data['versions'], 'metadata.versions');
+    final capture = _captureFromMap(data['capture']);
     return SampleMetadata(
       timestamp: data['timestamp']! as String,
       cameraIndex: camera['index']! as int,
@@ -163,21 +216,24 @@ class PoseSampleSerializer {
             confidence: _asDouble(_asMap(hand, 'metadata.hands[]')['confidence']),
           ),
       ],
-      capture: _captureFromMap(data['capture']),
+      capture: capture,
+      camera: _cameraFromMap(camera, capture),
     );
   }
 
   Map<String, Object?> _handToMap(HandSample hand) => {
     'handedness': hand.handedness.wireValue,
     'confidence': hand.confidence,
-    'raw': _landmarksToList(hand.raw),
+    // The wire key stays `raw` while the Dart field is `canonicalRaw`
+    // (FR-057). Renaming the key would be a schema change; this is not.
+    'raw': _landmarksToList(hand.canonicalRaw),
     'normalized': _landmarksToList(hand.normalized),
   };
 
   HandSample _handFromMap(Map<String, Object?> data) => HandSample(
     handedness: Handedness.fromLabel(data['handedness'] as String?),
     confidence: _asDouble(data['confidence']),
-    raw: _landmarksFromList(_asList(data['raw'], 'hands[].raw')),
+    canonicalRaw: _landmarksFromList(_asList(data['raw'], 'hands[].raw')),
     normalized: _landmarksFromList(
       _asList(data['normalized'], 'hands[].normalized'),
     ),

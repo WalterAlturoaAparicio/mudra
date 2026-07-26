@@ -9,7 +9,7 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:capture/domain/capture/capture_session.dart';
+import 'package:capture/domain/capture/recording_session.dart';
 import 'package:capture/domain/ports/ports.dart';
 import 'package:capture/shared/config/capture_config.dart';
 import 'package:capture/shared/errors/failures.dart';
@@ -32,7 +32,7 @@ class FileSessionStore implements SessionStore {
   );
 
   @override
-  Future<void> record(CaptureSession session) async {
+  Future<void> record(RecordingSession session) async {
     if (!session.isRecordable) return;
 
     final sessions = await all()
@@ -56,7 +56,7 @@ class FileSessionStore implements SessionStore {
   }
 
   @override
-  Future<List<CaptureSession>> all() async {
+  Future<List<RecordingSession>> all() async {
     if (!await _file.exists()) return [];
     try {
       final decoded = jsonDecode(await _file.readAsString());
@@ -75,7 +75,7 @@ class FileSessionStore implements SessionStore {
     }
   }
 
-  Map<String, Object?> _toMap(CaptureSession session) => {
+  Map<String, Object?> _toMap(RecordingSession session) => {
     'session_uuid': session.sessionUuid,
     'pose_id': session.poseId,
     'started_at': formatEngineTimestamp(session.startedAt),
@@ -87,9 +87,9 @@ class FileSessionStore implements SessionStore {
     'end_reason': session.endReason.wireValue,
   };
 
-  CaptureSession _fromMap(Map<String, Object?> data) {
+  RecordingSession _fromMap(Map<String, Object?> data) {
     final finishedAt = data['finished_at'] as String?;
-    return CaptureSession(
+    return RecordingSession(
       sessionUuid: data['session_uuid']! as String,
       poseId: data['pose_id']! as String,
       startedAt: DateTime.parse(data['started_at']! as String).toUtc(),

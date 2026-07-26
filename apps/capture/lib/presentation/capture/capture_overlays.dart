@@ -1,13 +1,13 @@
 /// Capture overlays: countdown and result summary.
 ///
-/// Widgets only — every value here comes from [CaptureSessionState]. The
+/// Widgets only — every value here comes from [RecordingSessionState]. The
 /// countdown deliberately shows the live preview, the counter, **and** the pose
 /// reference together (FR-012), because the moment a user needs the reference
 /// most is while they are shaping their hands.
 library;
 
-import 'package:capture/domain/capture/capture_session.dart';
-import 'package:capture/domain/capture/capture_state.dart';
+import 'package:capture/domain/capture/recording_session.dart';
+import 'package:capture/domain/capture/recording_state.dart';
 import 'package:capture/domain/poses/pose_catalog.dart';
 import 'package:capture/presentation/design/design.dart';
 import 'package:flutter/material.dart';
@@ -141,7 +141,7 @@ class CaptureSummaryCard extends StatelessWidget {
   });
 
   /// What the session produced.
-  final CaptureResult result;
+  final RecordingResult result;
 
   /// Called when the user acknowledges the summary.
   final VoidCallback onDismiss;

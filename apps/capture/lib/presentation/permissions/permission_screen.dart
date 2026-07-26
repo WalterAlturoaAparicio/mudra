@@ -4,6 +4,8 @@
 /// reads hand positions and never saves an image (Principle II).
 library;
 
+import 'dart:async';
+
 import 'package:capture/presentation/design/design.dart';
 import 'package:capture/shared/di/providers.dart';
 import 'package:capture/shared/errors/failures.dart';
@@ -25,11 +27,18 @@ class PermissionScreen extends ConsumerWidget {
   /// Called when the user wants to try again.
   final VoidCallback onRetry;
 
+  /// How this failure can be resolved, defaulting to a plain retry.
+  CameraRecovery get _recovery =>
+      failure is CameraFailure ? (failure as CameraFailure).recovery : CameraRecovery.retry;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // FR-110: "denied" and "permanently denied" are different problems with
+    // different solutions. Offering "try again" to someone who chose *don't ask
+    // again* is a dead end, and SC-029 forbids dead ends.
+    final permanentlyDenied = _recovery == CameraRecovery.openSettings;
     final isPermission =
-        failure is CameraFailure &&
-        (failure as CameraFailure).code == 'camera_permission_denied';
+        permanentlyDenied || _recovery == CameraRecovery.requestPermission;
 
     return Scaffold(
       appBar: AppBar(),
@@ -59,17 +68,26 @@ class PermissionScreen extends ConsumerWidget {
               style: TextStyle(color: Colors.white60, fontSize: 14),
             ),
             const SizedBox(height: Spacing.xl),
-            FilledButton(
-              key: const Key('permission-retry'),
-              onPressed: onRetry,
-              child: const Text('Try again'),
-            ),
-            if (isPermission) ...[
+            // The primary action is whichever one actually resolves the cause.
+            if (permanentlyDenied)
+              FilledButton(
+                key: const Key('permission-open-settings'),
+                onPressed: () =>
+                    unawaited(ref.read(cameraPermissionsProvider).openSettings()),
+                child: const Text('Open settings'),
+              )
+            else
+              FilledButton(
+                key: const Key('permission-retry'),
+                onPressed: onRetry,
+                child: const Text('Try again'),
+              ),
+            if (permanentlyDenied) ...[
               const SizedBox(height: Spacing.sm),
               OutlinedButton(
-                onPressed: () =>
-                    ref.read(cameraPermissionsProvider).openSettings(),
-                child: const Text('Open settings'),
+                key: const Key('permission-retry'),
+                onPressed: onRetry,
+                child: const Text('I have allowed it — try again'),
               ),
             ],
           ],

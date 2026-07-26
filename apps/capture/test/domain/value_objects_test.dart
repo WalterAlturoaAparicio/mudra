@@ -1,7 +1,7 @@
 /// Domain value-object invariants.
 library;
 
-import 'package:capture/domain/capture/capture_session.dart';
+import 'package:capture/domain/capture/recording_session.dart';
 import 'package:capture/domain/landmarks/landmarks.dart';
 import 'package:capture/domain/poses/pose_catalog.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -122,7 +122,7 @@ void main() {
     });
   });
 
-  group('CaptureSession', () {
+  group('RecordingSession', () {
     test('is recordable only when it produced samples', () {
       expect(makeSession().isRecordable, isTrue);
       expect(makeSession(totalSamples: 0).isRecordable, isFalse);

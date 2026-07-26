@@ -5,6 +5,7 @@
 /// knowledge: the wire format lives in the serializer, never here.
 library;
 
+import 'package:capture/domain/camera/camera.dart';
 import 'package:capture/domain/landmarks/landmarks.dart';
 
 /// Current on-disk schema version. Shared contract with the engine; changing it
@@ -57,16 +58,16 @@ class HandMeta {
   int get hashCode => Object.hash(handedness, confidence);
 }
 
-/// One detected hand with both its raw and normalized landmark sets.
+/// One detected hand with both its canonical-raw and normalized landmark sets.
 ///
-/// Persisting raw landmarks lets the normalization strategy change later
-/// without re-recording anything.
+/// Persisting the earliest landmark set lets the normalization strategy change
+/// later without re-recording anything.
 class HandSample {
   /// Creates a hand sample.
   const HandSample({
     required this.handedness,
     required this.confidence,
-    required this.raw,
+    required this.canonicalRaw,
     required this.normalized,
   });
 
@@ -76,8 +77,20 @@ class HandSample {
   /// Handedness classification confidence.
   final double confidence;
 
-  /// Exact detector output.
-  final HandLandmarks raw;
+  /// The earliest **canonical** observation of the hand (FR-056).
+  ///
+  /// Not a verbatim recording of detector output: a capture from a lens that
+  /// does not natively produce the canonical convention is converted before it
+  /// reaches here (FR-053/FR-055). That is deliberate — the dataset is the
+  /// canonical source of truth, not a recording of a detector, and a
+  /// lens-dependent earliest set would poison every future normalization
+  /// strategy re-derived from it.
+  ///
+  /// **The persisted JSON key is still `raw`** (FR-057), so `schema_version`
+  /// stays `1`, the engine needs no change, and every sample already on disk
+  /// stays valid. The Dart name and the wire key differ *on purpose*; a
+  /// serializer test pins the divergence.
+  final HandLandmarks canonicalRaw;
 
   /// Normalizer output.
   final HandLandmarks normalized;
@@ -87,11 +100,12 @@ class HandSample {
       other is HandSample &&
       other.handedness == handedness &&
       other.confidence == confidence &&
-      other.raw == raw &&
+      other.canonicalRaw == canonicalRaw &&
       other.normalized == normalized;
 
   @override
-  int get hashCode => Object.hash(handedness, confidence, raw, normalized);
+  int get hashCode =>
+      Object.hash(handedness, confidence, canonicalRaw, normalized);
 }
 
 /// How a sample was normalized, recorded independently of the implementation.
@@ -126,6 +140,7 @@ class CaptureTiming {
     required this.captureTime,
     this.countdownStartTime,
     this.countdownSeconds = 0.0,
+    this.countdownEnabled = false,
     this.sessionUuid,
   });
 
@@ -135,10 +150,16 @@ class CaptureTiming {
   /// UTC ISO-8601 instant the countdown was armed, if there was one.
   final String? countdownStartTime;
 
-  /// Configured countdown length in seconds.
+  /// Configured countdown length in seconds; `0.0` when disabled.
   final double countdownSeconds;
 
-  /// The capture session that produced this sample.
+  /// Whether a countdown preceded this take (FR-083).
+  ///
+  /// Additive field. Distinguishes "disabled" from "configured to zero", which
+  /// [countdownSeconds] alone cannot.
+  final bool countdownEnabled;
+
+  /// The recording session (take) that produced this sample.
   final String? sessionUuid;
 
   @override
@@ -147,11 +168,17 @@ class CaptureTiming {
       other.captureTime == captureTime &&
       other.countdownStartTime == countdownStartTime &&
       other.countdownSeconds == countdownSeconds &&
+      other.countdownEnabled == countdownEnabled &&
       other.sessionUuid == sessionUuid;
 
   @override
-  int get hashCode =>
-      Object.hash(captureTime, countdownStartTime, countdownSeconds, sessionUuid);
+  int get hashCode => Object.hash(
+    captureTime,
+    countdownStartTime,
+    countdownSeconds,
+    countdownEnabled,
+    sessionUuid,
+  );
 }
 
 /// Reproducibility context for a sample.
@@ -167,12 +194,15 @@ class SampleMetadata {
     required List<HandMeta> hands,
     this.mediapipeVersion,
     this.capture,
+    this.camera,
   }) : hands = List.unmodifiable(hands);
 
   /// UTC ISO-8601 capture instant (mirrors the sample's top-level timestamp).
   final String timestamp;
 
   /// Platform lens-facing constant: `0` back, `1` front (FR-044).
+  ///
+  /// Reflects the lens actually used, so it is `0` for an Operator Capture take.
   final int cameraIndex;
 
   /// Analysis frame width the landmarks were computed from.
@@ -196,6 +226,12 @@ class SampleMetadata {
   /// Optional capture-timing block.
   final CaptureTiming? capture;
 
+  /// Descriptive camera record (FR-081/FR-082/FR-084).
+  ///
+  /// Additive and optional: absent on samples recorded before revision R1, which
+  /// must stay readable with the new fields simply missing (FR-052).
+  final CameraMetadata? camera;
+
   @override
   bool operator ==(Object other) {
     if (other is! SampleMetadata) return false;
@@ -210,7 +246,8 @@ class SampleMetadata {
         other.mediapipeVersion == mediapipeVersion &&
         other.applicationVersion == applicationVersion &&
         other.numHands == numHands &&
-        other.capture == capture;
+        other.capture == capture &&
+        other.camera == camera;
   }
 
   @override
@@ -224,6 +261,7 @@ class SampleMetadata {
     numHands,
     Object.hashAll(hands),
     capture,
+    camera,
   );
 }
 

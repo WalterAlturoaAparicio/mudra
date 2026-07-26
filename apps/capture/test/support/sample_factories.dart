@@ -1,7 +1,8 @@
 /// Test factories for the capture domain (not a test file itself).
 library;
 
-import 'package:capture/domain/capture/capture_session.dart';
+import 'package:capture/domain/camera/camera.dart';
+import 'package:capture/domain/capture/recording_session.dart';
 import 'package:capture/domain/landmarks/landmarks.dart';
 import 'package:capture/domain/poses/pose_catalog.dart';
 import 'package:capture/domain/samples/pose_sample.dart';
@@ -35,26 +36,35 @@ HandDetection makeHandDetection({
   landmarks: landmarks ?? makeHandLandmarks(),
 );
 
-/// Builds a frame; defaults to a single right hand.
+/// Builds a frame; defaults to a single right hand in the canonical convention.
+///
+/// [convention] lets a test deliver a frame as a rear lens actually would, so
+/// the canonical conversion is exercised rather than bypassed.
 LandmarkFrame makeFrame({
   List<HandDetection>? hands,
   int width = 640,
   int height = 480,
   int timestampMicros = 0,
+  ViewConvention convention = ViewConvention.canonical,
 }) => LandmarkFrame(
   hands: hands ?? [makeHandDetection()],
   frameWidth: width,
   frameHeight: height,
   timestampMicros: timestampMicros,
+  convention: convention,
 );
 
 /// Builds a frame containing two hands, for two-handed pose tests.
-LandmarkFrame makeTwoHandFrame({int timestampMicros = 0}) => makeFrame(
+LandmarkFrame makeTwoHandFrame({
+  int timestampMicros = 0,
+  ViewConvention convention = ViewConvention.canonical,
+}) => makeFrame(
   hands: [
     makeHandDetection(handedness: Handedness.left, confidence: 0.94),
     makeHandDetection(),
   ],
   timestampMicros: timestampMicros,
+  convention: convention,
 );
 
 /// Builds a frame with no hands at all.
@@ -95,7 +105,7 @@ PoseSample makeSample({
       HandSample(
         handedness: i == 0 ? Handedness.right : Handedness.left,
         confidence: 0.98 - 0.02 * i,
-        raw: makeHandLandmarks(),
+        canonicalRaw: makeHandLandmarks(),
         normalized: makeHandLandmarks(offset: -0.1),
       ),
   ];
@@ -142,13 +152,13 @@ PoseCatalog makeCatalogWithout(String missingPoseId) => PoseCatalog([
 ]);
 
 /// Builds a session record.
-CaptureSession makeSession({
+RecordingSession makeSession({
   String sessionUuid = 'session-0001',
   String poseId = 'peace',
   int totalSamples = 24,
   int discardedSamples = 2,
   SessionEndReason endReason = SessionEndReason.completed,
-}) => CaptureSession(
+}) => RecordingSession(
   sessionUuid: sessionUuid,
   poseId: poseId,
   startedAt: DateTime.utc(2026, 7, 24, 13, 19, 56),

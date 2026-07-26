@@ -1,36 +1,106 @@
 # Contract: Internal Dart Interfaces
 
-**Feature**: 003-mobile-pose-capture | **Date**: 2026-07-24
+**Feature**: 003-mobile-pose-capture | **Date**: 2026-07-24 · revised 2026-07-26 (**Revision R1**)
 
 Capture exposes no network API. Its contracts are the **domain-owned ports** that keep the layers
 replaceable and the app testable without a device (constitution Principles I & IV; capture standards
-in v1.2.0). All ports live in `lib/domain/ports/`; implementations live in `lib/infrastructure/`
+in v1.3.0). All ports live in `lib/domain/ports/`; implementations live in `lib/infrastructure/`
 and are injected at the composition root — never imported directly by application or presentation
 code.
 
 ---
 
-## `HandLandmarkSource` — the platform seam
+## `CameraSource` / `CameraSession` — the platform seam **(R1)**
 
 ```dart
-abstract interface class HandLandmarkSource {
-  Future<LandmarkSourceSession> start();
+abstract interface class CameraSource {
+  Future<Set<LensPosition>> availableLenses();
+  Future<CameraSession> open(CameraRequest request);
+}
+
+abstract interface class CameraSession {
+  CameraSessionInfo get info;
   Stream<LandmarkFrame> get frames;
-  Future<void> stop();
-  Future<void> dispose();
+  Future<void> close();
 }
 ```
 
-**Contract**: `start()` acquires the camera and detector and returns the preview texture id plus the
-analysis dimensions, lens facing, and detector version that every sample's metadata needs. `frames`
-emits **one event per detected frame, including frames with zero hands** — the session counts those
-as discarded, so an empty frame must not be silently swallowed. Frames arrive in non-decreasing
-timestamp order; under load the source drops frames rather than queueing stale ones. Errors surface
-on the stream, never as an app crash.
+**(R1) Replaces** `HandLandmarkSource` (`start`/`stop`/`dispose`), whose split release left the
+camera claimed after the capture screen closed — the bug FR-086/FR-087 name. The distinction that
+fixes it: a **source** is a capability that outlives screens; a **session** is a resource with a birth
+and a death, and `close()` is its only terminal operation (research D14).
 
-**Implementations**: `MethodChannelHandLandmarkSource` (see
-[platform-channel.md](./platform-channel.md)); `FakeHandLandmarkSource` for tests, emitting scripted
-frames with no platform involved.
+**`CameraSource` contract**: `availableLenses()` reports what the device can actually provide, so an
+unavailable mode is disabled with a stated reason before a user taps it (FR-064/FR-069) rather than
+failing at the moment of use. `open()` binds the **requested** lens explicitly — never a platform
+default, never a substitution (FR-044) — and follows a single ordered path (permission → camera →
+analysis → preview) whose every step fails distinctly (FR-107).
+
+**`CameraSession` contract**: `info` reports the lens, the **display-oriented** preview dimensions the
+aspect ratio is derived from (FR-099), the analysis dimensions, the viewing convention, the platform
+lens identifier, and the detector version — everything the preview and sample metadata need. `frames`
+emits **one event per detected frame, including frames with zero hands** — a take counts those as
+discarded, so an empty frame must not be silently swallowed. Frames arrive in non-decreasing timestamp
+order; under load the source drops frames rather than queueing stale ones. Errors surface on the
+stream, never as an app crash.
+
+**`close()` is total and idempotent** (FR-086/FR-095): camera binding, preview surface, analysis
+stream, detector, and background workers. It completes even when the preceding `open` failed partway.
+After it returns, another application must be able to acquire the camera immediately (FR-087). There
+is no "stopped but still holding" state to represent — which is precisely why the pre-R1 two-verb
+interface was replaced rather than patched.
+
+**Implementations**: `MethodChannelCameraSource` / `MethodChannelCameraSession` (see
+[camera-channel.md](./camera-channel.md)); `FakeCameraSource` for tests, scripting the lens set,
+frames, open failures, and open latency with no platform involved (SC-030).
+
+---
+
+## `CameraSessionController` — the single-session invariant **(R1)**
+
+Not a port: an **application-layer** owner, and the only thing permitted to call `open`/`close`.
+
+```dart
+Future<void> request(CameraRequest request);   // open, or switch
+Future<void> release(CameraReleaseReason reason);
+```
+
+**Contract**: serializes every request through one slot with a monotonic token. A new request
+supersedes the pending one; an `open` that resolves with a stale token is closed immediately and never
+published; `close` is awaited before the next `open` begins. Every release records its
+`CameraReleaseReason` in a structured event (FR-096).
+
+This single mechanism is what satisfies FR-092 (at most one session), FR-093 (leave while starting),
+FR-070 (rapid switching converges), and FR-066 (release before acquire) — four statements of one
+invariant, implemented once rather than guarded four times (research D15). It also owns the
+foreground/background reaction (FR-090) and applies `CanonicalViewConverter` to `frames`, so nothing
+above it ever observes a non-canonical frame.
+
+**Ownership**: `autoDispose`, scoped to the capture screen. The camera is released because ownership
+ended, not because a `dispose()` override remembered to release it.
+
+---
+
+## `CanonicalViewConverter` — one convention for the whole dataset **(R1)**
+
+```dart
+abstract interface class CanonicalViewConverter {
+  LandmarkFrame toCanonical(LandmarkFrame frame);
+}
+```
+
+**Contract**: pure, deterministic, involutive, and never mutates its input. A frame already in the
+canonical convention is returned unchanged. Otherwise every hand is converted **in place, without
+reordering**: `x → 1 − x` on all 21 landmarks, and the handedness label flipped `left ↔ right`
+(FR-053/FR-054).
+
+Both must happen together: MediaPipe derives handedness assuming a mirrored selfie-view input, so
+flipping geometry without relabelling names the wrong physical hand — the silent corruption FR-044
+exists to prevent. Normalization cannot substitute for this: `translation_scale` is a translation and
+a scale, and a reflection is neither (research D17).
+
+**It never touches metadata** (FR-058): the sample still reports the lens and mirroring actually used,
+which is what makes the conversion auditable rather than invisible.
 
 ---
 
@@ -156,9 +226,16 @@ abstract interface class OrientationController {
 }
 ```
 
-**Contract**: `lock()` fixes the orientation for the duration of a session and `unlock()` restores it
-on **every** exit path, including failures. `unexpectedChanges` fires if orientation changes despite
-the lock; the session aborts and writes nothing (SC-016).
+**Contract** *(scope widened in R1.1)*: `lock()` fixes the orientation for the duration of the
+**capture session** — from entering the capture screen until leaving it, **not** per take — and
+`unlock()` restores the previous setting on **every** exit path, including failures. `unexpectedChanges`
+fires if orientation changes despite the lock; any in-flight recording session aborts and writes
+nothing (SC-016), while the camera stays acquired and the screen stays ready (FR-076).
+
+**Why the wider scope**: R1 made the capture screen persist across takes. Locking only during a take
+would let the device rotate between them, changing both the preview's aspect ratio (FR-099) and the
+frame geometry a sample's coordinates depend on. Locking the screen removes the case entirely, which
+is less machinery than recomputing either.
 
 ---
 
@@ -213,6 +290,17 @@ abstract interface class AppLogger {
 **debug only** — never info — mirroring the engine's rule against per-frame logging in a real-time
 loop (Principle V).
 
+**(R1) Camera lifecycle events** (FR-096), at info — one acquire and one release per camera session:
+
+| Event | Fields |
+|---|---|
+| `camera_acquired` | `lens`, `mirrored`, `preview` (`WxH`), `analysis` (`WxH`), `platform_lens_id`, `duration_ms` |
+| `camera_released` | `lens`, `reason` (`CameraReleaseReason`), `duration_ms`, `had_inflight_take` |
+
+The **reason** is what makes a field diagnosis possible: a leak appears in the log as an acquire with
+no matching release, and without a reason on the releases there is nothing to correlate against. A
+release exceeding `cameraReleaseTimeout` is logged at error rather than swallowed (SC-019).
+
 **Structured lifecycle records** (FR-042/FR-043, Principle V's explicit startup/shutdown MUST). The
 engine uses Loguru; Dart has no Loguru, so `AppLogger` emits the same *structured field-map* shape
 that Loguru's `bind()` produces, keeping the two applications' logs directly comparable:
@@ -225,7 +313,7 @@ that Loguru's `bind()` produces, keeping the two applications' logs directly com
 | `configuration_profile` | `default` |
 | `dataset_root` | `/data/user/0/com.mudra.capture/app_flutter/datasets` |
 | `catalog_size` | `18` |
-| `camera_configuration` | `{lens_facing: 1, mirrored: true, analysis: 640x480}` |
+| `camera_configuration` | `{mode: self_capture, lens: front, mirrored: true, analysis: 640x480}` **(R1)** |
 | `platform` | `{platform: android, os_version: "Android 14 (API 34)", model: "Pixel 7"}` |
 
 `ShutdownRecord` — emitted on graceful exit, at INFO:
@@ -250,17 +338,24 @@ Not ports, but the only entry points presentation may call. Widgets hold **no** 
 | Use case | Responsibility |
 |---|---|
 | `LoadPoseCatalog` | Load + validate the catalog, hydrate progress from stored counts |
-| `RunCaptureSession` | Mint `session_uuid` → lock orientation → countdown → capture window → validate each frame → build samples → persist → record the session → unlock → return `CaptureResult` |
+| `RunCaptureSession` | Mint `session_uuid` → lock orientation → countdown **when enabled** → capture window → validate each frame → build samples → persist → record the session → unlock → return `CaptureResult` |
 | `CancelCaptureSession` | Abort countdown or capture; guarantees nothing is written and orientation is unlocked |
 | `ExportDataset` | Validate integrity → build manifest → package → hand the archive to the share presenter; aborts on critical failure |
 | `RefreshPoseProgress` | Recount stored samples for one pose or all |
 | `RecordAppLifecycle` | Emit the structured startup record at launch and the shutdown record on graceful exit |
+| `CameraSessionController` **(R1)** | Own the camera session, the single-session invariant, the lifecycle reaction, and canonicalization of the frame stream |
+| `CaptureSettingsNotifier` **(R1)** | Hold mode, lens, countdown, and take confirmation; re-initialize from the mode profile **only** on a mode change |
 
-`RunCaptureSession` is the heart of the app: it owns the session state machine
-([data-model.md](../data-model.md)), consumes `HandLandmarkSource.frames`, applies `SampleValidator`,
-normalizes accepted frames, mints uuids and timestamps via the ambient ports, and persists through
-`SampleRepository.saveAll`. It touches no widget and no plugin, which is exactly why the whole
-recording behaviour can be tested on the host with a fake source.
+`RunCaptureSession` is the heart of the app: it owns the take state machine
+([data-model.md](../data-model.md)), consumes the controller's **canonical** frame stream, applies
+`SampleValidator`, normalizes accepted frames, mints uuids and timestamps via the ambient ports, and
+persists through `SampleRepository.saveAll`. It touches no widget and no plugin, which is exactly why
+the whole recording behaviour can be tested on the host with a fake source.
+
+**(R1)** It takes `CaptureSettings` per take, so the countdown may be skipped entirely (FR-010) and
+the camera metadata written into each sample reflects the configuration active **at that instant**
+(FR-085). It does **not** own the camera: a take is abandoned when the camera is released, never the
+other way round (FR-094).
 
 ---
 
@@ -268,7 +363,7 @@ recording behaviour can be tested on the host with a fake source.
 
 | Failure | Raised when | Handled by |
 |---|---|---|
-| `CameraFailure` | Permission denied, camera unavailable, **unsupported camera configuration** (no front camera / no mirroring), detector error | Session → `Failed`; UI shows cause + retry. Recording is refused rather than done against an untrusted configuration (FR-044) |
+| `CameraFailure` **(R1: now a taxonomy)** | `permissionDenied`, `permissionPermanentlyDenied`, `cameraBusy`, `lensUnavailable`, `detectorUnavailable`, `startFailed` | Each carries its own plain-language explanation **and a working route out** — request again, open system settings (FR-110), retry (FR-108), or fall back to the other lens/mode (FR-064/FR-069). **Zero** paths end in an indefinite loading state (SC-029). The failure is never cached, so re-entering the capture screen after the cause is resolved always succeeds (FR-111) |
 | `RepositoryFailure` | Write/read/IO error | Session → `Failed`; counts never claim unsaved samples |
 | `CatalogFailure` | Malformed catalog configuration | Startup error screen naming the entry |
 | `ExportFailure` | Archive creation failed | Sync shows the reason; no partial archive is shared |

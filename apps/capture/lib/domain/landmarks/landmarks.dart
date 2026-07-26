@@ -1,15 +1,17 @@
 /// Neutral hand-detection value objects.
 ///
 /// These immutable classes are the backend-agnostic shape produced by any
-/// [HandLandmarkSource] and consumed by the capture session. They mirror the
-/// Mudra engine's landmark model exactly so a sample recorded on a phone means
-/// the same thing as one recorded on the desktop.
+/// `CameraSession` and consumed by a recording session. They mirror the Mudra
+/// engine's landmark model exactly so a sample recorded on a phone means the
+/// same thing as one recorded on the desktop.
 ///
 /// Nothing here imports Flutter, plugins, or `dart:io` — that is what keeps the
 /// whole capture pipeline testable on the host.
 library;
 
 import 'dart:math' as math;
+
+import 'package:capture/domain/camera/camera.dart';
 
 /// The fixed number of landmarks MediaPipe reports for one hand.
 const int handLandmarkCount = 21;
@@ -24,7 +26,8 @@ const int middleFingerMcpLandmarkIndex = 9;
 ///
 /// Correct under selfie mirroring: MediaPipe assumes a mirrored input image, so
 /// with the mirrored front-camera preview the reported label already names the
-/// user's physical hand (FR-037a).
+/// user's physical hand (FR-037a). A rear-lens capture is in the opposite
+/// convention, and [flipped] is what puts it back — see `CanonicalViewConverter`.
 enum Handedness {
   /// The user's physical left hand.
   left('left'),
@@ -39,6 +42,18 @@ enum Handedness {
 
   /// The lowercase value written to and read from JSON.
   final String wireValue;
+
+  /// The label under the opposite mirroring convention.
+  ///
+  /// `left ↔ right`; [unknown] stays [unknown]. Used **only** by the canonical
+  /// conversion (FR-054): mirroring the geometry without relabelling would name
+  /// the wrong physical hand, which is the silent corruption FR-044 exists to
+  /// prevent.
+  Handedness get flipped => switch (this) {
+    Handedness.left => Handedness.right,
+    Handedness.right => Handedness.left,
+    Handedness.unknown => Handedness.unknown,
+  };
 
   /// Maps a detector label (`"Left"`/`"Right"`) to a member.
   ///
@@ -178,6 +193,7 @@ class LandmarkFrame {
     required this.frameWidth,
     required this.frameHeight,
     required this.timestampMicros,
+    this.convention = ViewConvention.canonical,
   }) : hands = List.unmodifiable(hands);
 
   /// The hands detected in this frame, in detector order.
@@ -191,6 +207,31 @@ class LandmarkFrame {
 
   /// Monotonic capture instant, in microseconds, from the native side.
   final int timestampMicros;
+
+  /// Which viewing convention these coordinates are in.
+  ///
+  /// Carried **on the frame** so the canonical conversion is a total function on
+  /// data rather than a decision made from ambient state. Everything above the
+  /// camera seam only ever observes [ViewConvention.canonical] frames.
+  final ViewConvention convention;
+
+  /// Whether these coordinates are already in the canonical convention.
+  bool get isCanonical => convention == ViewConvention.canonical;
+
+  /// Returns a copy with [hands] and [convention] replaced.
+  ///
+  /// Used by the canonical conversion; every other field is carried through
+  /// unchanged, because conversion changes coordinates, never provenance.
+  LandmarkFrame withHands(
+    List<HandDetection> hands, {
+    required ViewConvention convention,
+  }) => LandmarkFrame(
+    hands: hands,
+    frameWidth: frameWidth,
+    frameHeight: frameHeight,
+    timestampMicros: timestampMicros,
+    convention: convention,
+  );
 
   /// Number of hands detected; `0` is valid and means "no hands".
   int get handCount => hands.length;

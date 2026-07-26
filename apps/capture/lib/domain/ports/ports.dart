@@ -6,71 +6,61 @@
 /// host with no Android device attached.
 library;
 
-import 'package:capture/domain/capture/capture_session.dart';
+import 'package:capture/domain/camera/camera.dart';
+import 'package:capture/domain/capture/recording_session.dart';
 import 'package:capture/domain/export/manifest.dart';
 import 'package:capture/domain/landmarks/landmarks.dart';
 import 'package:capture/domain/poses/pose_catalog.dart';
 import 'package:capture/domain/samples/pose_sample.dart';
 
-/// What a started landmark source tells the application about itself.
+/// The platform seam, part one: a camera **capability** that outlives screens.
 ///
-/// These values flow straight into sample metadata, so the camera a sample was
-/// recorded with is recoverable from the dataset rather than inferred.
-class LandmarkSourceSession {
-  /// Creates a source session descriptor.
-  const LandmarkSourceSession({
-    required this.textureId,
-    required this.analysisWidth,
-    required this.analysisHeight,
-    required this.lensFacing,
-    required this.mirrored,
-    this.previewWidth = 0,
-    this.previewHeight = 0,
-    this.mediapipeVersion,
-  });
+/// Expressed entirely in lens position, preview dimensions, mirroring, and
+/// lifecycle — never in a specific platform's camera API (FR-112). An
+/// alternative platform is added by supplying one implementation of this and
+/// [CameraSession], with no edits to recording, dataset, or presentation logic
+/// (FR-114).
+abstract interface class CameraSource {
+  /// Which lenses this device can actually provide.
+  ///
+  /// Absence is **data, not an error**: an unavailable capture mode must be
+  /// disabled with a stated reason before a user taps it (FR-064/FR-069), not
+  /// fail at the moment of use.
+  Future<Set<LensPosition>> availableLenses();
 
-  /// Flutter texture id for the preview widget.
-  final int textureId;
-
-  /// Preview surface width.
-  final int previewWidth;
-
-  /// Preview surface height.
-  final int previewHeight;
-
-  /// Analysis frame width the landmarks are normalized against.
-  final int analysisWidth;
-
-  /// Analysis frame height the landmarks are normalized against.
-  final int analysisHeight;
-
-  /// Platform lens-facing constant; MUST be `1` (front) — see FR-044.
-  final int lensFacing;
-
-  /// Whether the preview is mirrored; MUST be `true` — see FR-044.
-  final bool mirrored;
-
-  /// Detector version, recorded in sample metadata.
-  final String? mediapipeVersion;
+  /// Acquires the camera and detector for [request].
+  ///
+  /// Binds the **requested** lens explicitly — never a platform default, never a
+  /// substitution (FR-044) — following a single ordered path whose every step
+  /// fails distinctly (FR-107). Throws `CameraFailure` on any failure.
+  Future<CameraSession> open(CameraRequest request);
 }
 
-/// The platform seam: a stream of detected hand landmarks.
+/// The platform seam, part two: one live acquisition of the camera.
 ///
-/// Emits one frame per detection **including frames with zero hands** — the
-/// capture session counts those as discarded, so silence must never be used to
-/// encode "no hands".
-abstract interface class HandLandmarkSource {
-  /// Acquires the camera and detector; returns the preview and metadata info.
-  Future<LandmarkSourceSession> start();
+/// A **source** is a capability; a **session** is a resource with a birth and a
+/// death. That distinction is the whole point: [close] is the only terminal
+/// operation, so a session cannot be left half-released — the state the
+/// pre-revision `stop`/`dispose` split made representable, and therefore
+/// eventually real (FR-086).
+abstract interface class CameraSession {
+  /// What this session reports about itself; drives the preview and metadata.
+  CameraSessionInfo get info;
 
   /// Frames in non-decreasing timestamp order; drops rather than queues.
+  ///
+  /// Emits one frame per detection **including frames with zero hands** — a
+  /// recording session counts those as discarded, so silence must never be used
+  /// to encode "no hands".
   Stream<LandmarkFrame> get frames;
 
-  /// Releases the camera; emits no further frames after it returns.
-  Future<void> stop();
-
-  /// Releases all native resources. Idempotent.
-  Future<void> dispose();
+  /// Releases **everything** this session acquired.
+  ///
+  /// Camera binding, preview surface, analysis stream, detector, and any
+  /// background worker. Idempotent, and completes even when the preceding open
+  /// failed partway (FR-095). After it returns, another application must be able
+  /// to acquire the camera immediately (FR-087).
+  Future<void> close();
 }
 
 /// Append-only sample storage.
@@ -101,10 +91,10 @@ abstract interface class PoseCatalogSource {
 abstract interface class SessionStore {
   /// Records a session that produced samples. Sessions that wrote nothing are
   /// not recorded, so no orphan identifier reaches the dataset.
-  Future<void> record(CaptureSession session);
+  Future<void> record(RecordingSession session);
 
   /// Every recorded session.
-  Future<List<CaptureSession>> all();
+  Future<List<RecordingSession>> all();
 }
 
 /// What an export produced.

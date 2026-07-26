@@ -6,7 +6,7 @@
 /// (SC-004) while keeping one-handed takes out of two-handed poses (SC-012).
 library;
 
-import 'package:capture/domain/capture/capture_session.dart';
+import 'package:capture/domain/capture/recording_session.dart';
 import 'package:capture/domain/landmarks/landmarks.dart';
 import 'package:capture/domain/validation/pose_sample_validator.dart';
 import 'package:flutter_test/flutter_test.dart';

@@ -6,21 +6,27 @@
 /// mutable state lives in the `ProviderContainer`, not in a global.
 library;
 
-import 'package:capture/application/capture/run_capture_session.dart';
+import 'dart:async';
+
+import 'package:capture/application/camera/camera_session_controller.dart';
+import 'package:capture/application/camera/capture_settings_notifier.dart';
+import 'package:capture/application/capture/run_recording_session.dart';
 import 'package:capture/application/capture/session_ticker.dart';
 import 'package:capture/application/catalog/pose_progress_notifier.dart';
 import 'package:capture/application/export/export_dataset.dart';
 import 'package:capture/application/lifecycle/record_app_lifecycle.dart';
+import 'package:capture/domain/camera/camera.dart';
+import 'package:capture/domain/camera/capture_settings.dart';
 import 'package:capture/domain/export/manifest.dart' show DeviceInfo;
 import 'package:capture/domain/normalization/translation_scale_normalizer.dart';
 import 'package:capture/domain/ports/ports.dart';
 import 'package:capture/domain/samples/pose_sample.dart' show NormalizationInfo;
 import 'package:capture/domain/validation/pose_sample_validator.dart';
+import 'package:capture/infrastructure/camera/method_channel_camera_source.dart';
 import 'package:capture/infrastructure/catalog/asset_pose_catalog_source.dart';
 import 'package:capture/infrastructure/export/dataset_integrity_checker.dart';
 import 'package:capture/infrastructure/export/manifest_builder.dart';
 import 'package:capture/infrastructure/export/zip_dataset_exporter.dart';
-import 'package:capture/infrastructure/landmarks/method_channel_hand_landmark_source.dart';
 import 'package:capture/infrastructure/platform/ambient.dart';
 import 'package:capture/infrastructure/platform/platform_adapters.dart';
 import 'package:capture/infrastructure/storage/file_sample_repository.dart';
@@ -89,12 +95,42 @@ final catalogSourceProvider = Provider<PoseCatalogSource>(
   (ref) => AssetPoseCatalogSource(config: ref.watch(configProvider)),
 );
 
-/// The platform landmark source.
-final handLandmarkSourceProvider = Provider<HandLandmarkSource>((ref) {
-  final source = MethodChannelHandLandmarkSource();
-  ref.onDispose(() => source.dispose());
-  return source;
+/// The platform camera source — a capability that outlives screens.
+final cameraSourceProvider = Provider<CameraSource>(
+  (ref) => MethodChannelCameraSource(),
+);
+
+/// The camera **session**, scoped to the capture screen.
+///
+/// `autoDispose` on purpose (FR-086/FR-089): the camera is released because
+/// ownership ended, not because a `dispose()` override remembered to release it.
+/// An app-lifetime provider is exactly what left the device claimed after the
+/// capture screen closed before revision R1.
+final cameraSessionControllerProvider =
+    Provider.autoDispose<CameraSessionController>((ref) {
+  final controller = CameraSessionController(
+    source: ref.watch(cameraSourceProvider),
+    logger: ref.watch(loggerProvider),
+    releaseTimeout: ref.watch(configProvider).cameraReleaseTimeout,
+  );
+  ref.onDispose(() => unawaited(controller.dispose()));
+  return controller;
 });
+
+/// Mode, lens, countdown, and take-confirmation for the capture session.
+///
+/// Scoped to the application run, **not** to the capture screen widget: a screen
+/// the OS recreates must not reset a user's countdown (FR-071/FR-091), and
+/// FR-063's "remember the most recent mode" then needs no extra mechanism.
+final captureSettingsProvider =
+    NotifierProvider<CaptureSettingsNotifier, CaptureSettings>(
+  () => CaptureSettingsNotifier(const CaptureConfig()),
+);
+
+/// Which lenses this device actually has (FR-064/FR-069).
+final availableLensesProvider = FutureProvider<Set<LensPosition>>(
+  (ref) => ref.watch(cameraSourceProvider).availableLenses(),
+);
 
 /// Session ticker.
 final sessionTickerProvider =
@@ -129,10 +165,14 @@ final catalogProvider =
   PoseCatalogNotifier.new,
 );
 
-/// The capture session use case.
-final runCaptureSessionProvider = Provider<RunCaptureSession>((ref) {
-  return RunCaptureSession(
-    source: ref.watch(handLandmarkSourceProvider),
+/// The recording-session use case (one take).
+///
+/// It no longer takes a camera: the controller owns the camera, and a take is
+/// abandoned when the camera goes away rather than the other way round (FR-094).
+/// Orientation is likewise not its concern — the capture screen locks it for the
+/// whole capture session (FR-049).
+final runRecordingSessionProvider = Provider<RunRecordingSession>((ref) {
+  return RunRecordingSession(
     validator: ref.watch(validatorProvider),
     normalizer: ref.watch(normalizerProvider),
     repository: ref.watch(sampleRepositoryProvider),
@@ -142,7 +182,6 @@ final runCaptureSessionProvider = Provider<RunCaptureSession>((ref) {
     config: ref.watch(configProvider),
     logger: ref.watch(loggerProvider),
     applicationVersion: ref.watch(applicationVersionProvider).requireValue,
-    orientation: ref.watch(orientationControllerProvider),
     ticker: ref.watch(sessionTickerProvider),
   );
 });

@@ -29,6 +29,52 @@ void main() {
     return file.readAsStringSync();
   }
 
+  /// The only keys Capture may add to the engine's schema v1.
+  ///
+  /// Additive, optional, and inside blocks the engine already reads — the
+  /// pattern FR-052 permits and `contracts/sample-json.md` documents. Anything
+  /// **not** on this list appearing in Capture's output is schema drift, and the
+  /// assertion below is what catches it.
+  const additiveKeys = <String, Set<String>>{
+    'metadata.camera': {'position', 'mirrored_preview', 'lens_facing'},
+    'metadata.capture': {'countdown_enabled', 'session_uuid'},
+  };
+
+  /// Asserts [actual] reproduces [expected] exactly, except for documented
+  /// additive keys.
+  void expectEngineParity(
+    Object? actual,
+    Object? expected, {
+    String path = '',
+  }) {
+    if (expected is Map && actual is Map) {
+      final allowed = additiveKeys[path] ?? const <String>{};
+      final extra = actual.keys.toSet().difference(expected.keys.toSet());
+      expect(
+        extra.difference(allowed),
+        isEmpty,
+        reason:
+            'Undocumented key(s) at "${path.isEmpty ? '<root>' : path}". Every '
+            'addition to the engine schema must be additive, optional, and '
+            'listed in contracts/sample-json.md.',
+      );
+      for (final key in expected.keys) {
+        expect(
+          actual.containsKey(key),
+          isTrue,
+          reason: 'Capture dropped the engine key "$path.$key".',
+        );
+        expectEngineParity(
+          actual[key],
+          expected[key],
+          path: path.isEmpty ? '$key' : '$path.$key',
+        );
+      }
+      return;
+    }
+    expect(actual, equals(expected), reason: 'Value differs at "$path".');
+  }
+
   group('engine golden fixtures', () {
     for (final name in ['sample_one_hand.json', 'sample_two_hands.json']) {
       test('$name is parsed and re-serialized identically', () {
@@ -38,11 +84,11 @@ void main() {
 
         // Compare parsed structures: both spell doubles their own way, but the
         // schema constrains values, not their textual representation.
-        expect(
-          jsonDecode(roundTripped),
-          equals(jsonDecode(original)),
-          reason: 'Capture must reproduce the engine document exactly',
-        );
+        //
+        // Every engine key must survive with its value intact; the only extra
+        // keys permitted are the documented additive ones. That is stricter
+        // than "equal or superset" and still allows FR-052's additions.
+        expectEngineParity(jsonDecode(roundTripped), jsonDecode(original));
       });
 
       test('$name round-trips through the domain model without loss', () {
@@ -56,7 +102,7 @@ void main() {
       expect(sample.hands, hasLength(2));
       expect(sample.metadata.numHands, 2);
       for (final hand in sample.hands) {
-        expect(hand.raw.points, hasLength(handLandmarkCount));
+        expect(hand.canonicalRaw.points, hasLength(handLandmarkCount));
         expect(hand.normalized.points, hasLength(handLandmarkCount));
       }
     });

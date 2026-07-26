@@ -9,7 +9,7 @@
 /// engine's job, and this application does no recognition at all (FR-022).
 library;
 
-import 'package:capture/domain/capture/capture_session.dart';
+import 'package:capture/domain/capture/recording_session.dart';
 import 'package:capture/domain/landmarks/landmarks.dart';
 import 'package:capture/domain/ports/ports.dart';
 import 'package:capture/domain/poses/pose_catalog.dart';

@@ -23,16 +23,23 @@ import io.flutter.view.TextureRegistry
 import java.util.concurrent.Executors
 
 /**
- * Owns the camera and the hand detector.
+ * Owns one camera acquisition and the hand detector for it.
+ *
+ * **One controller per session.** The plugin constructs this on `open` and drops the reference
+ * on `close`, so the analysis executor, the preview surface entry, and the detector all have
+ * exactly the session's lifetime. That is what makes [close] total *by construction* rather than
+ * by remembering to release each resource in turn — which is precisely how the pre-revision
+ * `stop`/`dispose` split leaked: `stop` unbound the camera but left the `SurfaceTextureEntry`
+ * alive, and `dispose` shut down a non-restartable executor, so a controller could never serve a
+ * second session.
  *
  * CameraX binds two use cases from a single provider: a [Preview] rendered into a Flutter
  * texture, and an [ImageAnalysis] stream feeding MediaPipe's [HandLandmarker] in LIVE_STREAM
  * mode. One owner, one stream — the preview and the landmarks always describe the same frames.
  *
- * The front camera is selected **explicitly** and the preview is mirrored. An unsupported
- * configuration fails loudly rather than falling back to the rear camera: handedness recorded
- * against the wrong lens is wrong in a way neither this app nor the engine could detect later
- * (FR-044).
+ * The lens is selected **explicitly** from the request and is never substituted: a capture
+ * recorded against a different lens than the caller believes would mislabel every hand in a way
+ * neither this app nor the engine could detect later (FR-044).
  */
 class CameraXController(
     private val context: Context,
@@ -45,13 +52,15 @@ class CameraXController(
         val previewHeight: Int,
         val analysisWidth: Int,
         val analysisHeight: Int,
-        val lensFacing: Int,
+        val lens: String,
         val mirrored: Boolean,
-        val mediapipeVersion: String?,
+        val platformLensId: Int,
+        val rotationDegrees: Int,
+        val detectorVersion: String?,
     )
 
-    /** Raised when the device cannot provide a mirrored front camera. */
-    class UnsupportedConfigurationException(message: String) : Exception(message)
+    /** Raised when the requested lens does not exist on this device. */
+    class LensUnavailableException(message: String) : Exception(message)
 
     /** Raised when the bundled detector model cannot be loaded. */
     class ModelUnavailableException(message: String, cause: Throwable?) : Exception(message, cause)
@@ -64,7 +73,8 @@ class CameraXController(
     private var textureEntry: TextureRegistry.SurfaceTextureEntry? = null
     private var frameListener: ((HandLandmarkerResult, Int, Int) -> Unit)? = null
     private var errorListener: ((String, String) -> Unit)? = null
-    private var analysisSize = Size(ANALYSIS_WIDTH, ANALYSIS_HEIGHT)
+    private var analysisSize = Size(DEFAULT_ANALYSIS_WIDTH, DEFAULT_ANALYSIS_HEIGHT)
+    private var closed = false
 
     /** Called for every detected frame, including frames with no hands. */
     fun setFrameListener(listener: ((HandLandmarkerResult, Int, Int) -> Unit)?) {
@@ -77,33 +87,53 @@ class CameraXController(
     }
 
     /**
-     * Binds the camera and detector.
+     * Binds the requested camera and the detector.
      *
-     * @throws UnsupportedConfigurationException when no front camera exists.
+     * @throws LensUnavailableException when the requested lens does not exist.
      * @throws ModelUnavailableException when the bundled model cannot be loaded.
      */
-    fun start(lifecycleOwner: LifecycleOwner): SessionInfo {
+    fun open(
+        lifecycleOwner: LifecycleOwner,
+        lens: String,
+        requestedAnalysisWidth: Int,
+        requestedAnalysisHeight: Int,
+    ): SessionInfo {
+        val selector = selectorFor(lens)
         val provider = ProcessCameraProvider.getInstance(context).get()
         cameraProvider = provider
 
-        if (!provider.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA)) {
-            throw UnsupportedConfigurationException(
-                "This device has no front-facing camera; recording is refused rather than " +
-                    "capturing hand labels that cannot be trusted."
+        if (!provider.hasCamera(selector)) {
+            throw LensUnavailableException(
+                "This device has no $lens camera."
             )
         }
 
+        analysisSize = Size(requestedAnalysisWidth, requestedAnalysisHeight)
         handLandmarker = buildLandmarker()
 
         val entry = textureRegistry.createSurfaceTexture()
         textureEntry = entry
         val surfaceTexture = entry.surfaceTexture()
-        surfaceTexture.setDefaultBufferSize(PREVIEW_WIDTH, PREVIEW_HEIGHT)
 
-        val preview = Preview.Builder()
-            .setTargetResolution(Size(PREVIEW_WIDTH, PREVIEW_HEIGHT))
-            .build()
+        // The preview size is whatever CameraX actually chose, reported back through the
+        // SurfaceRequest — never a compile-time constant. Dart derives the aspect ratio from
+        // it (FR-099), so a wrong value here produces a distorted preview that no amount of
+        // Dart-side layout can correct.
+        var previewWidth = 0
+        var previewHeight = 0
+        var rotationDegrees = 0
+
+        val preview = Preview.Builder().build()
         preview.setSurfaceProvider { request: SurfaceRequest ->
+            val resolution = request.resolution
+            rotationDegrees = resolutionRotation(lifecycleOwner)
+            // CameraX reports resolution in sensor orientation; a portrait screen consuming a
+            // landscape sensor stream must swap the axes to describe what will be displayed.
+            val swap = rotationDegrees == 90 || rotationDegrees == 270
+            previewWidth = if (swap) resolution.height else resolution.width
+            previewHeight = if (swap) resolution.width else resolution.height
+
+            surfaceTexture.setDefaultBufferSize(resolution.width, resolution.height)
             val surface = Surface(surfaceTexture)
             request.provideSurface(surface, ContextCompat.getMainExecutor(context)) {
                 surface.release()
@@ -120,41 +150,86 @@ class CameraXController(
         analysis.setAnalyzer(analysisExecutor, ::analyze)
 
         provider.unbindAll()
-        provider.bindToLifecycle(
-            lifecycleOwner,
-            CameraSelector.DEFAULT_FRONT_CAMERA,
-            preview,
-            analysis,
-        )
+        provider.bindToLifecycle(lifecycleOwner, selector, preview, analysis)
+
+        // The surface provider runs asynchronously; fall back to the requested analysis size
+        // rather than reporting zeros, which would make previewAspect meaningless.
+        if (previewWidth == 0 || previewHeight == 0) {
+            previewWidth = analysisSize.width
+            previewHeight = analysisSize.height
+        }
 
         return SessionInfo(
             textureId = entry.id(),
-            previewWidth = PREVIEW_WIDTH,
-            previewHeight = PREVIEW_HEIGHT,
+            previewWidth = previewWidth,
+            previewHeight = previewHeight,
             analysisWidth = analysisSize.width,
             analysisHeight = analysisSize.height,
-            lensFacing = LENS_FACING_FRONT,
-            mirrored = true,
-            mediapipeVersion = MEDIAPIPE_VERSION,
+            lens = lens,
+            mirrored = lens == LENS_FRONT,
+            platformLensId = if (lens == LENS_FRONT) LENS_FACING_FRONT else LENS_FACING_BACK,
+            rotationDegrees = rotationDegrees,
+            detectorVersion = MEDIAPIPE_VERSION,
         )
     }
 
-    /** Unbinds the camera and closes the detector. Safe to call repeatedly. */
-    fun stop() {
-        cameraProvider?.unbindAll()
-        cameraProvider = null
-        handLandmarker?.close()
-        handLandmarker = null
-    }
+    /**
+     * Releases **everything** this session acquired.
+     *
+     * Camera binding, preview surface, detector, and the analysis worker — one total operation
+     * with no intermediate "stopped but still holding" state to represent. Idempotent, and
+     * completes even when [open] failed partway through (FR-086/FR-095).
+     */
+    fun close() {
+        if (closed) return
+        closed = true
 
-    /** Releases the preview texture and the analysis executor. */
-    fun dispose() {
-        stop()
+        try {
+            cameraProvider?.unbindAll()
+        } catch (error: Exception) {
+            // Best effort: a failure here must not stop the remaining resources being freed.
+        }
+        cameraProvider = null
+
+        try {
+            handLandmarker?.close()
+        } catch (error: Exception) {
+            // Same reasoning.
+        }
+        handLandmarker = null
+
+        // The leak the pre-revision code left behind: `stop()` never released this.
         textureEntry?.release()
         textureEntry = null
+
         frameListener = null
         errorListener = null
         analysisExecutor.shutdown()
+    }
+
+    /** Which lenses this device can actually provide (FR-064/FR-069). */
+    fun availableLenses(): List<String> {
+        val provider = ProcessCameraProvider.getInstance(context).get()
+        val lenses = mutableListOf<String>()
+        if (provider.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA)) lenses.add(LENS_FRONT)
+        if (provider.hasCamera(CameraSelector.DEFAULT_BACK_CAMERA)) lenses.add(LENS_REAR)
+        return lenses
+    }
+
+    private fun selectorFor(lens: String): CameraSelector = when (lens) {
+        LENS_FRONT -> CameraSelector.DEFAULT_FRONT_CAMERA
+        LENS_REAR -> CameraSelector.DEFAULT_BACK_CAMERA
+        else -> throw LensUnavailableException("Unknown lens \"$lens\".")
+    }
+
+    private fun resolutionRotation(lifecycleOwner: LifecycleOwner): Int {
+        val display = (lifecycleOwner as? android.app.Activity)?.windowManager?.defaultDisplay
+        return when (display?.rotation) {
+            Surface.ROTATION_90 -> 90
+            Surface.ROTATION_180 -> 180
+            Surface.ROTATION_270 -> 270
+            else -> 90 // Portrait-locked capture screen consuming a landscape sensor stream.
+        }
     }
 
     private fun buildLandmarker(): HandLandmarker {
@@ -218,21 +293,28 @@ class CameraXController(
         }
     }
 
-    private companion object {
+    companion object {
+        /** Wire value for the front lens, shared with the Dart side. */
+        const val LENS_FRONT = "front"
+
+        /** Wire value for the rear lens, shared with the Dart side. */
+        const val LENS_REAR = "rear"
+
         /** Android's `CameraSelector.LENS_FACING_FRONT`; written into sample metadata. */
         const val LENS_FACING_FRONT = 1
 
-        /** The same model file the Python engine uses, so landmarks match exactly. */
-        const val MODEL_ASSET = "hand_landmarker.task"
+        /** Android's `CameraSelector.LENS_FACING_BACK`. */
+        const val LENS_FACING_BACK = 0
 
-        const val MAX_HANDS = 2
-        const val PREVIEW_WIDTH = 720
-        const val PREVIEW_HEIGHT = 1280
-        const val ANALYSIS_WIDTH = 480
-        const val ANALYSIS_HEIGHT = 640
-        const val MIN_DETECTION_CONFIDENCE = 0.5f
-        const val MIN_TRACKING_CONFIDENCE = 0.5f
-        const val MIN_PRESENCE_CONFIDENCE = 0.5f
-        const val MEDIAPIPE_VERSION = "0.10.14"
+        /** The same model file the Python engine uses, so landmarks match exactly. */
+        private const val MODEL_ASSET = "hand_landmarker.task"
+
+        private const val MAX_HANDS = 2
+        private const val DEFAULT_ANALYSIS_WIDTH = 480
+        private const val DEFAULT_ANALYSIS_HEIGHT = 640
+        private const val MIN_DETECTION_CONFIDENCE = 0.5f
+        private const val MIN_TRACKING_CONFIDENCE = 0.5f
+        private const val MIN_PRESENCE_CONFIDENCE = 0.5f
+        private const val MEDIAPIPE_VERSION = "0.10.14"
     }
 }

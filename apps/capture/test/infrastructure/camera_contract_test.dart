@@ -1,14 +1,19 @@
-/// The camera contract (FR-044).
+/// The camera platform contract, verified rather than assumed.
 ///
-/// A rear-facing or unmirrored capture produces handedness labels that are
-/// wrong in a way neither this app nor the engine can detect afterwards, so the
-/// Dart side verifies what the platform reports instead of trusting it.
+/// The pre-revision version of this file asserted `lensFacing == 1 && mirrored
+/// == true` on every start, because the front camera was the only permitted
+/// configuration. Revision R1 permits both lenses and preserves the same
+/// anti-corruption guarantee by converting rear-lens captures into the canonical
+/// convention before storage. What must still be verified is narrower but just
+/// as important: **the lens the platform binds is the lens that was requested**,
+/// and the mirroring it reports is consistent with that lens.
+///
+/// A silent substitution here would mislabel every hand in the dataset in a way
+/// neither this application nor the engine could detect afterwards (FR-044).
 library;
 
-import 'dart:typed_data';
-
-import 'package:capture/domain/landmarks/landmarks.dart';
-import 'package:capture/infrastructure/landmarks/method_channel_hand_landmark_source.dart';
+import 'package:capture/domain/camera/camera.dart';
+import 'package:capture/infrastructure/camera/method_channel_camera_source.dart';
 import 'package:capture/shared/errors/failures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -16,175 +21,191 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  const channel = MethodChannel(landmarkMethodChannelName);
+  const channel = MethodChannel(cameraMethodChannelName);
   final messenger =
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
 
-  final calls = <String>[];
+  const request = CameraRequest(
+    lens: LensPosition.front,
+    analysisWidth: 640,
+    analysisHeight: 480,
+  );
 
-  void mockStart(Map<String, Object?> reply) {
-    messenger.setMockMethodCallHandler(channel, (call) async {
-      calls.add(call.method);
-      if (call.method == 'start') return reply;
-      return null;
-    });
-  }
-
-  Map<String, Object?> validReply({int lensFacing = 1, bool mirrored = true}) => {
+  Map<String, Object?> reply({
+    String lens = 'front',
+    bool mirrored = true,
+    int platformLensId = 1,
+    int previewWidth = 720,
+    int previewHeight = 1280,
+  }) => {
     'textureId': 7,
-    'previewWidth': 1080,
-    'previewHeight': 1920,
+    'previewWidth': previewWidth,
+    'previewHeight': previewHeight,
     'analysisWidth': 640,
     'analysisHeight': 480,
-    'lensFacing': lensFacing,
+    'lens': lens,
     'mirrored': mirrored,
-    'mediapipeVersion': '0.10.14',
+    'platformLensId': platformLensId,
+    'rotationDegrees': 90,
+    'detectorVersion': '0.10.14',
   };
 
-  setUp(calls.clear);
+  void handle(Future<Object?> Function(MethodCall call) handler) {
+    messenger.setMockMethodCallHandler(channel, handler);
+  }
 
   tearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-  test('a mirrored front camera is accepted and reported', () async {
-    mockStart(validReply());
-    final source = MethodChannelHandLandmarkSource();
+  group('lens selection is explicit and verified (FR-044)', () {
+    test('a session opens when the platform binds the requested lens', () async {
+      handle((call) async => call.method == 'open' ? reply() : null);
 
-    final session = await source.start();
+      final session = await MethodChannelCameraSource().open(request);
 
-    expect(session.lensFacing, frontLensFacing);
-    expect(session.mirrored, isTrue);
-    expect(session.textureId, 7);
-    expect(session.analysisWidth, 640);
-    expect(session.analysisHeight, 480);
-    expect(session.mediapipeVersion, '0.10.14');
-  });
+      expect(session.info.lens, LensPosition.front);
+      expect(session.info.convention, ViewConvention.canonical);
+      expect(session.info.mirroredPreview, isTrue);
+      expect(session.info.platformLensId, 1);
+      expect(session.info.detectorVersion, '0.10.14');
+    });
 
-  test('a rear camera is refused (FR-044)', () async {
-    mockStart(validReply(lensFacing: 0));
-    final source = MethodChannelHandLandmarkSource();
+    test('the rear lens opens too, in the unmirrored convention', () async {
+      handle(
+        (call) async => call.method == 'open'
+            ? reply(lens: 'rear', mirrored: false, platformLensId: 0)
+            : null,
+      );
 
-    await expectLater(
-      source.start(),
-      throwsA(
-        isA<CameraFailure>().having(
-          (f) => f.code,
-          'code',
-          'camera_configuration_unsupported',
+      final session = await MethodChannelCameraSource().open(
+        const CameraRequest(
+          lens: LensPosition.rear,
+          analysisWidth: 640,
+          analysisHeight: 480,
         ),
-      ),
-    );
-    expect(
-      calls,
-      contains('stop'),
-      reason: 'the camera must be released when the configuration is refused',
-    );
-  });
+      );
 
-  test('an unmirrored preview is refused', () async {
-    mockStart(validReply(mirrored: false));
-    final source = MethodChannelHandLandmarkSource();
-
-    await expectLater(
-      source.start(),
-      throwsA(isA<CameraFailure>()),
-    );
-  });
-
-  test('a missing mirrored flag is treated as unmirrored, not assumed true', () async {
-    final reply = validReply()..remove('mirrored');
-    mockStart(reply);
-
-    await expectLater(
-      MethodChannelHandLandmarkSource().start(),
-      throwsA(isA<CameraFailure>()),
-    );
-  });
-
-  test('platform error codes map to user-facing failures', () async {
-    messenger.setMockMethodCallHandler(channel, (call) async {
-      if (call.method == 'start') {
-        throw PlatformException(code: 'camera_permission_denied');
-      }
-      return null;
+      // R1 permits this: the guarantee is preserved by converting before
+      // storage, not by refusing the lens.
+      expect(session.info.lens, LensPosition.rear);
+      expect(session.info.convention, ViewConvention.unmirrored);
+      expect(session.info.mirroredPreview, isFalse);
     });
 
-    await expectLater(
-      MethodChannelHandLandmarkSource().start(),
-      throwsA(
-        isA<CameraFailure>()
-            .having((f) => f.code, 'code', 'camera_permission_denied')
-            .having((f) => f.message, 'message', contains('camera')),
-      ),
-    );
-  });
+    test('a substituted lens is refused, not silently accepted', () async {
+      // The platform was asked for the front lens and bound the rear one.
+      handle(
+        (call) async => call.method == 'open'
+            ? reply(lens: 'rear', mirrored: false, platformLensId: 0)
+            : null,
+      );
 
-  group('frame decoding', () {
-    late MethodChannelHandLandmarkSource source;
-
-    setUp(() {
-      source = MethodChannelHandLandmarkSource();
+      await expectLater(
+        MethodChannelCameraSource().open(request),
+        throwsA(isA<CameraFailure>()),
+      );
     });
 
-    Float32List landmarksPayload() =>
-        Float32List.fromList([
-          for (var i = 0; i < handLandmarkCount; i++) ...[
-            0.01 * i,
-            0.02 * i,
-            0.005 * i,
-          ],
-        ]);
+    test('mirroring inconsistent with the lens is refused', () async {
+      handle(
+        (call) async => call.method == 'open' ? reply(mirrored: false) : null,
+      );
 
-    test('decodes a two-hand frame', () {
-      final frame = source.decodeForTest({
-        't': 123456,
-        'w': 640,
-        'h': 480,
-        'hands': [
-          {'handedness': 'Left', 'score': 0.94, 'lm': landmarksPayload()},
-          {'handedness': 'Right', 'score': 0.98, 'lm': landmarksPayload()},
-        ],
+      await expectLater(
+        MethodChannelCameraSource().open(request),
+        throwsA(isA<CameraFailure>()),
+      );
+    });
+  });
+
+  group('preview dimensions come from the platform (FR-099)', () {
+    test('the aspect ratio uses the reported size, not a constant', () async {
+      handle(
+        (call) async => call.method == 'open'
+            ? reply(previewWidth: 1080, previewHeight: 1440)
+            : null,
+      );
+
+      final session = await MethodChannelCameraSource().open(request);
+
+      expect(session.info.previewAspect, closeTo(1080 / 1440, 1e-9));
+      expect(session.info.rotationDegrees, 90);
+    });
+  });
+
+  group('lens enumeration (FR-064/FR-069)', () {
+    test('reports what the device actually has', () async {
+      handle(
+        (call) async =>
+            call.method == 'availableLenses' ? <String>['front'] : null,
+      );
+
+      final lenses = await MethodChannelCameraSource().availableLenses();
+
+      expect(lenses, {LensPosition.front});
+    });
+
+    test('a platform that cannot answer reports no lenses, not a crash',
+        () async {
+      handle((call) async => throw PlatformException(code: 'boom'));
+
+      expect(await MethodChannelCameraSource().availableLenses(), isEmpty);
+    });
+  });
+
+  group('failure taxonomy: every code has a distinct route out (SC-029)', () {
+    final cases = <String, CameraRecovery>{
+      'camera_permission_denied': CameraRecovery.requestPermission,
+      'camera_permission_permanently_denied': CameraRecovery.openSettings,
+      'camera_busy': CameraRecovery.retry,
+      'lens_unavailable': CameraRecovery.useOtherLens,
+      'model_unavailable': CameraRecovery.retry,
+      'camera_start_failed': CameraRecovery.retry,
+      'something_unexpected': CameraRecovery.retry,
+    };
+
+    cases.forEach((code, recovery) {
+      test('$code maps to ${recovery.name}', () async {
+        handle((call) async => throw PlatformException(code: code));
+
+        await expectLater(
+          MethodChannelCameraSource().open(request),
+          throwsA(
+            isA<CameraFailure>()
+                .having((f) => f.recovery, 'recovery', recovery)
+                .having((f) => f.message, 'message', isNotEmpty),
+          ),
+        );
+      });
+    });
+  });
+
+  group('close is total and idempotent (FR-086/FR-095)', () {
+    test('closing twice invokes the platform once and never throws', () async {
+      var closes = 0;
+      handle((call) async {
+        if (call.method == 'open') return reply();
+        if (call.method == 'close') closes += 1;
+        return null;
       });
 
-      expect(frame, isNotNull);
-      expect(frame!.handCount, 2);
-      expect(frame.frameWidth, 640);
-      expect(frame.timestampMicros, 123456);
-      expect(frame.hands.first.handedness, Handedness.left);
-      expect(frame.hands.first.confidence, closeTo(0.94, 1e-6));
-      expect(frame.hands.first.landmarks.points, hasLength(handLandmarkCount));
+      final session = await MethodChannelCameraSource().open(request);
+      await session.close();
+      await session.close();
+
+      expect(closes, 1);
     });
 
-    test('a frame with no hands is still delivered', () {
-      // Silence must never encode "no hands" — the session counts empty frames
-      // as discarded, which is how the user learns the take was bad.
-      final frame = source.decodeForTest({
-        't': 1,
-        'w': 640,
-        'h': 480,
-        'hands': <Object?>[],
+    test('close completes even when the platform fails', () async {
+      handle((call) async {
+        if (call.method == 'open') return reply();
+        throw PlatformException(code: 'close_failed');
       });
 
-      expect(frame, isNotNull);
-      expect(frame!.handCount, 0);
-    });
+      final session = await MethodChannelCameraSource().open(request);
 
-    test('a hand with the wrong landmark count is dropped, not crashed on', () {
-      final frame = source.decodeForTest({
-        't': 1,
-        'w': 640,
-        'h': 480,
-        'hands': [
-          {'handedness': 'Left', 'score': 0.9, 'lm': Float32List(30)},
-        ],
-      });
-
-      expect(frame, isNotNull);
-      expect(frame!.handCount, 0);
-    });
-
-    test('a malformed payload yields no frame instead of throwing', () {
-      expect(source.decodeForTest('nonsense'), isNull);
-      expect(source.decodeForTest({'t': 'not-an-int'}), isNull);
+      // Must not throw: a failure here would leave the caller believing the
+      // camera is still held (FR-095).
+      await expectLater(session.close(), completes);
     });
   });
 }

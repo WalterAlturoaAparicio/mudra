@@ -5,9 +5,11 @@ library;
 import 'dart:async';
 
 import 'package:capture/application/capture/session_ticker.dart';
-import 'package:capture/domain/capture/capture_session.dart';
+import 'package:capture/domain/camera/camera.dart';
+import 'package:capture/domain/capture/recording_session.dart';
 import 'package:capture/domain/landmarks/landmarks.dart';
 import 'package:capture/domain/ports/ports.dart';
+import 'package:capture/shared/errors/failures.dart';
 
 /// Waits until [condition] holds, or the timeout elapses.
 ///
@@ -23,48 +25,117 @@ Future<void> pumpUntil(
   }
 }
 
-/// A landmark source driven by the test rather than by a camera.
-class FakeHandLandmarkSource implements HandLandmarkSource {
-  /// Creates a fake source reporting the given session descriptor.
-  FakeHandLandmarkSource({LandmarkSourceSession? session})
-      : session = session ??
-            const LandmarkSourceSession(
-              textureId: 1,
-              analysisWidth: 640,
-              analysisHeight: 480,
-              lensFacing: 1,
-              mirrored: true,
-              mediapipeVersion: '0.10.14',
-            );
+/// A camera driven by the test rather than by hardware.
+///
+/// Complete enough to drive the **whole** pipeline, not just the capture loop
+/// (FR-116, SC-030): scriptable lens set, frames in either viewing convention,
+/// injectable open failures, and injectable open latency — the last of which is
+/// what makes "leave while the camera is still starting" (FR-093) testable at
+/// all.
+class FakeCameraSource implements CameraSource {
+  /// Creates a fake camera.
+  FakeCameraSource({
+    this.lenses = const {LensPosition.front, LensPosition.rear},
+    this.openDelay = Duration.zero,
+    this.detectorVersion = '0.10.14',
+  });
 
-  /// What [start] reports.
-  final LandmarkSourceSession session;
+  /// Which lenses this fake device has.
+  Set<LensPosition> lenses;
+
+  /// How long [open] takes, so a superseding request can arrive mid-flight.
+  Duration openDelay;
+
+  /// Detector version reported in session info.
+  final String detectorVersion;
+
+  /// Raised by the next [open] call, if set. Cleared after it is thrown.
+  CameraFailure? failNextOpen;
+
+  /// Every session this source has handed out, in order.
+  final List<FakeCameraSession> sessions = [];
+
+  /// How many times [open] has been called.
+  int openCount = 0;
+
+  /// The session currently open, or `null`.
+  FakeCameraSession? get current =>
+      sessions.where((s) => !s.closed).cast<FakeCameraSession?>().firstOrNull;
+
+  /// How many sessions are open at once — must never exceed 1 (FR-092).
+  int get liveCount => sessions.where((s) => !s.closed).length;
+
+  @override
+  Future<Set<LensPosition>> availableLenses() async => lenses;
+
+  @override
+  Future<CameraSession> open(CameraRequest request) async {
+    openCount += 1;
+    if (openDelay > Duration.zero) await Future<void>.delayed(openDelay);
+
+    final failure = failNextOpen;
+    if (failure != null) {
+      failNextOpen = null;
+      throw failure;
+    }
+    if (!lenses.contains(request.lens)) {
+      throw CameraFailure.lensUnavailable(request.lens.wireValue);
+    }
+
+    final session = FakeCameraSession(
+      info: CameraSessionInfo(
+        textureId: openCount,
+        previewWidth: 720,
+        previewHeight: 1280,
+        analysisWidth: request.analysisWidth,
+        analysisHeight: request.analysisHeight,
+        lens: request.lens,
+        convention: request.lens.defaultConvention,
+        platformLensId: request.lens == LensPosition.front ? 1 : 0,
+        detectorVersion: detectorVersion,
+      ),
+    );
+    sessions.add(session);
+    return session;
+  }
+
+  /// Pushes one frame through the live session.
+  void emit(LandmarkFrame frame) => current?.emit(frame);
+
+  /// Pushes several frames in order.
+  void emitAll(Iterable<LandmarkFrame> frames) => frames.forEach(emit);
+}
+
+/// One acquisition handed out by [FakeCameraSource].
+class FakeCameraSession implements CameraSession {
+  /// Creates a fake session.
+  FakeCameraSession({required this.info});
+
+  @override
+  final CameraSessionInfo info;
 
   final StreamController<LandmarkFrame> _controller =
       StreamController<LandmarkFrame>.broadcast();
 
-  /// Whether [start] has been called and [stop] has not.
-  bool started = false;
+  /// Whether [close] has been called.
+  bool closed = false;
 
-  /// Whether [dispose] has been called.
-  bool disposed = false;
-
-  @override
-  Future<LandmarkSourceSession> start() async {
-    started = true;
-    return session;
-  }
+  /// How many times [close] has been called — idempotency is a requirement.
+  int closeCount = 0;
 
   @override
   Stream<LandmarkFrame> get frames => _controller.stream;
 
   @override
-  Future<void> stop() async => started = false;
-
-  @override
-  Future<void> dispose() async {
-    disposed = true;
-    await _controller.close();
+  Future<void> close() async {
+    closeCount += 1;
+    if (closed) return;
+    closed = true;
+    // Deliberately not awaited: a broadcast controller's close() completes only
+    // once its done event has been delivered, which never happens inside a
+    // widget test's fake-async zone. Waiting on it here would make the double
+    // hang where the real platform channel returns.
+    unawaited(_controller.close());
   }
 
   /// Pushes one frame to any listener.
@@ -72,8 +143,10 @@ class FakeHandLandmarkSource implements HandLandmarkSource {
     if (!_controller.isClosed) _controller.add(frame);
   }
 
-  /// Pushes several frames in order.
-  void emitAll(Iterable<LandmarkFrame> frames) => frames.forEach(emit);
+  /// Simulates the camera failing after start.
+  void fail(Object error) {
+    if (!_controller.isClosed) _controller.addError(error);
+  }
 }
 
 /// A ticker the test advances by hand, so no test ever waits on real time.
@@ -175,13 +248,13 @@ class SequentialUuidFactory implements UuidFactory {
 /// Captures session records instead of writing them.
 class InMemorySessionStore implements SessionStore {
   /// Everything recorded so far.
-  final List<CaptureSession> recorded = [];
+  final List<RecordingSession> recorded = [];
 
   @override
-  Future<void> record(CaptureSession session) async => recorded.add(session);
+  Future<void> record(RecordingSession session) async => recorded.add(session);
 
   @override
-  Future<List<CaptureSession>> all() async => List.of(recorded);
+  Future<List<RecordingSession>> all() async => List.of(recorded);
 }
 
 /// Collects log output so tests can assert on structured records.

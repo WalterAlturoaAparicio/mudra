@@ -10,7 +10,17 @@ description: "Task list for 003-mobile-pose-capture (Mudra Capture)"
 **Prerequisites**: [plan.md](./plan.md), [spec.md](./spec.md), [research.md](./research.md),
 [data-model.md](./data-model.md), [contracts/](./contracts/)
 
-**Tests**: Test tasks are **included and mandatory** here — not optional. Constitution v1.2.0
+> **Revision R1 integrated (2026-07-26).** Phases 1–7 (T001–T081) are the **baseline**, largely merged;
+> they are kept as the record of what exists. Phases 8–16 (T082–T138) implement Revision R1 — camera
+> lifecycle, capture modes, preview fidelity, countdown, session loop, camera metadata, layout, and the
+> camera abstraction (FR-053–FR-116).
+>
+> **T037 and T037a are superseded by R1** and marked as such below. They enforce front-camera-only
+> capture; R1 permits both lenses and preserves the same anti-corruption guarantee by converting
+> captures into the canonical convention before storage. They are **replaced**, not extended, by
+> T099/T100 and T089/T090.
+
+**Tests**: Test tasks are **included and mandatory** here — not optional. Constitution v1.3.0
 (capture standards) requires `flutter test` coverage of the domain layer, the application layer, and
 JSON serialization round-trips, and `flutter analyze` clean, as part of the definition of done.
 
@@ -19,7 +29,7 @@ JSON serialization round-trips, and `flutter analyze` clean, as part of the defi
 ## Format: `[ID] [P?] [Story] Description`
 
 - **[P]**: Can run in parallel (different files, no dependencies on incomplete work)
-- **[Story]**: US1–US4 map to the user stories in spec.md
+- **[Story]**: US1–US10 map to the user stories in spec.md (US5–US10 added in R1)
 - All paths are relative to the repository root
 
 ## Path Conventions
@@ -32,7 +42,7 @@ tests under `apps/capture/test/<layer>/`, Android native under
 
 ## Phase ↔ Plan cross-reference
 
-`plan.md` describes **capability phases A–G**; this file sequences **execution phases 1–7** grouped
+`plan.md` describes **capability phases A–N**; this file sequences **execution phases 1–16** grouped
 by user story. Neither supersedes the other — this table is the mapping, and each phase header below
 repeats its letter.
 
@@ -44,7 +54,16 @@ repeats its letter.
 | 4 US2 Quality | E Quality & catalog | T040–T046 |
 | 5 US3 Catalog | E Quality & catalog | T047–T055 |
 | 6 US4 Export | F Export | T056–T061, T076–T079 |
-| 7 Polish | G Docs & polish | T062–T069, T080 |
+| 7 Polish | G Docs & polish | T062–T069, T080–T081 |
+| **8 R1 Foundational** | **H Camera seam · I Canonical conversion** | **T082–T093** (incl. T082a, T086a) |
+| **9 US5 Camera lifecycle** | **H Camera seam & lifecycle** | **T094–T105** |
+| **10 US1′ Countdown & loop** | **J Modes/settings · L Session loop** | **T106–T111a** |
+| **11 US7 Operator Capture** | **J Modes, lenses & settings** | **T112–T115a** |
+| **12 US6 Preview fidelity** | **M Preview fidelity & layout** | **T116–T118** |
+| **13 US8 Lens switching** | **J Modes, lenses & settings** | **T119–T122** |
+| **14 US9 Traceability** | **K Camera metadata** | **T123–T127** |
+| **15 US10 Capture layout** | **M Preview fidelity & layout** | **T128–T131** |
+| **16 R1 Polish** | **N Validation & docs** | **T132–T138** (incl. T133a, T133b) |
 
 ---
 
@@ -123,8 +142,8 @@ produces the same result from a real hand.
 - [X] T034 [US1] Add the large Record button and wire it to `CaptureSessionNotifier` in `apps/capture/lib/presentation/home/home_screen.dart`
 - [X] T035 [US1] Implement `CameraPermissions` (request, rationale, permanently-denied → settings) in `apps/capture/lib/infrastructure/platform/camera_permissions.dart` and the rationale screen in `apps/capture/lib/presentation/permissions/`
 - [X] T036 [US1] Implement the Kotlin `HandLandmarkerPlugin` (MethodChannel `mudra.capture/landmarks`, EventChannel `.../frames`, `start`/`stop`/`dispose`, `PlatformException` codes) in `apps/capture/android/app/src/main/kotlin/com/mudra/capture/HandLandmarkerPlugin.kt` per contracts/platform-channel.md
-- [X] T037 [US1] Implement `CameraXController` in `apps/capture/android/app/src/main/kotlin/com/mudra/capture/CameraXController.kt`: one `ProcessCameraProvider` binding `Preview` (into a Flutter `TextureRegistry` surface) and `ImageAnalysis` (`KEEP_ONLY_LATEST`) → `HandLandmarker` LIVE_STREAM with `numHands = 2`, results forwarded to the event sink on the main thread. **Camera selection is explicit and mandatory (FR-044)**: bind `CameraSelector.DEFAULT_FRONT_CAMERA`, mirror the preview, return `lensFacing = 1` + `mirrored = true` + device/OS info from `start()`, and fail with `camera_configuration_unsupported` when no front camera exists or mirroring is unavailable — **never** silently fall back to the rear camera
-- [X] T037a [US1] Enforce the camera contract on the Dart side in `apps/capture/lib/infrastructure/landmarks/method_channel_hand_landmark_source.dart`: assert `lensFacing == 1` and `mirrored == true` on every `start()`, raise `CameraFailure` otherwise, and propagate `lensFacing` into `metadata.camera.index`; test both the accept and reject paths in `apps/capture/test/infrastructure/camera_contract_test.dart` (FR-044, guards against silent dataset corruption)
+- [X] ~~T037~~ **[SUPERSEDED BY R1 → T099]** [US1] Implement `CameraXController` … bind `CameraSelector.DEFAULT_FRONT_CAMERA`, mirror the preview, return `lensFacing = 1` + `mirrored = true`, fail with `camera_configuration_unsupported` when no front camera exists. *R1 permits the rear lens (FR-059–FR-070) and preserves the anti-corruption guarantee by converting captures into the canonical convention before storage (FR-053–FR-058). Rewritten by **T099**, not extended.*
+- [X] ~~T037a~~ **[SUPERSEDED BY R1 → T098]** [US1] Enforce `lensFacing == 1 && mirrored == true` on every `start()` in the Dart source. *R1 asserts instead that the returned lens **equals the requested one** and that mirroring is consistent with it. Rewritten by **T098**, not extended.*
 - [X] T038 [US1] Add Android configuration: CameraX + `tasks-vision` dependencies and `minSdk 24` in `apps/capture/android/app/build.gradle`, `CAMERA` permission and `android:hardwareAccelerated` in `apps/capture/android/app/src/main/AndroidManifest.xml`, and plugin registration in `MainActivity.kt`
 - [X] T039 [US1] Implement `MethodChannelHandLandmarkSource` decoding the `Float32List` payload into `LandmarkFrame` in `apps/capture/lib/infrastructure/landmarks/method_channel_hand_landmark_source.dart`, and bind it in the providers (fake source overridable in tests)
 
@@ -227,6 +246,216 @@ files with the engine's serializer.
 
 ---
 
+## Phase 8: R1 Foundational (Blocking Prerequisites) — *plan phases H, I*
+
+**Purpose**: the typed camera vocabulary and the canonical conversion every R1 story sits on. **No R1
+story work may begin until this phase is complete.** It is also the phase that breaks compilation
+deliberately — the port and field renames must land together, so the tree is green before behaviour
+changes.
+
+- [X] T082 [P] Implement the camera domain types — `LensPosition`, `ViewConvention`, `CaptureMode`, `CaptureProfile`, `CameraRequest`, `CameraSessionInfo` (incl. derived `mirroredPreview` and `previewAspect`), `CameraMetadata`, `CameraReleaseReason` — in `apps/capture/lib/domain/camera/camera.dart` per data-model.md § Camera domain
+- [X] T083 [P] Add `Handedness.flipped` (`left ↔ right`, `unknown` unchanged) and a `convention` field on `LandmarkFrame` in `apps/capture/lib/domain/landmarks/landmarks.dart`, with a debug assertion that frames observed above the camera seam are always `ViewConvention.canonical`
+- [X] T084 Replace `HandLandmarkSource` and `LandmarkSourceSession` with `CameraSource` and `CameraSession` in `apps/capture/lib/domain/ports/ports.dart` per contracts/interfaces.md — `availableLenses()`, `open(CameraRequest)`, `info`/`frames`/`close()`; delete the `lensFacing MUST be 1` / `mirrored MUST be true` doc contracts, which R1 replaces
+- [X] T085 Rename `HandSample.raw` → `canonicalRaw` (FR-056), add `countdownEnabled` to `CaptureTiming` (FR-083), and add `camera: CameraMetadata` to `SampleMetadata` (FR-081/FR-082/FR-084) in `apps/capture/lib/domain/samples/pose_sample.dart`, updating every call site
+- [X] T082a **[R1.1 / A1]** Rename the take types to end the "session" collision — `CaptureSession` → `RecordingSession`, `CaptureSessionState` → `RecordingSessionState` (and its `Idle`/`Countdown`/`Capturing`/`Saving`/`Summary`/`Cancelled`/`Failed` subclasses' file) — in `apps/capture/lib/domain/capture/`, updating every call site. **Mechanical rename only**: no behaviour change, and the persisted key `session_uuid` is untouched (spec Glossary → *The three sessions*)
+- [X] T086 [P] Implement `CaptureSettings` (mode, lens, countdownEnabled, countdownSeconds, confirmTakes; `mirrored` **derived** from lens, never stored) in `apps/capture/lib/domain/camera/capture_settings.dart`
+- [X] T086a **[R1.1 / F1]** Widen the orientation lock to the whole capture session in `apps/capture/lib/infrastructure/platform/platform_adapters.dart` and `apps/capture/lib/presentation/capture/capture_screen.dart`: lock on entering the capture screen, restore the previous setting on leaving via **every** exit path including failures, and stop locking/unlocking per take. Rename `CaptureConfig.lockOrientationDuringSession` → `lockOrientationOnCaptureScreen`. Test in `apps/capture/test/application/orientation_scope_test.dart` that the lock outlives a completed take and is released exactly once on exit (FR-049 revised, FR-050)
+- [X] T087 Extend `CaptureConfig` in `apps/capture/lib/shared/config/capture_config.dart` with `selfCaptureProfile`, `operatorCaptureProfile`, `defaultConfirmTakes`, `analysisWidth`/`analysisHeight`, `cameraReleaseTimeout`, and the renamed `lockOrientationOnCaptureScreen` — the two profiles are configuration data, never constants at a call site (Principle V)
+- [X] T088 [P] Replace `CameraFailure.unsupportedConfiguration` with the R1 taxonomy — `permissionDenied`, `permissionPermanentlyDenied`, `cameraBusy`, `lensUnavailable`, `detectorUnavailable`, `startFailed` — each carrying a plain-language message and a declared route out, in `apps/capture/lib/shared/errors/failures.dart` per data-model.md § Camera failure taxonomy
+- [X] T089 [P] Canonical-conversion tests **before** the implementation, in `apps/capture/test/domain/canonical_converter_test.dart`: a canonical frame is returned unchanged; an unmirrored frame has `x → 1 − x` on all 21 points with `y`/`z` untouched; handedness flips; a two-handed frame keeps each hand's landmarks with its own entry and is **never** reordered; `convert(convert(f)) == convert(f)`; a synthetic rear-lens frame converges on the equivalent front-lens frame (SC-031)
+- [X] T090 Implement `CanonicalViewConverter` in `apps/capture/lib/domain/canonical/canonical_view_converter.dart` — pure, involutive, never mutates its input, never touches metadata (FR-053–FR-055, FR-058)
+- [X] T091 [P] Implement `FakeCameraSource` in `apps/capture/test/support/fake_camera_source.dart` — scriptable lens set, scripted frames in either convention, injectable open failures and open latency — and delete `apps/capture/test/support/fake_hand_landmark_source.dart`, migrating its callers. **[R1.1 / C2]** It MUST be complete enough to drive the whole pipeline, not only the capture loop: deterministic frame sequences long enough to fill a capture window, controllable timing, and every failure code from contracts/camera-channel.md (FR-116)
+- [X] T092 Update `PoseSampleSerializer` in `apps/capture/lib/infrastructure/serialization/pose_sample_serializer.dart` for the `canonicalRaw` rename while keeping the emitted JSON key `"raw"` and the output **byte-identical** (FR-057)
+- [X] T093 [P] Pin the name/key divergence in `apps/capture/test/infrastructure/serializer_test.dart`: the Dart field is `canonicalRaw`, the wire key is `"raw"`, and existing golden fixtures still match exactly — so a future reader cannot "fix" the serializer and silently change the schema
+
+**Checkpoint**: `flutter analyze` clean and `flutter test` green with **no behaviour change yet** —
+the rename and the new vocabulary are in, the app still records exactly as before.
+
+---
+
+## Phase 9: User Story 5 — Enter and leave capture without the camera locking up (Priority: P1) 🎯 R1 MVP — *plan phase H*
+
+**Goal**: the camera is fully released every time the capture screen is left, and reacquired cleanly
+every time it is shown, without limit.
+
+**Independent Test**: open and leave the capture screen 20 consecutive times, background the app, lock
+the screen, unlock, and force screen recreation. The preview returns every time and the camera-in-use
+indicator is off whenever the capture screen is not displayed.
+
+### Tests for User Story 5
+
+- [X] T094 [P] [US5] Single-session invariant tests in `apps/capture/test/application/camera_session_controller_test.dart` using `FakeCameraSource` — a request while opening supersedes the pending one; the superseded session is closed and never published; `close` completes before the next `open` begins; ten rapid alternating requests converge on the last lens with exactly one live session (FR-070/FR-092/FR-093)
+- [X] T095 [P] [US5] Lifecycle tests in `apps/capture/test/application/camera_lifecycle_test.dart` — backgrounding releases with reason `backgrounded`; resuming reacquires without user action; resuming when the screen no longer owns the camera does **not** reacquire; screen recreation leaves exactly one session (FR-090/FR-091)
+- [X] T096 [P] [US5] Teardown robustness tests in `apps/capture/test/application/camera_teardown_test.dart` — `close` after a failed `open` completes without throwing; `close` twice is a no-op; leaving during a countdown or capture abandons the take, writes nothing, and still releases (FR-094/FR-095)
+
+### Implementation for User Story 5
+
+- [X] T097 [US5] Implement `CameraSessionController` in `apps/capture/lib/application/camera/camera_session_controller.dart` — `request(CameraRequest)` / `release(CameraReleaseReason)` serialized through one slot with a monotonic request token, a `WidgetsBindingObserver` for foreground/background, and `CanonicalViewConverter` applied to the frame stream so nothing above it observes a non-canonical frame (research D15/D17)
+- [X] T098 [US5] Implement `MethodChannelCameraSource` and `MethodChannelCameraSession` in `apps/capture/lib/infrastructure/camera/method_channel_camera_source.dart` per contracts/camera-channel.md — `availableLenses`, `open` with an explicit lens, total `close`, `Float32List` frame decoding, and `PlatformException` → `CameraFailure` mapping for every R1 code. **Assert the returned lens equals the requested one** and that `mirrored` is consistent with it, raising `CameraFailure` otherwise (replaces T037a). Delete `apps/capture/lib/infrastructure/landmarks/`
+- [X] T099 [US5] Rewrite `CameraXController` in `apps/capture/android/app/src/main/kotlin/com/mudra/capture/CameraXController.kt` (replaces T037): bind the **requested** lens via `CameraSelector`, take the preview size from `SurfaceRequest.resolution` and report it **rotation-adjusted for display** with `rotationDegrees` (removing `PREVIEW_WIDTH`/`PREVIEW_HEIGHT`), report `lens`/`mirrored`/`platformLensId`, and make `close()` release the camera binding, the `SurfaceTextureEntry`, the analysis executor, and the detector — **one total operation**, no `stop`/`dispose` split
+- [X] T100 [US5] Rewrite `HandLandmarkerPlugin` in `apps/capture/android/app/src/main/kotlin/com/mudra/capture/HandLandmarkerPlugin.kt`: rename the channels to `mudra.capture/camera` and `mudra.capture/camera/frames`, add `availableLenses` (query `hasCamera` for both selectors), replace `start`/`stop`/`dispose` with `open`/`close`, **construct a fresh `CameraXController` per open and drop it on close** (research D16), emit `mirrored` per frame, and map every failure to its R1 `PlatformException` code
+- [X] T101 [US5] Rewire the composition root in `apps/capture/lib/shared/di/providers.dart`: replace the app-lifetime `handLandmarkSourceProvider` with a `cameraSourceProvider` plus an **`autoDispose`** `cameraSessionControllerProvider` scoped to the capture screen, so release happens because ownership ended rather than because a `dispose()` override remembered it
+- [X] T102 [US5] Rebuild `CaptureScreen` camera wiring in `apps/capture/lib/presentation/capture/capture_screen.dart`: express *intent* only (request on mount, release on unmount), delete the `stop()`-in-`dispose()` path, and render the ordered start sequence's states (checking permission → acquiring → starting analysis → live) rather than a bare spinner (FR-107)
+- [X] T103 [US5] Emit the structured lifecycle events in `apps/capture/lib/application/camera/camera_session_controller.dart` — one `camera_acquired` and one `camera_released` per session, the release carrying its `CameraReleaseReason` and duration, with a release exceeding `cameraReleaseTimeout` logged at error rather than swallowed (FR-096); assert both in `apps/capture/test/application/camera_logging_test.dart`
+- [X] T104 [US5] Extend `CameraPermissions` in `apps/capture/lib/infrastructure/platform/platform_adapters.dart` to distinguish denied from **permanently denied** and expose an open-settings action, and surface both in `apps/capture/lib/presentation/permissions/permission_screen.dart` (FR-109/FR-110)
+- [X] T105 [P] [US5] Widget tests in `apps/capture/test/presentation/camera_failure_test.dart` — every `CameraFailure` variant renders a distinct plain-language message **and** a working action; **no** variant renders an indefinite loading state (SC-029); the failure is not cached, so a retry re-runs the full start path (FR-111)
+
+**Checkpoint**: US5 complete on the host. **The six hardware criteria (quickstart L1–L6) remain
+unproven until T136** — a green suite here is not evidence the leak is fixed.
+
+---
+
+## Phase 10: User Story 1 (revised) — Conditional countdown & the capture loop (Priority: P1) — *plan phases J, L*
+
+**Goal**: Record starts a take with or without a countdown, and the screen stays ready for the next
+take with the camera still held.
+
+**Independent Test**: with the countdown disabled, one press captures immediately; after a take, the
+screen returns to ready without the camera being released and reacquired.
+
+### Tests for User Story 1 (revised)
+
+- [X] T106 [P] [US1] Countdown-path tests in `apps/capture/test/application/countdown_conditional_test.dart` — with the countdown disabled the session emits **no** `CountdownState` and capture begins immediately; with it enabled the existing behaviour is unchanged; `countdownSeconds` is `0.0` and `countdownStartTime` is the press instant in the disabled case (FR-010)
+- [X] T107 [P] [US1] Loop tests in `apps/capture/test/application/capture_loop_test.dart` — a completed take returns to `Idle` **without** releasing the camera; with `confirmTakes` on the summary blocks the next take until dismissed; with it off the screen returns to ready immediately and the result is still conveyed; progress updates in both cases (FR-076–FR-080)
+
+### Implementation for User Story 1 (revised)
+
+- [X] T108 [US1] Change `RunCaptureSession.run` in `apps/capture/lib/application/capture/run_capture_session.dart` to take `CaptureSettings` and skip the countdown phase entirely when it is disabled, consuming the controller's canonical frame stream rather than owning a source
+- [X] T109 [US1] Replace the pop-on-terminal behaviour in `apps/capture/lib/presentation/capture/capture_screen.dart`: `SummaryState`, `CancelledState`, and `FailedState` all return to `Idle` on the same screen with the camera untouched; only the explicit close action leaves (FR-076)
+- [X] T110 [US1] Refresh pose progress after every saved take regardless of whether the summary is shown, in `apps/capture/lib/application/catalog/pose_progress_notifier.dart` and its capture-screen listener (FR-080)
+- [X] T111 [US1] Add `SessionEndReason.cameraReleased` and route every no-save exit — cancel, orientation change, camera release, lens switch, mode change — through a **single** abandon operation in `apps/capture/lib/application/capture/run_capture_session.dart`, so "nothing partial is ever written" is one code path rather than six (FR-068/FR-094, SC-016)
+- [X] T111a **[R1.1 / E1]** [US1] Create `apps/capture/lib/presentation/capture/capture_control_bar.dart` with the **take-confirmation toggle**, wired to `CaptureSettingsNotifier`. *Moved here from the P3 layout phase: FR-078 is part of this P1 story and cannot be demonstrated without the control.* Widget test in `apps/capture/test/presentation/capture_control_bar_test.dart` — toggling it off makes the next take return to ready without a blocking summary (FR-078)
+
+**Checkpoint**: US5 + US1′ — repeated takes on one screen, with or without a countdown, and the camera
+held throughout. The take-confirmation control is usable, so FR-078 is demonstrable now rather than in
+Phase 15.
+
+---
+
+## Phase 11: User Story 7 — Record someone else with Operator Capture (Priority: P2) — *plan phase J*
+
+**Goal**: two capture modes whose defaults are established once and then owned by the user.
+
+**Independent Test**: choose Operator Capture — rear lens, unmirrored preview, countdown off; record;
+enable the countdown and record again; both takes are stored with metadata that distinguishes them.
+
+### Tests for User Story 7
+
+- [X] T112 [P] [US7] Settings-ownership tests in `apps/capture/test/application/capture_settings_test.dart` — each mode initializes its own defaults exactly once; a lens switch changes **nothing** about the countdown in either direction; backgrounding, screen lock, screen recreation, and a completed take all leave every setting untouched; a mode change re-initializes all of them. Assert **zero** unrequested changes across a scripted session (SC-032, FR-071–FR-074, FR-079)
+
+### Implementation for User Story 7
+
+- [X] T113 [US7] Implement `CaptureSettingsNotifier` in `apps/capture/lib/application/camera/capture_settings_notifier.dart` — holds `CaptureSettings`, re-initializes from the mode's `CaptureProfile` **only** on a mode change, and is scoped to the application run (not the widget) so screen recreation cannot reset it and the most recent mode is preselected (FR-063/FR-071/FR-075)
+- [X] T114 [US7] Add the mode selector to `apps/capture/lib/presentation/capture/capture_control_bar.dart` — reachable without leaving the capture screen, taking effect for the next take, with a mode whose default lens the device lacks shown as **unavailable with a stated reason** while the other stays fully usable (FR-062/FR-064)
+- [X] T115 [US7] Wire mode changes through `CameraSessionController.request` in `apps/capture/lib/presentation/capture/capture_screen.dart`, abandoning any in-flight recording session with reason `modeChange` and leaving already-saved samples untouched
+- [X] T115a **[R1.1 / E1]** [US7] Add the **countdown toggle** to `apps/capture/lib/presentation/capture/capture_control_bar.dart`, wired to `CaptureSettingsNotifier`. *Moved here from the P3 layout phase: US7's own independent test requires enabling the countdown in Operator Capture, so this P2 story cannot pass without it.* Extend `apps/capture/test/presentation/capture_control_bar_test.dart` to cover toggling in both directions and confirm a lens switch afterwards leaves it unchanged (FR-072/FR-074)
+
+**Checkpoint**: both modes usable; Operator Capture records with the rear lens, and the countdown can
+be turned on for it — US7's independent test passes end to end. Its samples are only **trustworthy**
+once T127 and the on-device SC-031 check in T135 pass.
+
+---
+
+## Phase 12: User Story 6 — See an undistorted preview (Priority: P2) — *plan phase M*
+
+**Goal**: the preview shows the camera's true proportions, centered, with neutral bands.
+
+**Independent Test**: display the preview at several surface aspect ratios and confirm a square held
+in frame appears square in every case, with bands rather than distortion.
+
+### Tests for User Story 6
+
+- [X] T116 [P] [US6] Widget tests in `apps/capture/test/presentation/preview_stage_test.dart` — at a surface wider than the camera the image is pillarboxed and horizontally centered; taller, letterboxed and vertically centered; the rendered box always matches the session's reported aspect within tolerance; overlays land inside the **image** box, not the bands (FR-097/FR-098/FR-101)
+
+### Implementation for User Story 6
+
+- [X] T117 [US6] Implement `PreviewStage` in `apps/capture/lib/presentation/capture/preview_stage.dart` — `Center → AspectRatio(info.previewAspect) → Stack(Texture, overlays)` with a neutral background, replacing the `Stack(fit: StackFit.expand)` + bare `Texture` that stretches today; the ratio comes from `CameraSessionInfo`, never from a constant (FR-099)
+- [X] T118 [US6] Move the countdown, capturing, and summary overlays into the `PreviewStage` stack in `apps/capture/lib/presentation/capture/capture_overlays.dart` so their alignment to the visible image is structural rather than a coordinate calculation (FR-101)
+
+**Checkpoint**: the preview is undistorted at every surface shape. SC-022's on-device square check
+runs in T136.
+
+---
+
+## Phase 13: User Story 8 — Switch between front and rear cameras in place (Priority: P3) — *plan phase J*
+
+**Goal**: change lens without leaving the screen or restarting the application.
+
+**Independent Test**: switch lenses back and forth ten times; the preview reappears each time,
+mirroring follows the lens, and no camera error occurs.
+
+### Tests for User Story 8
+
+- [X] T119 [P] [US8] Lens-switch tests in `apps/capture/test/application/lens_switch_test.dart` — the previous session is fully closed before the new one opens; mirroring follows the lens regardless of which mode selected it; a switch during a countdown or capture abandons the take and reports that nothing was saved; ten rapid switches converge on the last requested lens with exactly one live session (FR-066–FR-068/FR-070)
+
+### Implementation for User Story 8
+
+- [X] T120 [US8] Add the lens-switch control to `apps/capture/lib/presentation/capture/capture_control_bar.dart`, dispatching a `CameraRequest` for the other lens through the controller (FR-065)
+- [X] T121 [US8] Abandon any in-flight take on a lens switch with reason `lensSwitch` and tell the user nothing was saved, in `apps/capture/lib/presentation/capture/capture_screen.dart` (FR-068)
+- [X] T122 [US8] Disable the switch control **with a stated reason** when `availableLenses()` reports a single usable lens, rather than failing on tap, in `apps/capture/lib/presentation/capture/capture_control_bar.dart` (FR-069)
+
+**Checkpoint**: lens switching works in place, and the countdown is provably unaffected by it.
+
+---
+
+## Phase 14: User Story 9 — Trust what a sample was recorded with (Priority: P3) — *plan phase K*
+
+**Goal**: every sample states its lens, mirroring, countdown, and platform lens identifier.
+
+**Independent Test**: record takes in each mode with the countdown on and off, then read the stored
+samples and confirm each reports the configuration actually active when it was taken.
+
+### Tests for User Story 9
+
+- [X] T123 [P] [US9] R1 metadata tests in `apps/capture/test/infrastructure/camera_metadata_test.dart` — all five additive fields serialize with the right values for each mode; `lens_facing == metadata.camera.index` in every emitted sample; a converted rear-lens sample still reports `position: rear` and `mirrored_preview: false` (FR-058); with the countdown disabled, `countdown_enabled` is `false` and `countdown_seconds` is `0.0`
+- [X] T124 [P] [US9] Backwards-compatibility test in `apps/capture/test/infrastructure/pre_r1_compat_test.dart` — a pre-R1 golden fixture carrying none of the additive fields deserializes successfully with them **absent rather than wrong** (FR-052, SC-026)
+- [X] T125 [P] [US9] Cross-lens agreement test in `apps/capture/test/domain/cross_lens_agreement_test.dart` — the same synthetic hand delivered once as a mirrored frame and once as an unmirrored one produces samples that agree on handedness and match geometrically within the tolerance accepted between two consecutive samples of one take, while each still reports its own lens (SC-031)
+
+### Implementation for User Story 9
+
+- [X] T126 [US9] Build `CameraMetadata` from the **live** session and settings at the instant each frame is captured, in `RunCaptureSession._buildSample` (`apps/capture/lib/application/capture/run_capture_session.dart`), so samples taken before and after a lens or mode change each report their own configuration (FR-085)
+- [X] T127 [US9] Emit the five additive fields in `apps/capture/lib/infrastructure/serialization/pose_sample_serializer.dart` — `position`, `mirrored_preview`, `lens_facing` inside `metadata.camera`; `countdown_enabled` inside `metadata.capture` — additive, optional, `schema_version` unchanged, per contracts/sample-json.md
+
+**Checkpoint**: every sample is self-describing, and pre-R1 samples still load.
+
+---
+
+## Phase 15: User Story 10 — Work from a layout built for capturing (Priority: P3) — *plan phase M*
+
+**Goal**: reference, progress, preview, Record, and Sync visible together, with the preview central
+but not fullscreen.
+
+**Independent Test**: on the smallest supported screen, all five elements are visible and reachable at
+once without scrolling and nothing is clipped.
+
+### Tests for User Story 10
+
+- [X] T128 [P] [US10] Layout widget tests in `apps/capture/test/presentation/capture_layout_test.dart` — all five required elements are present simultaneously at the smallest supported surface size; the **preview** yields space first as the surface shrinks; nothing is clipped or scrollable; the reference image and progress stay visible through countdown, capture, and summary (FR-102/FR-104/FR-106, SC-027)
+
+### Implementation for User Story 10
+
+- [X] T129 [US10] Rebuild the capture screen layout in `apps/capture/lib/presentation/capture/capture_screen.dart` — reference image, progress, `PreviewStage`, Record, Sync in one non-scrolling column, the preview as the visual focal point but **not** fullscreen (FR-102/FR-103)
+- [X] T130 [US10] Lay out the finished control bar in `apps/capture/lib/presentation/capture/capture_control_bar.dart` so **all four** controls — mode (T114), lens (T120), countdown (T115a), take confirmation (T111a) — are reachable without leaving the capture screen and legible at the smallest supported size (FR-105). *All four already exist by this phase; this task positions them, it does not build them* **[R1.1 / E1]**
+- [X] T131 [US10] Make the preview the flexible element and the other four fixed, so constrained space shrinks the preview rather than clipping anything, in `apps/capture/lib/presentation/capture/capture_screen.dart` (FR-106)
+
+**Checkpoint**: all R1 user stories independently functional on the host.
+
+---
+
+## Phase 16: R1 Polish & Validation — *plan phase N*
+
+- [X] T132 [P] Update `apps/capture/README.md` — the camera seam (`CameraSource`/`CameraSession`), the single-session invariant and why it lives in one controller, the canonical viewing convention and why `raw` means *canonical raw*, and the two capture modes
+- [X] T133 Remove the superseded surface: delete `apps/capture/lib/infrastructure/landmarks/`, the old fake source, and any remaining reference to `mudra.capture/landmarks` or `contracts/platform-channel.md` in code or docs
+- [X] T133a **[R1.1 / C1]** [P] Add the **layer-boundary architecture test** in `apps/capture/test/architecture/layer_boundaries_test.dart`, asserting by static import analysis that: `lib/application/camera/**` and `lib/infrastructure/camera/**` import nothing from `storage/`, `serialization/`, or `export/`; `lib/infrastructure/storage/**` and `lib/infrastructure/export/**` import nothing from `camera/`; and `lib/domain/**` imports no Flutter, plugin, or `dart:io` symbol. Each violation must name the offending file and import, so the failure is actionable. This makes FR-115 **enforced rather than observed**, which is the point — a convention nobody checks drifts (Principle I)
+- [X] T133b **[R1.1 / C2]** Add the **end-to-end no-hardware integration test** in `apps/capture/test/integration/full_pipeline_test.dart`, driving the complete pipeline through `FakeCameraSource` with a temp dataset root: camera initialization → mode/settings → capture flow (both with and without a countdown) → per-frame validation → persistence → integrity validation → manifest → export archive. Assert the archive contains what was recorded and that every sample loads back. This is what makes SC-030/FR-116 verified rather than assumed
+- [X] T134 Confirm `flutter analyze` is clean and `flutter test` is green from `apps/capture/`, including every new R1 test
+- [ ] T135 Run `quickstart.md` manual rows **29–44** on a physical Android device and record the results
+- [ ] T136 ⭐ Run the **camera lifecycle validation** L1–L6 from `quickstart.md` on hardware — release within 1 s (SC-019), another app acquires the camera (SC-020), 20 enter/leave cycles (SC-018), zero busy errors over 30 minutes (SC-021), lens switch under 1.5 s (SC-024), square-object undistortion (SC-022) — plus the four additional device checks. **This is the only evidence the leak R1 exists to fix is actually fixed**; a green test suite is not
+- [ ] T137 Run the **SC-028 throughput comparison** from `quickstart.md`: the same benchmark in Self Capture (countdown + confirmation on) and in Operator Capture (both off). The second must yield **at least twice** the samples per minute, or the R1 session loop needs revisiting
+- [ ] T138 [P] File the engine-side follow-ups (both **out of scope** here, tracked so they are not forgotten): (1) teach `PoseMetadata`/`CaptureTiming`/`PoseSerializer` to carry and re-emit the five additive fields so an engine round-trip stops dropping them; (2) correct the engine's documentation of `HandSample.raw`, whose meaning FR-056 redefines without renaming it
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
@@ -238,77 +467,112 @@ files with the engine's serializer.
 - **US3 (Phase 5)**: depends on Foundational; integrates with US1 for post-session refresh
 - **US4 (Phase 6)**: depends on US1 (needs stored samples to export)
 - **Polish (Phase 7)**: depends on all desired stories
+- **R1 Foundational (Phase 8)**: depends on the baseline being merged — **blocks every R1 story**
+- **US5 (Phase 9)**: depends on Phase 8. **Everything else in R1 depends on US5's camera session**
+- **US1′ (Phase 10)**: depends on US5 (the take must not own the camera) — *no dependency on modes*
+- **US7 (Phase 11)**: depends on US5 and US1′ (the countdown must already be conditional)
+- **US6 (Phase 12)**: depends on US5 only (needs true preview dimensions) — **parallel with US7**
+- **US8 (Phase 13)**: depends on US7 (mode defaults exist before switching between them)
+- **US9 (Phase 14)**: depends on Phase 8's converter and US7's settings
+- **US10 (Phase 15)**: depends on US6, US7, US8 (it surfaces their controls)
+- **R1 Polish (Phase 16)**: depends on all R1 stories
 
-### Critical path
+### Critical path (baseline)
 
 `T001 → T002 → T007-T014 → T016-T019 → T026-T028 → T030-T032 → T072 → T036-T039 → T043-T044 → T076-T077 → T058-T060`
 
-### Refinement tasks added after the analysis report
+### Critical path (R1)
+
+`T082-T085 → T090 → T091 → T097 → T098 → T099-T100 → T101-T102 → T108-T109 → T113 → T126-T127 → T136`
+
+### Baseline task provenance (post-analysis refinements, 2026-07-24)
 
 | Task | Closes | Requirement |
 |---|---|---|
 | T070, T071 | D1 (CRITICAL) | FR-042/FR-043 structured startup + shutdown records |
-| T037 (extended), T037a | E1 (HIGH) | FR-044 explicit front camera, mirroring, rejection of unsupported configs |
+| ~~T037, T037a~~ | E1 (HIGH) | FR-044 — **restated by R1**, not reversed: the guarantee now holds through canonical conversion rather than through refusing the rear lens |
 | T080 | E2 (HIGH) | SC-001 primary KPI benchmark |
 | T073 | E3 (MEDIUM) | FR-012 reference thumbnail during countdown |
 | T075 | E4 (MEDIUM) | FR-049/FR-050 orientation lock + safe abort |
 | Phase cross-reference table | F1 (MEDIUM) | Plan ↔ tasks numbering |
-| T062 (extended) | B1 (LOW) | Sync / dataset-export terminology |
+| T062 | B1 (LOW) | Sync / dataset-export terminology |
 | T074 | C1 (LOW) | FR-051 sample-limit behaviour |
 | T072 | new | FR-045/FR-046 session identity |
 | T076–T079 | new | FR-047/FR-048 manifest + integrity validation |
 | T081 | new | Engine-side follow-up for `session_uuid` round-tripping |
 
-### Within User Story 1
+### R1 task provenance
 
-Tests (T021–T025) are written before the implementation they cover. T026/T027 are independent;
-T028 depends on T027 (it serializes what it writes); T031 depends on T026–T030; T033–T034 depend on
-T032; T039 depends on T036–T038.
+| Tasks | Delivers | Requirements |
+|---|---|---|
+| T082–T088 | Camera vocabulary, settings, config profiles, failure taxonomy | FR-059–FR-061, FR-107–FR-111 |
+| T089–T090, T125 | Canonical viewing convention | FR-053–FR-058, SC-031 |
+| T092–T093 | `canonicalRaw` rename with the wire key pinned | FR-056/FR-057 |
+| T094–T103 | Camera lifecycle, single-session invariant, native rebuild | FR-086–FR-096, FR-112–FR-116 |
+| T104–T105 | Camera stability and error handling | FR-107–FR-111, SC-029 |
+| T106, T108 | Conditional countdown | FR-010, FR-071 |
+| T107, T109–T111 | Capture session loop | FR-076–FR-080 |
+| T112–T115 | Capture modes and settings ownership | FR-059–FR-064, FR-071–FR-075, SC-032 |
+| T116–T118 | Preview fidelity | FR-097–FR-101, SC-022 |
+| T119–T122 | Lens selection and switching | FR-065–FR-070, SC-024 |
+| T123–T124, T126–T127 | Camera metadata | FR-081–FR-085, FR-052, SC-025/SC-026 |
+| T128–T131 | Capture screen layout | FR-102–FR-106, SC-027 |
+| T136–T137 | The hardware-only criteria | SC-018–SC-022, SC-024, SC-028 |
+| ~~T037~~ → T099, ~~T037a~~ → T098 | Superseded front-camera-only enforcement | FR-044 (revised) |
+| **T082a** | R1.1/A1 — end the "session" name collision | Glossary → *The three sessions* |
+| **T086a** | R1.1/F1 — orientation locked for the whole capture session | FR-049 (revised), FR-050 |
+| **T111a, T115a, T130** | R1.1/E1 — confirmation and countdown controls built in the phases that need them | FR-072, FR-078, FR-105 |
+| **T133a** | R1.1/C1 — layer boundaries enforced automatically | FR-115 (extended) |
+| **T091, T133b** | R1.1/C2 — complete pipeline exercisable with no hardware | FR-116 (extended), SC-030 |
+| **T135** | R1.1/C3 — SC-023 added to the manual matrix | SC-023 |
 
-### Native-work isolation
+### Native-work isolation (R1)
 
-T036–T039 are the only tasks that cannot be verified in the current environment (no device/emulator,
-Android licenses unaccepted). Every other task is provable with `flutter analyze` and `flutter test`.
-They are ordered last within US1 deliberately, so the entire Dart application is already green before
-the platform binding is attempted.
+T099 and T100 are the only R1 tasks that cannot be verified in the current environment. They are
+ordered **after** the Dart side of US5 deliberately, so the controller and its invariant are already
+proven against `FakeCameraSource` before the platform binding is touched. T136 is where the six
+hardware-only criteria are actually settled — it is not optional polish.
 
 ### Parallel Opportunities
 
 - Setup: T003, T005, T006 in parallel
-- Foundational: T007–T015 and T020 all in parallel (separate files); T016 before T017 before T018
+- Foundational: T007–T015 and T020 all in parallel; T016 → T017 → T018
 - US1: T021–T025 in parallel; T026, T027, T029 in parallel
 - US2: T040–T042 in parallel; T043 parallel with the summary UI
 - US3: T047–T049 in parallel; T050, T052, T055 in parallel
 - US4: T056, T057 in parallel; T059 parallel with T058
 - Polish: T062, T063, T064, T067 in parallel
+- **R1 Foundational**: T082, T083, T086, T088, T089, T091 in parallel; T082a and T086a are wide
+  mechanical renames and should land **alone**, not alongside other edits to the same files;
+  T084 → T085 → T092 → T093
+- **US5**: T094–T096 in parallel; T099 and T100 are the same Kotlin change set and are **not** parallel
+- **Phases 11 and 12 (US7, US6) run in parallel** — different files, and US6 depends only on US5
+- **US9**: T123–T125 in parallel before T126/T127
+- **R1 Polish**: T132, T133a in parallel; T133b depends on the whole pipeline and runs last before T134
 
 ---
 
-## Parallel Example: User Story 1
+## Parallel Example: R1 Foundational
 
 ```bash
-# Tests first, all independent files:
-Task: "Normalizer parity test in apps/capture/test/domain/normalizer_test.dart"
-Task: "Serializer golden test in apps/capture/test/infrastructure/serializer_test.dart"
-Task: "Repository test in apps/capture/test/infrastructure/repository_test.dart"
-Task: "Capture-session test in apps/capture/test/application/capture_session_test.dart"
-
-# Then the independent implementations:
-Task: "TranslationScaleNormalizer in apps/capture/lib/domain/normalization/translation_scale_normalizer.dart"
-Task: "PoseSampleSerializer in apps/capture/lib/infrastructure/serialization/pose_sample_serializer.dart"
-Task: "FakeHandLandmarkSource in apps/capture/test/support/fake_hand_landmark_source.dart"
+# Independent domain files:
+Task: "Camera domain types in apps/capture/lib/domain/camera/camera.dart"
+Task: "CaptureSettings in apps/capture/lib/domain/camera/capture_settings.dart"
+Task: "CameraFailure taxonomy in apps/capture/lib/shared/errors/failures.dart"
+Task: "Canonical converter tests in apps/capture/test/domain/canonical_converter_test.dart"
+Task: "FakeCameraSource in apps/capture/test/support/fake_camera_source.dart"
 ```
 
 ---
 
 ## Implementation Strategy
 
-### MVP (User Story 1 only)
+### Baseline MVP (User Story 1 only)
 
 1. Phase 1 Setup → 2. Phase 2 Foundational → 3. Phase 3 US1 → **stop and validate**: a session with
 the fake source writes engine-readable samples; on hardware, Record captures real landmarks.
 
-### Incremental delivery
+### Incremental delivery (baseline)
 
 1. Setup + Foundational → skeleton runs
 2. + US1 → **records samples** (MVP)
@@ -316,18 +580,41 @@ the fake source writes engine-readable samples; on hardware, Record captures rea
 4. + US3 → the catalog becomes workable end to end
 5. + US4 → the dataset reaches the engine
 
+### R1 MVP (User Story 5 only)
+
+Phase 8 → Phase 9 → **stop and validate on hardware**. US5 alone makes the application usable beyond
+the first recording, which is what puts SC-001 back in reach. Everything else in R1 is improvement on
+top of a working loop; US5 is the difference between usable and not.
+
+### Incremental delivery (R1)
+
+1. Phase 8 → the vocabulary and the conversion land with **no behaviour change**
+2. + US5 → **the camera is released and reacquired reliably** (R1 MVP)
+3. + US1′ → takes repeat on one screen, with or without a countdown
+4. + US7 (‖ US6) → Operator Capture; undistorted preview
+5. + US8 → lens switching in place
+6. + US9 → samples become self-describing
+7. + US10 → the layout built for capturing
+
 Each increment is demonstrable on its own and breaks nothing before it.
 
 ### Suggested checkpoints for review
 
 - After Phase 2: layer boundaries and the port surface
 - After US1: schema parity (the hardest thing to change later)
-- After US4: the engine import check (SC-005) — the acceptance test for the whole feature
+- After US4: the engine import check (SC-005)
+- **After Phase 8**: the canonical conversion — like schema parity, it is very hard to change once
+  samples exist that depend on it
+- **After US5, on hardware**: the camera lifecycle (T136). Do not build the rest of R1 on an unproven
+  release path
 
 ## Notes
 
 - `[P]` = different files, no dependencies
-- Tests are mandatory per constitution v1.2.0, not optional
+- Tests are mandatory per constitution v1.3.0, not optional
 - Commit after each task or logical group
-- T036–T039 will likely need on-device iteration; treat their first version as a starting point, not
-  a finished artifact
+- T036–T039 and T099–T100 will likely need on-device iteration; treat their first version as a
+  starting point, not a finished artifact
+- Phases 1–7 are the merged baseline. Unchecked baseline tasks (T042, T048, T049, T057, T064, T066,
+  T068, T069, T080, T081) remain outstanding and are **not** superseded by R1
+

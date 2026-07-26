@@ -5,6 +5,8 @@
 /// configuration story and lives in `assets/config/pose_catalog.json`.
 library;
 
+import 'package:capture/domain/camera/camera.dart';
+
 /// All tunable values for the capture application.
 class CaptureConfig {
   /// Creates a configuration, using the documented defaults for anything unset.
@@ -23,16 +25,51 @@ class CaptureConfig {
     this.exportFileName = 'mudra_capture_export.zip',
     this.manifestFileName = 'manifest.json',
     this.maxSamplesPerSession = 120,
-    this.lockOrientationDuringSession = true,
+    this.lockOrientationOnCaptureScreen = true,
     this.computeChecksums = true,
     this.tickIntervalMillis = 50,
+    this.analysisWidth = 480,
+    this.analysisHeight = 640,
+    this.defaultConfirmTakes = true,
+    this.cameraReleaseTimeoutMillis = 1000,
+    this.selfCaptureProfile = const CaptureProfile(
+      defaultLens: LensPosition.front,
+      countdownEnabled: true,
+      countdownSeconds: 3.0,
+    ),
+    this.operatorCaptureProfile = const CaptureProfile(
+      defaultLens: LensPosition.rear,
+      countdownEnabled: false,
+      countdownSeconds: 3.0,
+    ),
   });
 
   /// Name of this configuration profile, reported in the startup record.
   final String profile;
 
-  /// Countdown length before capture begins (FR-010).
+  /// Countdown length when enabled (FR-010); the Self Capture profile's value.
   final double countdownSeconds;
+
+  /// Self Capture defaults: front lens, mirrored, countdown on at 3 s (FR-060).
+  final CaptureProfile selfCaptureProfile;
+
+  /// Operator Capture defaults: rear lens, unmirrored, countdown off (FR-061).
+  final CaptureProfile operatorCaptureProfile;
+
+  /// Whether each completed take pauses for review by default (FR-077).
+  final bool defaultConfirmTakes;
+
+  /// Requested analysis frame width — the resolution landmarks are computed at.
+  final int analysisWidth;
+
+  /// Requested analysis frame height.
+  final int analysisHeight;
+
+  /// Budget for a full camera release, in milliseconds (SC-019).
+  ///
+  /// Exceeding it is logged at error rather than swallowed: a release that took
+  /// too long is the first symptom of the leak this revision exists to fix.
+  final int cameraReleaseTimeoutMillis;
 
   /// Automatic capture window length (FR-014).
   final double captureWindowSeconds;
@@ -67,11 +104,17 @@ class CaptureConfig {
   /// Name of the manifest inside the archive (FR-047).
   final String manifestFileName;
 
-  /// Safety bound on samples buffered in one session (FR-051).
+  /// Safety bound on samples buffered in one take (FR-051).
   final int maxSamplesPerSession;
 
-  /// Whether to lock orientation for the duration of a session (FR-049).
-  final bool lockOrientationDuringSession;
+  /// Whether to lock orientation for the whole **capture session** (FR-049).
+  ///
+  /// Locked on entering the capture screen, restored on leaving — **not** per
+  /// take. The narrower per-take scope this replaced would let the device rotate
+  /// between takes now that the screen persists, silently changing both the
+  /// preview's aspect ratio and the frame geometry a sample's coordinates depend
+  /// on.
+  final bool lockOrientationOnCaptureScreen;
 
   /// Whether to compute per-collection checksums for the manifest.
   final bool computeChecksums;
@@ -83,6 +126,16 @@ class CaptureConfig {
 
   /// Session tick interval as a [Duration].
   Duration get tickInterval => Duration(milliseconds: tickIntervalMillis);
+
+  /// Camera release budget as a [Duration].
+  Duration get cameraReleaseTimeout =>
+      Duration(milliseconds: cameraReleaseTimeoutMillis);
+
+  /// The defaults [mode] establishes at capture-session initialization.
+  CaptureProfile profileFor(CaptureMode mode) => switch (mode) {
+    CaptureMode.selfCapture => selfCaptureProfile,
+    CaptureMode.operatorCapture => operatorCaptureProfile,
+  };
 
   /// Countdown length as a [Duration].
   Duration get countdown =>

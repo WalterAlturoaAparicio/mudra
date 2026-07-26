@@ -8,7 +8,7 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:capture/domain/capture/capture_session.dart';
+import 'package:capture/domain/capture/recording_session.dart';
 import 'package:capture/domain/export/manifest.dart';
 import 'package:capture/domain/ports/ports.dart';
 import 'package:capture/domain/samples/pose_sample.dart';
@@ -189,7 +189,7 @@ class ManifestSerializer {
   String toJson(DatasetManifest manifest, {int indent = 2}) =>
       JsonEncoder.withIndent(' ' * indent).convert(toMap(manifest));
 
-  Map<String, Object?> _sessionToMap(CaptureSession session) => {
+  Map<String, Object?> _sessionToMap(RecordingSession session) => {
     'session_uuid': session.sessionUuid,
     'pose_id': session.poseId,
     'started_at': formatEngineTimestamp(session.startedAt),

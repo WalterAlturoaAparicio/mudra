@@ -1,19 +1,24 @@
 # Phase 0 Research: Mudra Capture
 
-**Feature**: 003-mobile-pose-capture | **Date**: 2026-07-24
+**Feature**: 003-mobile-pose-capture | **Date**: 2026-07-24 (D1–D13) · 2026-07-26 (D14–D22, R1)
 
 Decisions taken before design, each with the alternatives that were rejected. The recurring
 constraint behind almost every decision: **samples produced on a phone must be indistinguishable
 from samples produced by the engine**, because the dataset is the only contract between the two
 applications (constitution, Monorepo & Cross-Application Boundaries).
 
+**D1–D13** are the baseline decisions, taken before the application was built. **D14–D22** were taken
+for **Revision R1** (camera lifecycle, capture modes, preview fidelity) and are grounded in the code
+that now exists — each one names the concrete behaviour it changes.
+
 ---
 
 ## D1 — Hand landmark detection on Android
 
 **Decision**: MediaPipe **Tasks Vision `HandLandmarker`** (`com.google.mediapipe:tasks-vision`) in
-`LIVE_STREAM` mode, running natively on Android and surfaced to Dart behind a single Dart interface
-(`HandLandmarkSource`).
+`LIVE_STREAM` mode, running natively on Android and surfaced to Dart behind a single Dart interface.
+*(R1 renamed that interface — see [D14](#d14--the-camera-seam-a-session-not-a-singleton); the
+detector decision itself is unchanged.)*
 
 **Rationale**: The engine uses the MediaPipe Tasks `HandLandmarker` with the bundled
 `hand_landmarker.task` model. Using the same task, the same model file, and the same 21-point
@@ -226,7 +231,10 @@ correctly, which is easy to get wrong by hand.
 
 ## D12 — Testing without a device
 
-**Decision**: Everything above the `HandLandmarkSource` interface is testable on the host:
+> **Superseded in part by [D22](#d22--what-r1-makes-testable-without-a-device)** — the seam is now
+> `CameraSource`/`CameraSession` and the fake is `FakeCameraSource`. The split below still holds.
+
+**Decision**: Everything above the platform seam is testable on the host:
 
 - `FakeHandLandmarkSource` emits scripted frames (valid, invalid, absent-hand, one-handed) so capture
   sessions, validation, and accepted/discarded accounting are unit-tested deterministically.
@@ -252,6 +260,276 @@ the concrete meaning of the "iOS can be added later without changes" requirement
 
 ---
 
+# Revision R1 decisions (2026-07-26)
+
+R1 changes how the application owns the camera. Unlike D1–D13, these decisions are made against
+existing code, so each states the behaviour it replaces.
+
+---
+
+## D14 — The camera seam: a session, not a singleton
+
+**Decision**: replace `HandLandmarkSource` with two interfaces — `CameraSource` (a capability:
+`availableLenses()`, `open(CameraRequest)`) and `CameraSession` (a resource: `info`, `frames`,
+`close()`). `close()` is total and idempotent; there is no intermediate "stopped but still holding"
+state.
+
+**What it replaces**: `HandLandmarkSource` has `start`/`stop`/`dispose`, is bound as an
+**app-lifetime** `Provider`, and `CaptureScreen.dispose()` calls only `stop()`. The camera therefore
+stays claimed for the rest of the application run — the concrete cause of the "camera already in use"
+report behind FR-086/FR-087.
+
+**Rationale**: the three-verb interface makes partial release *representable*, and anything
+representable eventually happens. A session whose only terminal operation is `close()` cannot be left
+half-released, and its lifetime is visible in the type: you hold a `CameraSession` or you do not.
+This is also what FR-112 asks for in the abstract — a boundary expressed in lens position, preview
+dimensions, mirroring, and lifecycle rather than in a platform's camera API — so one change satisfies
+both the bug and the extensibility requirement.
+
+**Alternatives considered**:
+
+- *Keep the interface, fix the call site* (add `dispose()` to `CaptureScreen.dispose()`) — the
+  smallest possible change. Rejected: it leaves the app-lifetime provider and the restartable-executor
+  problem (D16) in place, so the second entry into the capture screen fails instead of the first, and
+  FR-089's "unlimited enter/leave cycles" would still not hold.
+- *Reference-counted singleton* — one long-lived camera with acquire/release counting. Rejected: the
+  count is global mutable state by another name (Principle I), and a single missed release reproduces
+  today's bug with more machinery in the way.
+
+---
+
+## D15 — Exactly one camera session, enforced in one place
+
+**Decision**: `CameraSessionController` (application layer) is the only caller of `open`/`close`. It
+serializes requests through a single slot with a monotonic **request token**: a new request supersedes
+the pending one; an `open` that resolves with a stale token is closed immediately and never published;
+`close` is always awaited before the next `open` starts.
+
+**Rationale**: FR-092 (at most one session), FR-093 (leave while starting), FR-070 (rapid switching
+converges on the last request), and FR-066 (release before acquire) are four statements of the same
+invariant. Implementing them as four guards would leave four places to get the ordering wrong; the
+token makes "the world moved on while I was starting" a single, testable condition. The controller
+also owns the `WidgetsBindingObserver` reaction (FR-090/FR-091), because backgrounding is just another
+request to release.
+
+**Alternatives considered**:
+
+- *A mutex around open/close* — serializes correctly but makes a superseded request **wait** for a
+  camera it no longer wants, which is exactly the "leaving while starting" stall FR-093 forbids.
+- *Guards in `CaptureScreen`* — where the logic lives today. Rejected: the constitution forbids
+  business logic in widgets, and a screen the OS may recreate at any moment is the worst possible
+  owner of a device resource.
+
+**Consequence**: the controller's provider is `autoDispose` and scoped to the capture screen. Release
+happens because ownership ended, not because a `dispose()` override remembered to do it.
+
+---
+
+## D16 — Native lifetime equals resource lifetime
+
+**Decision**: `HandLandmarkerPlugin` builds a **fresh `CameraXController` per open** and drops it on
+close. `start` gains a required `lensFacing` argument, and the preview size is read from
+`SurfaceRequest.resolution` instead of constants.
+
+**What it replaces**: one controller for the plugin's lifetime, where `stop()` unbinds the camera and
+closes the detector but leaves the `SurfaceTextureEntry` alive, and `dispose()` calls
+`analysisExecutor.shutdown()` — which is **not restartable**, so a controller can never serve a second
+session. Preview resolution is hardcoded at `720×1280` regardless of what the device produces, which
+is half of the stretched-preview bug (D20 is the other half).
+
+**Rationale**: making the object's lifetime equal the resource's lifetime removes an entire class of
+leak instead of patching the instances of it. Nothing has to remember to release the texture, because
+the object that owns it is gone.
+
+**Alternatives considered**:
+
+- *Recreate the executor on each start* — fixes the executor and nothing else; the texture leak and
+  the "which fields are still valid after stop?" question remain.
+- *Reuse the controller and add a `reset()`* — a second lifecycle to keep correct alongside the first,
+  for no benefit: opening a camera already costs hundreds of milliseconds, so allocating one small
+  object per session is not measurable.
+
+---
+
+## D17 — Canonicalization: applied at the seam, to everything persisted
+
+**Decision**: `CanonicalViewConverter` is a pure domain service applied to `CameraSession.frames` by
+the controller, before any consumer sees a frame. For an unmirrored (rear-lens) source it maps
+`x' = 1 − x` on every landmark, swaps the `left`/`right` handedness label, leaves `y`/`z`/`visibility`
+untouched, and **never reorders the hands list** — each entry is converted in place.
+
+**Rationale**: three separate points.
+
+1. *Why handedness must flip*: MediaPipe derives the handedness label assuming a mirrored, selfie-view
+   input image. Flipping the geometry without relabelling would produce a sample whose label names the
+   wrong physical hand — the silent corruption FR-044 was written to prevent.
+2. *Why normalization cannot absorb it*: `translation_scale` is a translation followed by a uniform
+   scale. A reflection is neither, so a mirrored and an unmirrored capture of the same hand do **not**
+   converge under normalization. This is the concrete reason FR-055 requires the conversion on every
+   persisted landmark set rather than only the normalized one.
+3. *Why in-place per hand satisfies FR-054*: converting each entry independently keeps each hand's
+   landmarks with its own (relabelled) handedness. The list may no longer read left-then-right, but no
+   entry ever acquires another hand's geometry — which is what "preserve identity rather than swapping
+   the entries" means.
+
+**Placement**: at the seam rather than inside `RunCaptureSession._buildSample`, so validation,
+normalization, persistence, and any future consumer observe one convention. Converting later would let
+the preview overlay and the stored data disagree about which side of the frame a hand is on.
+
+**Naming**: the Dart field `HandSample.raw` becomes `canonicalRaw` (FR-056) while the serializer keeps
+emitting the JSON key `"raw"` (FR-057). A test pins the divergence so a future reader does not
+"correct" it and silently change the schema.
+
+**Alternatives considered**:
+
+- *Store the lens and let consumers correct for it* — rejected by the clarification session: every
+  downstream consumer, present and future, would have to know the rule, and one that forgets produces
+  a dataset that looks fine.
+- *Convert only the normalized set* — leaves the earliest-stored set lens-dependent, so a future
+  normalization strategy re-derived from it would inherit the split. Directly contrary to FR-055.
+
+---
+
+## D18 — Mode initializes the settings once; the session owns them after
+
+**Decision**: `CaptureMode.selfCapture → CaptureProfile(front, mirrored, countdown on @ 3.0 s)` and
+`CaptureMode.operatorCapture → CaptureProfile(rear, unmirrored, countdown off)`, both as
+`CaptureConfig` data. `CaptureSettingsNotifier` holds the live settings and is re-initialized from the
+profile **only when the mode changes**. Mirroring is derived from the active lens, not stored.
+
+**Rationale**: FR-071, FR-073, FR-074, FR-079, and SC-032 are one rule stated five times — *nothing
+but the user and a mode change may alter a setting*. Expressing it as a single re-initialization
+trigger makes the guarantee structural. The notifier is scoped to the application run rather than to
+the widget so that screen recreation (FR-091) cannot reset a user's countdown, and so FR-063's
+"remember the most recent mode" needs no extra mechanism.
+
+**Terminology** *(settled in R1.1 — the spec's Glossary now defines all three)*: **recording session**
+(one press of Record — what the baseline confusingly called a "capture session"), **capture session**
+(one visit to the capture screen: the settings and orientation scope; begins on entry or on a mode
+change, survives lens switches, backgrounding, screen lock, and recreation), and **camera session**
+(one device acquisition). The ambiguity this decision originally worked around — whether backgrounding
+or a re-entry ends the settings scope — is now answered in FR-071: neither does; only a mode change
+re-initializes. That is the only reading consistent with SC-032's **zero** unrequested changes.
+
+**Alternatives considered**:
+
+- *Lens-keyed countdown defaults* (front on, rear off, re-applied on every switch) — the reading the
+  raw R1 input allowed, and explicitly rejected in clarification: it would silently undo a user's
+  choice on every lens switch, which FR-074 now forbids in both directions.
+- *Persisting settings across runs* — FR-075 puts this out of scope, and Principle VI would reject it
+  as feature surface beyond the milestone.
+
+---
+
+## D19 — Where the R1 metadata lives
+
+**Decision**: `position`, `mirrored_preview`, and `lens_facing` are added to `metadata.camera`;
+`countdown_enabled` is added to `metadata.capture`. All four are additive, optional, and inside
+existing blocks. `schema_version` stays `1`.
+
+**Rationale**: `countdown_enabled` describes the take, not the lens, so it belongs beside
+`countdown_seconds`. `lens_facing` is stored explicitly even though `metadata.camera.index` currently
+holds the same integer, because `index` is an **engine-owned** field that Capture fills with a lens
+constant by local convention (D5); FR-084 asks for the platform's identifier independently of that
+convention, so it gets its own key. A test asserts the two agree, so the redundancy cannot drift into
+a contradiction.
+
+**Verified, not assumed**: `apps/engine/dataset/serializer.py` rebuilds samples by explicit key lookup
+on plain frozen dataclasses — no `extra="forbid"`, no strict shape check. Unknown keys in these blocks
+are ignored, so the engine reads R1 samples unmodified. The known consequence is that an engine
+load-then-resave drops them, exactly as it already does for `session_uuid`; that is an engine-side
+follow-up, recorded in `contracts/sample-json.md`.
+
+**Countdown disabled**: `countdown_seconds` is `0.0` and `countdown_start_time` is the instant Record
+was pressed — a zero-length countdown. No new nullability, no new type, and the engine's existing
+default (`countdown_seconds: float = 0.0`) already means the same thing.
+
+**Alternatives considered**:
+
+- *A new top-level `capture_mode` block* — cleaner to read, but a new top-level key is a more visible
+  schema change than additions inside blocks the engine already tolerates, for no functional gain.
+- *Reusing `index` alone for FR-084* — rejected above: it couples a requirement to a local convention
+  about someone else's field.
+
+---
+
+## D20 — The preview is sized by the camera, not by the screen
+
+**Decision**: render as `Center → AspectRatio(previewAspect) → Stack(Texture, overlays)`, with the
+ratio taken from the session's **actually reported, rotation-adjusted** preview dimensions.
+
+**What it replaces**: `Texture` inside `Stack(fit: StackFit.expand)`. `Texture` is a leaf that fills
+whatever constraints it receives, so it currently stretches to the screen — the reported distortion.
+The hardcoded `720×1280` (D16) means even a correct ratio computation would use the wrong numbers.
+
+**Rationale**: `AspectRatio` inside a `Center` produces letterboxing or pillarboxing as a consequence
+of layout, with the neutral bands being the container's own background — no branching on which
+dimension is constrained, no way to get one orientation right and the other wrong. Making the overlays
+children of the same box makes FR-101's alignment structural rather than a coordinate calculation
+somebody must keep correct.
+
+**Rotation**: CameraX reports resolution in sensor orientation, so a portrait phone consuming a
+landscape sensor stream must swap the axes. The native side reports the display-oriented size plus the
+rotation degrees it applied, so the value is auditable rather than inferred.
+
+**(R1.1)** The ratio is computed **once per camera session** and is safe to cache because FR-049 now
+locks orientation for the whole capture session, not merely for a take. The analysis pass caught this:
+R1's persistent screen would otherwise have allowed rotation *between* takes, invalidating both the
+cached ratio and the frame geometry. Widening the lock removes the case; the alternative — recomputing
+the aspect on rotation and re-deriving geometry mid-capture-session — is strictly more machinery for a
+case the product does not need.
+
+---
+
+## D21 — The capture screen is a loop, not a one-shot
+
+**Decision**: `SummaryState` returns to `Idle` with the camera still held (FR-076), gated by the
+take-confirmation setting (FR-077/FR-078). The capture screen gains the reference image, progress,
+Sync, and a control bar for mode, lens, countdown, and confirmation. The **home screen is unchanged**.
+
+**Rationale**: the requested layout (progress, Record, and Sync permanently on screen) only makes sense
+if the screen persists across takes — which is also what stops the camera being torn down and
+reacquired once per take, the single largest threat to SC-001. FR-006/FR-007 were not revised, so home
+keeps its own Record and Sync; home's Record navigates to capture, capture's Record starts a take. The
+overlap is specified, not accidental.
+
+**What it replaces**: `_onEnded()` calls `Navigator.maybePop()` from three paths — cancellation,
+summary dismissal, and the close button — so every take currently ends by leaving the screen and
+dropping the camera.
+
+---
+
+## D22 — What R1 makes testable without a device
+
+**Decision**: `FakeCameraSource` (scriptable lens set, scripted frames, injectable open failures and
+delays) replaces `FakeHandLandmarkSource`, so the following are host-verifiable:
+
+- the single-session invariant, superseded-start teardown, and rapid-switch convergence (D15);
+- canonicalization: self/operator agreement on handedness and geometry (SC-031);
+- settings ownership: mode initializes once, and no lens switch, background, or take changes the
+  countdown (SC-032);
+- the session loop with and without take confirmation;
+- preview letterbox/pillarbox geometry and layout at the smallest supported size, via widget tests at
+  several surface shapes;
+- R1 metadata serialization, and pre-R1 golden fixtures still loading (SC-026).
+
+**(R1.1)** Two of these become **automated guards** rather than ordinary tests, because both protect
+properties that decay silently:
+
+- a **layer-boundary architecture test** asserting camera code never touches storage and storage never
+  touches camera (FR-115). A boundary nobody checks is a boundary that drifts, and this one has no
+  visible symptom until it is expensive to undo.
+- a **full-pipeline integration test** driving camera init → capture → validation → storage → export
+  entirely through `FakeCameraSource` (FR-116, SC-030), so the no-hardware claim is verified end to
+  end rather than inferred from the fact that unit tests happen to use a fake.
+
+**Hardware-only, stated plainly**: release within 1 s (SC-019), another app acquiring the camera
+(SC-020), 20 enter/leave cycles (SC-018), zero busy errors over 30 minutes (SC-021), lens switch under
+1.5 s (SC-024), and the square-object undistortion check (SC-022). These six are the reason
+FR-116/SC-030 exist — the workflow around them is provable without a camera even though they are not.
+
+---
+
 ## Open risks
 
 | Risk | Impact | Mitigation |
@@ -260,3 +538,6 @@ the concrete meaning of the "iOS can be added later without changes" requirement
 | MediaPipe Tasks version drift between engine (Python) and capture (Android) | Subtle landmark differences | `versions.mediapipe` is recorded in every sample, making drift detectable in the dataset itself |
 | Sustained detection rate on low-end devices below ~20 fps | Fewer than 20 samples per press (SC-002) | Capture window duration is configuration, not code; it can be lengthened per device class without a release |
 | `archive` throughput on very large datasets | Slow export | Streaming encoder in an isolate; `DatasetExporter` interface allows swapping in a native zip implementation |
+| **(R1)** The six hardware-only criteria cannot be verified in this environment | The leak R1 exists to fix is unproven until a device is available | Everything around them is host-tested (D22); the release path is one method on one object, and FR-096's structured `camera_released` records (with reason) make a field diagnosis possible from logs alone |
+| **(R1)** Handedness relabelling is wrong for some device/detector combination | Rear-lens samples would be mislabelled — the exact corruption FR-044 guards against | SC-031 is an explicit on-device check (same hand, both modes, must agree); until it passes on hardware, Operator Capture is not trustworthy for collection. `metadata.camera.position` makes any affected samples identifiable and re-correctable after the fact |
+| **(R1)** Rear-lens field of view and focal length differ from the front lens | Landmark geometry may differ systematically between modes beyond mirroring | Normalization is translation+scale, which removes most of it; SC-031's tolerance is the acceptance bar. `position` is recorded per sample, so a residual difference stays measurable in the dataset rather than hidden |

@@ -5,7 +5,7 @@
 /// all (FR-048). Neither touches the pose-sample schema.
 library;
 
-import 'package:capture/domain/capture/capture_session.dart';
+import 'package:capture/domain/capture/recording_session.dart';
 import 'package:capture/domain/samples/pose_sample.dart';
 
 /// Version of the manifest format itself, independent of the sample schema.
@@ -114,7 +114,7 @@ class DatasetManifest {
     required this.normalization,
     required this.totalSamples,
     required Map<String, int> poseCounts,
-    required List<CaptureSession> sessions,
+    required List<RecordingSession> sessions,
     required this.integrity,
     this.schemaVersion = sampleSchemaVersion,
     this.manifestFormatVersion = manifestVersion,
@@ -152,7 +152,7 @@ class DatasetManifest {
   final Map<String, int> poseCounts;
 
   /// Session records linking `session_uuid` to the samples it produced.
-  final List<CaptureSession> sessions;
+  final List<RecordingSession> sessions;
 
   /// Digest algorithm used for [checksums], when computed.
   final String? checksumAlgorithm;

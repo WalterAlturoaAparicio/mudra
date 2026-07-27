@@ -11,6 +11,7 @@ import 'package:capture/domain/poses/pose_catalog.dart';
 import 'package:capture/presentation/capture/capture_screen.dart';
 import 'package:capture/presentation/catalog/pose_picker_screen.dart';
 import 'package:capture/presentation/design/design.dart';
+import 'package:capture/presentation/recognition/recognition_preview_screen.dart';
 import 'package:capture/shared/di/providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -36,6 +37,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         title: const Text('Mudra Capture'),
         centerTitle: false,
         backgroundColor: Palette.surface,
+        actions: [
+          // A secondary, clearly-labeled entry point (FR-026) — Record and
+          // Sync remain the only two primary actions (specification 003's
+          // FR-007), unchanged by this addition.
+          IconButton(
+            key: const Key('recognition-preview-button'),
+            tooltip: 'Recognition Preview',
+            icon: const Icon(Icons.auto_awesome),
+            onPressed: _openRecognitionPreview,
+          ),
+          const SizedBox(width: Spacing.sm),
+        ],
       ),
       body: SafeArea(
         child: catalog.when(
@@ -106,6 +119,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Future<void> _openPicker() async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => const PosePickerScreen()),
+    );
+  }
+
+  Future<void> _openRecognitionPreview() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const RecognitionPreviewScreen()),
     );
   }
 

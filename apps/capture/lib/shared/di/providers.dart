@@ -15,6 +15,8 @@ import 'package:capture/application/capture/session_ticker.dart';
 import 'package:capture/application/catalog/pose_progress_notifier.dart';
 import 'package:capture/application/export/export_dataset.dart';
 import 'package:capture/application/lifecycle/record_app_lifecycle.dart';
+import 'package:capture/application/recognition/load_exemplars.dart';
+import 'package:capture/application/recognition/recognition_session_controller.dart';
 import 'package:capture/domain/camera/camera.dart';
 import 'package:capture/domain/camera/capture_settings.dart';
 import 'package:capture/domain/export/manifest.dart' show DeviceInfo;
@@ -24,14 +26,18 @@ import 'package:capture/domain/samples/pose_sample.dart' show NormalizationInfo;
 import 'package:capture/domain/validation/pose_sample_validator.dart';
 import 'package:capture/infrastructure/camera/method_channel_camera_source.dart';
 import 'package:capture/infrastructure/catalog/asset_pose_catalog_source.dart';
+import 'package:capture/infrastructure/effects/asset_effect_catalog_source.dart';
 import 'package:capture/infrastructure/export/dataset_integrity_checker.dart';
 import 'package:capture/infrastructure/export/manifest_builder.dart';
 import 'package:capture/infrastructure/export/zip_dataset_exporter.dart';
 import 'package:capture/infrastructure/platform/ambient.dart';
 import 'package:capture/infrastructure/platform/platform_adapters.dart';
+import 'package:capture/infrastructure/recognition/file_exemplar_source.dart';
+import 'package:capture/infrastructure/recognition/weighted_euclidean_matcher.dart';
 import 'package:capture/infrastructure/storage/file_sample_repository.dart';
 import 'package:capture/infrastructure/storage/file_session_store.dart';
 import 'package:capture/shared/config/capture_config.dart';
+import 'package:capture/shared/config/recognition_config.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
@@ -233,3 +239,52 @@ final exportDatasetProvider = Provider<ExportDataset>((ref) {
     lifecycle: ref.watch(lifecycleProvider),
   );
 });
+
+// -- Phase 2.75 — Live Recognition Preview ----------------------------------
+
+/// Recognition tunables (research D3/D4; left untuned until T066).
+final recognitionConfigProvider =
+    Provider<RecognitionConfig>((ref) => RecognitionConfig());
+
+/// The recognition strategy — Principle III's first realized pluggable
+/// similarity-matching implementation.
+final poseMatcherProvider = Provider<PoseMatcher>((ref) {
+  return WeightedEuclideanNearestNeighborMatcher(
+    weights: ref.watch(recognitionConfigProvider).landmarkWeights,
+  );
+});
+
+/// Read-only access to the existing dataset, for building exemplars
+/// (FR-004) — depends only on [sampleRepositoryProvider]'s read methods.
+final exemplarSourceProvider = Provider<ExemplarSource>((ref) {
+  return FileExemplarSource(
+    repository: ref.watch(sampleRepositoryProvider),
+    catalog: ref.watch(catalogProvider).requireValue.catalog,
+    config: ref.watch(recognitionConfigProvider),
+  );
+});
+
+/// Loads this visit's exemplar set once (research D6).
+final loadExemplarsProvider = Provider<LoadExemplars>((ref) {
+  return LoadExemplars(
+    source: ref.watch(exemplarSourceProvider),
+    logger: ref.watch(loggerProvider),
+  );
+});
+
+/// The recognition pipeline, scoped to one recognition-screen visit —
+/// `autoDispose` so its `StabilityState` never leaks across visits, mirroring
+/// [cameraSessionControllerProvider]'s ownership pattern (research D9).
+final recognitionSessionControllerProvider =
+    Provider.autoDispose<RecognitionSessionController>((ref) {
+  return RecognitionSessionController(
+    matcher: ref.watch(poseMatcherProvider),
+    catalog: ref.watch(catalogProvider).requireValue.catalog,
+    clock: ref.watch(clockProvider),
+    config: ref.watch(recognitionConfigProvider),
+  );
+});
+
+/// Data-driven visual-effect definitions (FR-019/FR-020).
+final effectCatalogSourceProvider =
+    FutureProvider<EffectCatalogSource>((ref) => AssetEffectCatalogSource.load());

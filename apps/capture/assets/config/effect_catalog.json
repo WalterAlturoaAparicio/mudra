@@ -1,0 +1,46 @@
+{
+  "catalog_version": 1,
+  "effects": [
+    {
+      "pose_id": "horse",
+      "kind": "spritePair",
+      "color": "#D9A066",
+      "intensity": 0.8
+    },
+    {
+      "pose_id": "dog",
+      "kind": "spritePair",
+      "color": "#8B6B4A",
+      "intensity": 0.8
+    },
+    {
+      "pose_id": "snake",
+      "kind": "glow",
+      "color": "#2BB673",
+      "intensity": 0.9
+    },
+    {
+      "pose_id": "dragon",
+      "kind": "particleBurst",
+      "color": "#FF7A3D",
+      "intensity": 1.0
+    },
+    {
+      "pose_id": "bird",
+      "kind": "spritePair",
+      "color": "#F2E9D8",
+      "intensity": 0.7
+    },
+    {
+      "pose_id": "tp",
+      "kind": "fadeWithLines",
+      "color": "#4C6FFF",
+      "intensity": 0.9
+    }
+  ],
+  "generic_fallback": {
+    "kind": "genericConfirm",
+    "color": "#4C6FFF",
+    "intensity": 0.7
+  }
+}

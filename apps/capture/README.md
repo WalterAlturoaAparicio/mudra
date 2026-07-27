@@ -4,8 +4,11 @@ A Flutter/Android app whose only job is building **high-quality hand-pose datase
 Think "Duolingo for collecting computer-vision datasets": pick a pose, press Record, hold the
 shape for a second, and walk away with dozens of validated samples.
 
-It is **not** the recognition engine and **not** a game. No recognition, no predictions, no
-classifiers, no gameplay — it captures MediaPipe landmarks and stores samples, nothing else.
+It is **not** the recognition engine and **not** a game: dataset collection has no recognition,
+predictions, classifiers, or gameplay of its own — it captures MediaPipe landmarks and stores
+samples, nothing else. A single, narrowly-scoped exception exists alongside it: the **Live
+Recognition Preview** (below), an explicitly authorized Phase 2.75 milestone, not a redefinition
+of Capture's purpose.
 
 **The metric that matters**: how many validated samples a contributor collects in five
 minutes. Target ≥300 (SC-001). Every design decision here serves that number.
@@ -183,6 +186,55 @@ placeholder with the pose name and description — missing artwork never blocks 
 
 Reference images are **UI guidance only**. They are never used for recognition and never
 written into a dataset.
+
+## Live Recognition Preview (Phase 2.75)
+
+A second, secondary screen — reachable from the home screen's app bar, never replacing Record or
+Sync as a primary action (specification 003's FR-007 stands unchanged) — that recognizes poses
+live against the dataset already collected. It exists for two reasons:
+
+1. **Dataset validation.** If a correctly-performed pose is not recognized stably, that is a
+   signal the pose needs more or better samples — not a claim about the pose's semantic
+   correctness (FR-025). Use the preview's "Dataset readiness" sheet (the app-bar icon on that
+   screen) to see every catalog pose's exemplar count and ready/not-ready status without leaving
+   the screen.
+2. **A visually engaging demo.** Confirming a pose (holding it stably for a few seconds) plays a
+   simple, demo-quality visual effect — not production-quality, and not a gameplay mechanic.
+
+**Explicit non-goals**, restated from the constitution's Phase 2.75 exception (Principle VI):
+no machine learning, no model training, no neural-network inference, no cloud services, no
+backend, no gameplay/"attacks" mechanics beyond the one confirmed-pose visual effect. Recognition
+is deterministic distance-based matching over the same `translation_scale`-normalized landmark
+vectors Capture already stores — nothing here trains on-device or off-device.
+
+**`PoseMatcher`** (`lib/domain/ports/ports.dart`) is Principle III's "similarity matching as a
+pluggable strategy" anticipation, realized for the first time:
+`WeightedEuclideanNearestNeighborMatcher` is the current implementation, but a different
+deterministic strategy (e.g. cosine similarity) is a new `PoseMatcher` implementation with no
+change to `RecognitionSessionController`, `RecognitionPreviewScreen`, or anything else that calls
+it.
+
+**Authoring or changing a visual effect is a JSON edit**, never a Dart change — mirrors
+`pose_catalog.json`'s pattern exactly. Edit `assets/config/effect_catalog.json`:
+
+```json
+{
+  "pose_id": "new_sign",
+  "kind": "glow",
+  "color": "#2BB673",
+  "intensity": 0.8
+}
+```
+
+`kind` must be one of `glow`, `spritePair`, `particleBurst`, `fadeWithLines`, `genericConfirm`
+(see `contracts/effect-catalog.md` under `specs/005-live-recognition-preview/` for the full
+format). A `pose_id` with no entry here plays `generic_fallback` automatically — this is legal,
+not an error (FR-020). Every effect is a vector `CustomPainter`; no sprite image assets are used
+or required, even though `sprite_asset` is a legal (currently unused) field.
+
+**Read-only, by construction**: `FileExemplarSource` depends only on `SampleRepository.readAll`,
+never `save`/`saveAll` — the recognition preview cannot write a sample, a session record, or an
+export archive (FR-004), verified by `test/architecture/layer_boundaries_test.dart`.
 
 ## What is never stored
 

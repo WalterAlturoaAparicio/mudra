@@ -149,6 +149,35 @@ class FileSampleRepository implements SampleRepository {
       (await _existingNumbers(poseId)).length;
 
   @override
+  Future<List<PoseSample>> readAll(String poseId) async {
+    final dir = _poseDir(poseId);
+    if (!await dir.exists()) return const [];
+
+    final files = <File>[];
+    await for (final entity in dir.list(followLinks: false)) {
+      if (entity is File && entity.path.endsWith('.json')) files.add(entity);
+    }
+    // Filename order is numeric order (fixed-width, zero-padded stems), so a
+    // plain string sort already yields sample order without re-parsing.
+    files.sort((a, b) => a.path.compareTo(b.path));
+
+    final samples = <PoseSample>[];
+    for (final file in files) {
+      final String text;
+      try {
+        text = await file.readAsString();
+      } on FileSystemException catch (error) {
+        throw RepositoryFailure(
+          'Could not read a stored sample for "$poseId".',
+          debugDetail: error,
+        );
+      }
+      samples.add(_serializer.fromJson(text));
+    }
+    return samples;
+  }
+
+  @override
   Future<Map<String, int>> countAll() async {
     final root = _posesRoot;
     if (!await root.exists()) return {};

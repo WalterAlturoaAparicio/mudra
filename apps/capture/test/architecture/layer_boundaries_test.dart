@@ -70,6 +70,21 @@ void main() {
       because: 'FR-115: export must not depend on the camera.',
     ),
     _Rule(
+      from: 'infrastructure/recognition/',
+      forbidden: ['infrastructure/storage/', 'infrastructure/export/'],
+      because: "FR-004: the recognition preview's matching and exemplar-loading "
+          'code must depend only on the abstract `SampleRepository` port '
+          '(injected at the composition root), never on a concrete storage or '
+          'export implementation — the same camera/storage separation this '
+          'file already enforces elsewhere.',
+    ),
+    _Rule(
+      from: 'infrastructure/effects/',
+      forbidden: ['infrastructure/storage/', 'infrastructure/export/'],
+      because: 'Visual effects are presentation-only (FR-021/FR-022) and have '
+          'no legitimate reason to depend on dataset storage or export.',
+    ),
+    _Rule(
       from: 'domain/',
       forbidden: ['infrastructure/', 'presentation/', 'application/'],
       because: 'Principle I: dependencies point inward only. The domain is the '

@@ -8,9 +8,13 @@ library;
 
 import 'package:capture/domain/camera/camera.dart';
 import 'package:capture/domain/capture/recording_session.dart';
+import 'package:capture/domain/effects/effect_definition.dart';
 import 'package:capture/domain/export/manifest.dart';
 import 'package:capture/domain/landmarks/landmarks.dart';
 import 'package:capture/domain/poses/pose_catalog.dart';
+import 'package:capture/domain/recognition/candidate.dart';
+import 'package:capture/domain/recognition/catalog_readiness.dart';
+import 'package:capture/domain/recognition/exemplar.dart';
 import 'package:capture/domain/samples/pose_sample.dart';
 
 /// The platform seam, part one: a camera **capability** that outlives screens.
@@ -79,6 +83,14 @@ abstract interface class SampleRepository {
 
   /// Absolute path of the dataset root.
   Future<String> datasetRootPath();
+
+  /// Reads every currently-stored sample for [poseId], in numeric filename
+  /// order.
+  ///
+  /// Read-only: callers that only ever call this (never [save]/[saveAll]) are
+  /// exactly the read-only consumers Phase 2.75's recognition preview requires
+  /// (FR-004) — [ExemplarSource] is one.
+  Future<List<PoseSample>> readAll(String poseId);
 }
 
 /// Loads and validates the pose catalog configuration.
@@ -297,4 +309,62 @@ abstract interface class AppLogger {
 
   /// Emits the single structured shutdown record for this run (FR-043).
   void shutdown(ShutdownRecord record);
+}
+
+/// The recognition strategy, pluggable (Principle III's first realization).
+///
+/// Scores [frame]'s hands against [exemplarsByPose], returning one
+/// [Candidate] per eligible pose, unsorted and with a raw [Candidate.distance]
+/// only — confidence is derived one layer up, once every eligible candidate's
+/// distance is known (data-model.md's pipeline).
+///
+/// A pose is eligible only when [frame] carries at least the hand count
+/// [catalog] declares that pose requires (FR-009). Pure and deterministic: the
+/// same frame and the same exemplar set always produce the same candidates.
+/// Never mutates its inputs; never retains state across calls — that is
+/// `StabilityState`'s job, one layer up.
+abstract interface class PoseMatcher {
+  /// Scores one frame against the current exemplar set.
+  List<Candidate> score(
+    LandmarkFrame frame,
+    Map<String, List<Exemplar>> exemplarsByPose,
+    PoseCatalog catalog,
+  );
+}
+
+/// What one exemplar load produced: the exemplars themselves, grouped by
+/// pose, plus the per-pose readiness that load already computed for free
+/// (research D10) — one full read, not two.
+class ExemplarLoadResult {
+  /// Creates a load result.
+  const ExemplarLoadResult({
+    required this.exemplarsByPose,
+    required this.readiness,
+  });
+
+  /// Exemplars for poses that meet the minimum sample threshold, keyed by
+  /// `pose_id`. A pose below threshold has no key here at all (FR-006).
+  final Map<String, List<Exemplar>> exemplarsByPose;
+
+  /// Every catalog pose's readiness, ready or not.
+  final CatalogReadiness readiness;
+}
+
+/// Read-only access to the existing dataset, for building exemplars.
+abstract interface class ExemplarSource {
+  /// Reads every currently-stored sample and returns one [Exemplar] per
+  /// sample-hand, grouped by pose, alongside [CatalogReadiness] (FR-004,
+  /// FR-005, FR-006, FR-024).
+  ///
+  /// Read-only — MUST NOT write, delete, or modify any sample or session
+  /// record. Called once per screen entry (research D6); nothing is cached
+  /// across app restarts.
+  Future<ExemplarLoadResult> load();
+}
+
+/// Data-driven effect definitions (FR-019/FR-020).
+abstract interface class EffectCatalogSource {
+  /// Returns the effect for [poseId], or the generic fallback if none is
+  /// authored — never null, so callers never branch on absence.
+  EffectDefinition effectFor(String poseId);
 }

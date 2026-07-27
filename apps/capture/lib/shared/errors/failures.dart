@@ -151,3 +151,17 @@ class OrientationChangedFailure extends Failure {
           'Nothing was saved — please try again.',
         );
 }
+
+/// Exemplars could not be built from the stored dataset (Phase 2.75 spec
+/// FR-004/FR-005) — a storage error while reading, not a validation problem.
+class ExemplarLoadFailure extends Failure {
+  /// Creates an exemplar-load failure.
+  const ExemplarLoadFailure(super.message, {super.debugDetail});
+}
+
+/// `assets/config/effect_catalog.json` is malformed — a developer error,
+/// mirroring [CatalogFailure]'s "fail loudly, naming the entry" contract.
+class EffectCatalogFailure extends Failure {
+  /// Creates an effect-catalog failure.
+  const EffectCatalogFailure(super.message, {super.debugDetail});
+}

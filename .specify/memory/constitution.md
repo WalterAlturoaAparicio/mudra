@@ -1,6 +1,30 @@
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 1.3.0 → 1.4.0
+Rationale: Phase 2.75 — Live Recognition Preview is authorized as a narrow, explicitly-bounded
+exception to Principle VI: deterministic (non-ML) pose recognition and demo-quality visual
+effects in apps/capture, to validate the collected dataset and produce a demo before Mudra
+Studio. MINOR — a new authorized-milestone entry is added; no principle is redefined or
+weakened, and Capture's existing no-recognition mandate (specification 003, FR-040/FR-041) is
+unchanged for its dataset-collection purpose.
+
+Modified in this amendment (1.4.0):
+  - Principle VI (Scope Discipline) — adds the Phase 2.75 authorized exception: deterministic
+    matching only (nearest-neighbor / distance- or similarity-based), demo-quality visual
+    effects only; explicitly excludes ML training, neural networks, cloud, backend, and
+    gameplay/"attacks" mechanics, which remain deferred to a later milestone.
+  - Principle III (Recognition-Ready) — cross-references Phase 2.75 as the first realization
+    of the anticipated similarity-matching strategy, still behind the same stable interface.
+
+Templates requiring updates:
+  - ✅ .specify/templates/* — no path or mandatory-section assumptions affected.
+
+Deferred / follow-up TODOs:
+  - Phase 2.75 itself is specified independently (a new numbered spec under specs/), not
+    embedded in this file; this amendment only records the authorization and its bounds.
+
+--- previous report (1.2.0 → 1.3.0) -------------------------------------------
 Version change: 1.2.0 → 1.3.0
 Rationale: the monorepo layout is now symmetrical. The Python engine moved from the
 repository root (`app/`) to `apps/engine/`, alongside `apps/capture/`, and its
@@ -119,6 +143,8 @@ people, hand sizes, distances, rotations, and lighting.
 **Rationale**: Every architectural decision optimizes for growth into a full recognition
 engine. A stable `pose_id` decouples identity from presentation, making renaming/localization
 and dataset evolution safe; append-only guarantees data is never lost as the corpus grows.
+Phase 2.75 (Principle VI) is the first realization of this: a deterministic similarity-matching
+strategy, still expressed as one pluggable strategy behind the same stable interface.
 
 ### IV. Typed, Modeled, and Clean Code
 
@@ -154,13 +180,32 @@ The current objective is a robust data-collection foundation, delivered in order
 camera + detection, (2) pose recorder, (3) sequence recorder, (4) dataset builder. The
 following MUST NOT be implemented until the foundation is complete and a later milestone
 explicitly authorizes them: recognition algorithms, machine learning / model training,
-gameplay, visual effects, and "attacks"/abilities. Interfaces and extension points for these
-MAY (and per Principle III SHOULD) exist; their behavior MUST NOT. When a proposed change
-adds feature surface beyond the current milestone, it is rejected or deferred by default.
+gameplay, visual effects, and "attacks"/abilities — **except where explicitly authorized
+below**. Interfaces and extension points for these MAY (and per Principle III SHOULD) exist;
+their behavior MUST NOT, outside an explicit authorization. When a proposed change adds
+feature surface beyond the current milestone or an existing authorization, it is rejected or
+deferred by default.
+
+**Phase 2.75 — Live Recognition Preview (authorized exception, added in v1.4.0)**: with
+pose-dataset collection (mobile Capture, specification 003) feature-complete, a narrow
+exception is authorized ahead of the milestone order above: a live, on-device recognition
+preview in `apps/capture`, for two purposes only — validating that the collected dataset
+supports stable recognition, and producing a demo. This exception permits **deterministic
+pose recognition** (distance- or similarity-based matching over the existing normalized
+landmark dataset — e.g. nearest-neighbor, weighted Euclidean distance, cosine similarity;
+Principle III's anticipated similarity-matching strategy, realized) and **demo-quality visual
+effects** triggered by a confirmed pose. It explicitly does **not** authorize machine
+learning, model training, neural networks, cloud services, a backend, or gameplay/"attacks"
+mechanics — those remain deferred to a later milestone (Mudra Studio) that must explicitly
+authorize them in turn. This exception does not change Capture's core mandate: FR-040/FR-041
+of specification 003 stand unchanged for its dataset-collection flow; the recognition preview
+is a separate, additive capability, specified independently.
 
 **Rationale**: Discipline protects the foundation. Building recognition or gameplay on an
 unproven data pipeline would bake in assumptions before the ground truth (the dataset format)
-is stable.
+is stable. The Phase 2.75 exception stays narrow — deterministic matching only, no training,
+no cloud — because its purpose is to test whether that foundation holds, not to start
+building on it before the question is answered.
 
 ## Technology & Code Quality Standards
 
@@ -289,4 +334,4 @@ against this document. Any justified deviation MUST be recorded in the plan's Co
 Tracking with the simpler alternative that was rejected and why. Unjustified complexity is
 grounds for rejection.
 
-**Version**: 1.3.0 | **Ratified**: 2026-07-24 | **Last Amended**: 2026-07-24
+**Version**: 1.4.0 | **Ratified**: 2026-07-24 | **Last Amended**: 2026-07-26

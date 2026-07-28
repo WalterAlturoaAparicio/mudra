@@ -280,6 +280,12 @@ void main() {
       expect(releases.single.$3['reason'], 'screen_left');
       expect(acquires.single.$3['lens'], 'front');
       expect(acquires.single.$3['preview'], '720x1280');
+      expect(
+        acquires.single.$3['rotation_degrees'],
+        0,
+        reason: 'D23: the rotation the display transform relies on must be '
+            'auditable from the acquire log, not just applied silently',
+      );
     });
 
     test('a lens switch records why the previous session ended', () async {
@@ -352,6 +358,66 @@ void main() {
       expect(seen.single.hands.single.landmarks.points.first.x,
           closeTo(0.25, 1e-12));
 
+      await sub.cancel();
+    });
+  });
+
+  group('rawFrames bypasses canonicalization (root cause of the rendering '
+      'bug: display must never consume the dataset-canonical stream)', () {
+    test('a rear-lens frame reaches rawFrames unmirrored, exactly as the '
+        'session produced it — while the same frame reaches frames mirrored',
+        () async {
+      await controller.request(rear);
+
+      final canonical = <LandmarkFrame>[];
+      final raw = <LandmarkFrame>[];
+      final canonicalSub = controller.frames.listen(canonical.add);
+      final rawSub = controller.rawFrames.listen(raw.add);
+
+      source.emit(
+        _frame(
+          convention: ViewConvention.unmirrored,
+          handedness: Handedness.left,
+          x: 0.25,
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(raw, hasLength(1));
+      expect(raw.single.convention, ViewConvention.unmirrored);
+      expect(raw.single.hands.single.handedness, Handedness.left);
+      expect(
+        raw.single.hands.single.landmarks.points.first.x,
+        closeTo(0.25, 1e-12),
+        reason: 'raw must be the untouched analysis-space coordinate — the '
+            'same space the (unmirrored) rear-lens preview buffer is in',
+      );
+
+      expect(canonical.single.convention, ViewConvention.canonical);
+      expect(canonical.single.hands.single.handedness, Handedness.right);
+      expect(
+        canonical.single.hands.single.landmarks.points.first.x,
+        closeTo(0.75, 1e-12),
+        reason: 'frames must stay mirrored for dataset/recognition consumers',
+      );
+
+      await canonicalSub.cancel();
+      await rawSub.cancel();
+    });
+
+    test('a superseded session\'s frames never reach rawFrames either',
+        () async {
+      await controller.request(front);
+      final first = source.sessions.single;
+
+      final raw = <LandmarkFrame>[];
+      final sub = controller.rawFrames.listen(raw.add);
+
+      await controller.request(rear);
+      first.emit(_frame());
+      await Future<void>.delayed(Duration.zero);
+
+      expect(raw, isEmpty);
       await sub.cancel();
     });
   });

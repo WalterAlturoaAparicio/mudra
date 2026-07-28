@@ -21,6 +21,7 @@ import 'dart:async';
 
 import 'package:capture/application/camera/camera_session_controller.dart';
 import 'package:capture/domain/camera/camera.dart';
+import 'package:capture/domain/canonical/camera_calibration.dart';
 import 'package:capture/domain/capture/recording_session.dart';
 import 'package:capture/domain/capture/recording_state.dart';
 import 'package:capture/domain/ports/ports.dart';
@@ -28,10 +29,15 @@ import 'package:capture/domain/poses/pose_catalog.dart';
 import 'package:capture/presentation/capture/capture_control_bar.dart';
 import 'package:capture/presentation/capture/capture_overlays.dart';
 import 'package:capture/presentation/capture/preview_stage.dart';
+import 'package:capture/presentation/debug/camera_calibration_screen.dart';
+import 'package:capture/presentation/debug/coordinate_debug_toggle_button.dart';
+import 'package:capture/presentation/debug/debug_overlay_toggle_button.dart';
+import 'package:capture/presentation/debug/hand_landmark_debug_overlay.dart';
 import 'package:capture/presentation/design/design.dart';
 import 'package:capture/presentation/permissions/permission_screen.dart';
 import 'package:capture/shared/di/providers.dart';
 import 'package:capture/shared/errors/failures.dart';
+import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -246,6 +252,16 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen>
         actions: [
           RequiredHandsBadge(requiredHands: widget.pose.requiredHands),
           const SizedBox(width: Spacing.md),
+          if (!kReleaseMode) ...[
+            const DebugOverlayToggleButton(),
+            const CoordinateDebugToggleButton(),
+            IconButton(
+              key: const Key('open-camera-calibration'),
+              tooltip: 'Camera calibration',
+              icon: const Icon(Icons.tune),
+              onPressed: () => unawaited(openCameraCalibrationScreen(context)),
+            ),
+          ],
         ],
       ),
       body: SafeArea(
@@ -354,10 +370,20 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen>
   }
 
   Widget _preview(CameraControllerState camera) {
+    final calibrationSet =
+        ref.watch(cameraCalibrationProvider).valueOrNull ?? CameraCalibrationSet.defaults;
     return switch (camera) {
       CameraLive(:final info) => PreviewStage(
         info: info,
+        calibration: calibrationSet.forLens(info.lens),
         overlays: [
+          if (!kReleaseMode && ref.watch(debugOverlayEnabledProvider))
+            HandLandmarkDebugOverlay(
+              frames: _controller.rawFrames,
+              info: info,
+              calibration: calibrationSet.forLens(info.lens),
+              showCoordinateDebug: ref.watch(coordinateDebugEnabledProvider),
+            ),
           if (_state is CountdownState)
             CountdownOverlay(
               state: _state as CountdownState,

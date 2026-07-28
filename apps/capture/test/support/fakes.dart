@@ -6,6 +6,7 @@ import 'dart:async';
 
 import 'package:capture/application/capture/session_ticker.dart';
 import 'package:capture/domain/camera/camera.dart';
+import 'package:capture/domain/canonical/camera_calibration.dart';
 import 'package:capture/domain/capture/recording_session.dart';
 import 'package:capture/domain/landmarks/landmarks.dart';
 import 'package:capture/domain/ports/ports.dart';
@@ -243,6 +244,23 @@ class SequentialUuidFactory implements UuidFactory {
 
   @override
   String create() => '$prefix-${++_next}';
+}
+
+/// Holds calibration state in memory instead of writing it to disk.
+class InMemoryCalibrationStore implements CalibrationStore {
+  CameraCalibrationSet? _saved;
+
+  /// How many times [save] has been called.
+  int saveCount = 0;
+
+  @override
+  Future<CameraCalibrationSet?> load() async => _saved;
+
+  @override
+  Future<void> save(CameraCalibrationSet calibrationSet) async {
+    saveCount += 1;
+    _saved = calibrationSet;
+  }
 }
 
 /// Captures session records instead of writing them.

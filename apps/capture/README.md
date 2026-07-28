@@ -236,6 +236,77 @@ or required, even though `sprite_asset` is a legal (currently unused) field.
 never `save`/`saveAll` — the recognition preview cannot write a sample, a session record, or an
 export archive (FR-004), verified by `test/architecture/layer_boundaries_test.dart`.
 
+## Hand landmark debug overlay & camera calibration (developer-only)
+
+Both the capture screen and the recognition preview screen have a bug-report icon in their app bar,
+visible only in non-release builds (`!kReleaseMode` — there is nothing to configure, it simply does
+not exist in a release binary). Tapping it draws every detected hand's 21 landmarks and skeleton
+directly over the live preview, colored by handedness, with a small panel reporting handedness,
+confidence, and hand count per frame.
+
+It reads `CameraSessionController.rawFrames` — **not** `.frames` — as one more independent broadcast
+subscriber alongside whatever recording or recognition happens to be consuming `.frames` at the same
+time; never altering, delaying, or duplicating what either of them sees. `HandLandmarkDebugOverlay`
+(`lib/presentation/debug/`) is mounted only while the toggle (`debugOverlayEnabledProvider`) is on, so
+disabling it releases its subscription by leaving the widget tree, the same ownership idiom
+`cameraSessionControllerProvider` uses for the camera itself. See spec 003 Revision R2 for the full
+requirements.
+
+**Why `rawFrames` and not `frames`** (bug fix, research D23): `.frames` is the **dataset-canonical**
+stream — every rear-lens frame is mirrored to match the fixed storage convention every sample uses,
+regardless of what the rear lens's actual (unmirrored) preview shows on screen. Painting that stream
+directly over the preview is precisely the bug this fix exists for: on the rear lens the drawn skeleton
+was guaranteed to be mirrored relative to the hand the user could see. Landmarks and the `Texture`
+itself must agree on one **display**-space transform. Recording and recognition matching are unaffected
+either way — they still consume `.frames` exactly as before.
+
+D23 originally computed that shared transform automatically, via `DisplayOrientation`
+(`lib/domain/canonical/display_orientation.dart`), from the session's reported rotation and
+`mirroredPreview` flag. **That is no longer what `PreviewStage` and `HandLandmarkPainter` use in
+production** — Revision R3 (below) replaced it with this device's persisted `CameraCalibration`.
+`DisplayOrientation` still exists and is still correct for what it computes, but its only remaining
+consumer is the coordinate-debug diagnostic two paragraphs down, kept there as a comparison against what
+an automatic formula alone would have guessed.
+
+**D23 shipped, but on-device testing showed the misalignment persists.** A second app-bar icon
+(`CoordinateDebugToggleButton` / `coordinateDebugEnabledProvider`, independent of the skeleton toggle
+above) draws temporary investigation diagnostics — canvas bounds, the mapped "image rect" with labeled
+corners, analysis-space `+X`/`+Y` axis arrows, and highlighted landmarks #0/#5/#17 — plus throttled
+`[coord-debug]` console logging (Dart) and two `Log.d("coord-debug", …)` sites (Kotlin,
+`CameraXController`) covering every value the transform depends on. See `research.md` → D24 for the
+full coordinate-space table, what's proven versus assumed, and the decision tree for reading this
+tool's output on a real device — nothing about the actual remaining bug is confirmed without that.
+
+**D24 wasn't enough either — a screenshot showed two independent symptoms** (the preview itself rotated
+in portrait; the overlay still misaligned on top of that). Research D25 built a calibration screen to
+find the answer by hand rather than guess a third time, and it worked: a third app-bar icon (tune/wrench)
+opens `CameraCalibrationScreen` (`lib/presentation/debug/camera_calibration_screen.dart`), showing every
+display transform — rotation, mirror, and for the overlay also swap-X/Y, scale, X/Y offset, and for the
+preview also fit (contain/cover/fill) — as a live, independently-adjustable control, for the preview and
+the overlay **separately**. It reuses whichever camera session is already live and never calls
+`request()` itself.
+
+**Revision R3 made that calibration permanent** (research D26) rather than a one-time, throwaway search.
+`CameraCalibration`/`CameraCalibrationSet` (`lib/domain/canonical/camera_calibration.dart`) is the
+persisted, per-lens model — every field the table above edits, plus JSON export/import — defaulting to
+the values found for the reference device (front: overlay rot=270°/mirror=true/scale=0.75; rear: overlay
+rot=90°/mirror=true/scale=0.75; both lenses: preview rot=0°/unmirrored/contain) until a device saves its
+own, via `FileCalibrationStore` writing `<storage root>/calibration.json` — a sibling of `datasets/`,
+never inside it, so export and integrity validation never see it. Critically, **this is no longer a
+disconnected instrument**: `PreviewStage` and `HandLandmarkPainter` — the exact widgets the capture and
+recognition screens render with — now consume `CameraCalibration` directly instead of the automatic
+`DisplayOrientation.fromSession(info)` guess, and the calibration screen renders through those same
+widgets rather than its own separate pipeline. What a developer calibrates is what a real user sees;
+there is structurally one rendering implementation, not two that could drift apart. `DisplayOrientation`
+itself is unchanged and still used, but only by the D24 coordinate-debug diagnostic below, kept as a
+comparison against what a formula alone would have guessed.
+
+Changing any control saves it immediately — no separate save step — and Reset/Export/Import round out the
+Developer UX: Reset returns only the currently-active lens to its shipped default; Export shows the whole
+two-lens set as selectable JSON; Import replaces it from pasted JSON, rejecting malformed input with an
+inline error rather than closing the dialog. See `research.md` → D25/D26 and `quickstart.md`'s D25/D26
+rows for the full procedure and rationale.
+
 ## What is never stored
 
 No images. No video frames. No screenshots. Only landmark coordinates and metadata, as

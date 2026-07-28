@@ -182,6 +182,91 @@ Numbers refer to spec requirements and success criteria.
 | 46 | Leave the capture screen and return **without changing mode** | The countdown and take-confirmation settings the user chose are still in effect; only a mode change re-initializes them | FR-071 |
 | 47 | Hand the device to someone who has not seen it, in Operator Capture; time their first take | First successful take within **30 seconds**, with no instruction beyond the on-screen controls | SC-023 |
 
+### Revision R2 validation
+
+| # | Action | Expected result | Verifies |
+|---|---|---|---|
+| 48 | On a debug build, enable the overlay on the capture screen with one hand in view | 21 landmarks and the correct skeleton are drawn on that hand, colored by handedness, with handedness/confidence/hand-count shown | FR-117/FR-118/FR-120, SC-033 |
+| 49 | Show both hands, then hide one | The overlay tracks the change to two hands and back to one within a frame, each hand distinguishable by color | FR-119/FR-121, SC-034 |
+| 50 | Enable the overlay, then record a take | The recorded samples and accepted/discarded counts are unchanged from the same take with the overlay off | FR-122, SC-035 |
+| 51 | Enable the overlay on the recognition preview screen and confirm a pose | Recognition result and confirmation are unaffected by the overlay being on | FR-122, SC-035 |
+| 52 | Toggle the overlay off | The drawing disappears immediately, no restart needed | FR-123/FR-126, SC-034 |
+| 53 | Build a release binary and inspect both screens' app bars | No debug-overlay control exists anywhere | FR-125, SC-036 |
+
+### Coordinate-pipeline bug fix validation (D23, 2026-07-27) — needs a device
+
+**Status: D23 shipped but did not fix the bug on-device.** Rows 54–57 below are D23's *original*
+validation plan and are kept for record — do not expect them to pass yet. Use the **D24 investigation**
+rows further down instead; they are what actually diagnoses the remaining misalignment.
+
+| # | Action | Expected result | Verifies |
+|---|---|---|---|
+| 54 | Enable the debug overlay in Self Capture, hold a hand in view | The drawn skeleton sits **directly on the user's fingers** in the preview — not mirrored (left hand drawn on the left of the screen), not rotated | D23 root cause: rotation/mirroring must be applied once, consistently, to both the preview and the overlay |
+| 55 | Repeat row 54 in Operator Capture (rear lens) | The skeleton again sits directly on the fingers; specifically **not mirrored** — this is the lens the original bug affected deterministically | D23; `CanonicalViewConverter` must never be the source for on-screen rendering |
+| 56 | Rotate to every supported device orientation the capture screen can be entered from, re-checking rows 54–55 each time | Alignment holds at every orientation the sensor/device combination produces | D23; `requiredRotationDegrees`'s Camera2 formula, unverified without hardware (`research.md` Open risks) |
+| 57 | Inspect the `camera_acquired` structured log after entering the capture screen | `rotation_degrees` is present and matches the rotation actually needed for row 54 to align | D23 auditability — the value the fix relies on is not just applied, but inspectable |
+
+### D24 investigation — read this before touching the code again
+
+Full background, the coordinate-space table, and the decision tree for interpreting what you see:
+`research.md` → D24. Summary of what to do on a device:
+
+| # | Action | Expected result | Verifies / diagnoses |
+|---|---|---|---|
+| 58 | Enable **both** debug toggles (skeleton + the new coordinate-diagnostics icon) in Self Capture, hold one hand steady | Yellow canvas-bounds outline, cyan "image rect" outline (should exactly coincide with the yellow one — see D24 point 4), red `+X`/green `+Y` axis arrows, and three large labeled markers (`L0 wrist`, `L5 index-MCP`, `L17 pinky-MCP`) all render without error | Confirms the new tooling itself works before using it to diagnose anything |
+| 59 | Compare the three labeled markers' positions against the real hand visible in the preview behind them | Use `research.md` D24's decision tree: whole-skeleton rotation offset → wrong `rotationDegrees` (check row 61's log); left-right mirror image → front-camera mirroring assumption or `mirroredPreview` bug; correct at center but drifting near the edges → `Preview`/`ImageAnalysis` field-of-view mismatch (check row 60's log) | Determines which of D24's three unruled-out hypotheses is actually true on this device |
+| 60 | Filter Logcat for `coord-debug` while opening the capture screen | One line with `sensorOrientation`, `deviceRotationDegrees`, and computed `rotationDegrees`; one line with `preview=W×H` and `requestedAnalysis=W×H` raw dimensions | Kotlin-side instrumentation (D24); compare the two aspect ratios directly for the field-of-view hypothesis |
+| 61 | With coordinate diagnostics on, watch the Flutter console (`flutter run`'s output) for `[coord-debug]` lines | At most one printed per second, showing lens, `mirroredPreview`, `rotationDegrees`, `quarterTurns`, raw/analysis/frame dimensions, and each hand's landmarks #0/#5/#17 raw **and** display-space coordinates | Dart-side instrumentation (D24) — cross-reference against row 60's Kotlin log and the worked example in `research.md` D24 |
+| 62 | Repeat rows 58–61 in Operator Capture (rear lens) and, if possible, on a second physical device | Same diagnosis process; note whether the failure mode is identical across lenses/devices or differs | Distinguishes a systematic formula bug (same everywhere) from a device-specific sensor/CameraX quirk |
+
+### D25 — the calibration panel: find the answer by hand, then stop guessing
+
+**Status: a screenshot after D24 showed two independent symptoms** — the preview itself rotated 90° in
+portrait, and the overlay still misaligned on top of that. Rows 58–62 above assumed the preview was
+already correct and only diagnosed the overlay; they are insufficient on their own now. Use the
+calibration panel instead. Full background: `research.md` → D25.
+
+| # | Action | Expected result | Verifies / diagnoses |
+|---|---|---|---|
+| 63 | On a debug build, open the capture or recognition screen, tap the third debug icon (tune/wrench) | `Camera Calibration` opens showing the same live preview, with a **Preview** control card and an **Overlay** control card below it | Confirms the panel reuses the already-live session (no "waiting for camera", no new permission prompt, no flicker in the screen underneath) |
+| 64 | Adjust **only** the Preview rotation control through all four values, holding the phone in normal portrait orientation | Exactly one of the four values makes the live preview appear upright and undistorted | Isolates the preview's actual required rotation empirically — independent of whatever `rotationDegrees` the native side currently computes |
+| 65 | With the preview now upright, adjust the Preview mirror toggle | Note whether mirrored or unmirrored looks correct for Self Capture (front lens) | Isolates the preview's actual required mirror state |
+| 66 | Try the Preview fit selector (contain/cover/fill) at the rotation found in row 64 | Note which, if any, removes visible letterboxing/distortion the current automatic preview doesn't already handle | Tests whether `BoxFit` — not rotation or mirroring — explains any remaining preview-shape issue |
+| 67 | With the preview correct, hold one hand steady and adjust the Overlay rotation control through all four values | Exactly one value makes the skeleton's *orientation* match the hand (even if position is still off) | Isolates the overlay's required rotation, independently of the preview's |
+| 68 | Adjust the Overlay mirror and Swap X/Y toggles | Note which combination, with the rotation from row 67, makes left/right and up/down track the real hand correctly | Isolates mirroring and axis-swap separately — do not assume either from the preview's own values |
+| 69 | With orientation and mirroring correct, adjust the Overlay scale slider while watching the fingertips versus the palm | If the skeleton's proportions now match the hand at every point (not just the center), scale was part of the error; note the value | Directly tests the D24 field-of-view/crop hypothesis — a needed scale ≠ 1.0 is itself the evidence |
+| 70 | Adjust the Overlay X/Y offset sliders last | The skeleton should now sit exactly on the hand across the whole frame, not just the center | Isolates any residual pure translation (e.g. from a crop that is offset, not just scaled) |
+| 71 | Tap the toolbar copy icon and record the shown values verbatim (both Preview and Overlay lines) | A dialog with selectable text showing every control's current value | This is the deliverable — the exact numbers a real, automatic fix needs to reproduce |
+| 72 | Repeat rows 63–71 in Operator Capture (rear lens) | Record a second, independent set of values | Confirms whether the same values work for both lenses (supporting a single formula) or differ (supporting the per-lens field-of-view hypothesis) |
+
+**What happened after this row was done**: rows 71–72's values became the shipped default calibration
+(research D26) rather than the input to a further formula change — see the next section.
+
+### D26 — persistent per-device calibration: confirm it, don't re-find it
+
+**Status: implemented, not yet confirmed on hardware.** The values D25 found are now this device's
+*default* calibration, persisted, and drive the real capture/recognition preview — not just the
+calibration screen. These rows confirm the new mechanism behaves as designed; they are not a re-run of
+D25's search.
+
+| # | Action | Expected result | Verifies |
+|---|---|---|---|
+| 73 | Fresh install (or clear app storage), open Self Capture | The preview and debug overlay already look exactly as they did at the end of row 71 — **no manual adjustment** | FR-128: shipped defaults apply automatically, front lens |
+| 74 | Repeat row 73 in Operator Capture (rear lens) | Same: correct with zero manual adjustment | FR-128, rear lens |
+| 75 | Open the calibration screen, change any Preview or Overlay control, watch the screen underneath (visible through the calibration screen's own preview) | The change is visible **immediately**, no restart | FR-130 |
+| 76 | Change a value, then fully close and relaunch the app, then reopen the capture screen | The changed value is still in effect — not reset to the shipped default | FR-129, FR-130 |
+| 77 | With the front lens calibrated differently from its default, open the calibration screen from a rear-lens session | The rear lens's own (still-default, unless separately changed) values are shown — not the front lens's | FR-127: per-lens independence |
+| 78 | Tap Reset while only one lens has been changed from default | Only the active lens returns to its shipped default; switch lenses and confirm the other lens's values are untouched | FR-132 |
+| 79 | Tap Export, copy the shown JSON, tap Import, paste the exact same text back in, submit | The dialog closes with no error; every value is unchanged (compare against the banner before/after) | FR-133 |
+| 80 | Tap Import, paste clearly invalid text (e.g. `not json`), submit | An inline error appears, the dialog stays open, and the calibration active before the attempt is unchanged | FR-134 |
+| 81 | Repeat rows 73–74 with the debug landmark overlay also enabled, holding a hand in view | The skeleton still lines up with the hand exactly as it did at the end of D25's row 71/72 — confirms the full-pane overlay geometry change (research D26) didn't move anything visually on this device | Regression check for the FR-101 revision |
+
+**If row 73/74/81 do *not* look correct**: something about the rendering geometry changed between D25's
+search and R3's production wiring (research D26 names the specific risk). Do not re-guess — reopen the
+calibration screen and re-run D25's rows 63–72 procedure to find this device's actual working values
+again; they will now save automatically and this section's rows 73–80 will then confirm persistence
+around the newly-found values.
+
 ## Camera lifecycle validation (R1) — needs a device
 
 **These six criteria cannot be verified on a laptop.** R1 exists to fix a camera leak; a green test

@@ -455,6 +455,147 @@ no new features, no schema change.
 Principle I (the boundary is now enforced, not assumed) and the capture testing standard. F1 is the
 only behaviour change and touches no principle.
 
+## Revision R2 — Hand Landmark Debug Overlay (2026-07-27)
+
+A developer-only rendering layer, composed onto the same `PreviewStage` both the capture screen and
+specification 005's recognition preview screen already use. See
+[spec.md → Revision History → R2](./spec.md#r2--hand-landmark-debug-overlay-2026-07-27).
+
+**Design**
+
+- `application/debug/debug_overlay_notifier.dart` — `DebugOverlayNotifier extends Notifier<bool>`, a
+  runtime on/off flag scoped to the application run (same lifetime as `captureSettingsProvider`, no
+  persistence — this is dev state, not a capture setting). Depends on nothing but Riverpod, so it stays
+  on the application side of the layer-boundary test.
+- `presentation/debug/hand_landmark_painter.dart` — a `CustomPainter` drawing 21 points plus the fixed
+  MediaPipe `HAND_CONNECTIONS` topology per hand in `LandmarkFrame.hands`, colored by `Handedness`. Paint
+  objects are constructed once per hand-color, not per point/line, to keep per-frame allocation to just
+  the geometry.
+- `presentation/debug/hand_landmark_debug_overlay.dart` — a `StatefulWidget` that owns its own
+  subscription to `CameraSessionController.frames` (the same broadcast stream `RunRecordingSession` and
+  `RecognitionSessionController` already subscribe to independently) and repaints only itself on each
+  frame via internal `setState`, plus a small on-screen panel reporting hand count, handedness, and
+  confidence. Mounted only when the toggle is on, so disabling it tears the subscription down as a
+  consequence of the widget leaving the tree (the same ownership pattern
+  `cameraSessionControllerProvider` uses for the camera itself) — this is what makes FR-126 true by
+  construction rather than by a remembered `cancel()`.
+- `presentation/debug/debug_overlay_toggle_button.dart` — an `IconButton` bound to
+  `debugOverlayEnabledProvider`, rendered only behind `!kReleaseMode` (FR-125): the control simply does
+  not exist in the compiled release binary, so "unreachable in production" needs no configuration to get
+  right.
+- `capture_screen.dart` and `recognition_preview_screen.dart` each gain one line in their `overlays` list
+  (`if (ref.watch(debugOverlayEnabledProvider)) HandLandmarkDebugOverlay(frames: _controller.frames)`)
+  and the toggle button in their `AppBar.actions`. Neither screen's own frame handling changes: the
+  overlay is an independent broadcast subscriber, exactly like recognition's own `_onFrame` listener
+  already is relative to a capture-screen take.
+
+**Why no `data-model.md`/`contracts/` change**: nothing here is persisted, and nothing here is a contract
+between layers or applications — it is presentation state over a stream that already exists.
+
+**Constitution re-check after R2**: unchanged, all gates still PASS. Principle I is respected (the
+overlay is a `presentation/`-only addition composed via a port-free stream it consumes but never owns);
+Principle II holds (no pixel data — the overlay draws coordinates already produced for recording/
+recognition, and persists nothing); Principle V holds (the toggle is a compile-time idiom, not a
+hardcoded tunable that should have lived in `CaptureConfig`); Principle VI holds (no recognition, ML, or
+gameplay is added — this is diagnostic tooling that cannot reach an end user).
+
+## Bug fix: coordinate-pipeline rendering bug (D23, 2026-07-27)
+
+R2's debug overlay revealed that rendered landmarks did not align with the live preview — mirrored,
+and on some paths rotated, on both lenses. Full root-cause audit and the fix's design:
+[research.md → D23](./research.md#d23--one-coordinate-transform-from-analysis-space-to-display-space-bug-fix-2026-07-27).
+Task-level tracking: [tasks.md → Bug fix](./tasks.md#bug-fix-coordinate-pipeline-rendering-bug-d23-2026-07-27).
+
+Classified as a **bug fix**, not a revision, per the numbering policy: FR-097–FR-101 (preview fidelity)
+and FR-117–FR-126 (the debug overlay) already stated the correct intent — an undistorted, correctly
+oriented preview, with overlays aligned to it. Only the implementation was wrong. No requirement
+changed, so `spec.md` is untouched; `contracts/camera-channel.md`'s *Preview dimensions* section was
+corrected to describe the wire contract as it now actually behaves.
+
+**One-line summary of the fix**: introduce `DisplayOrientation` (`domain/canonical/`) as the single
+place the analysis-space → display-space transform is decided — rotation from a correctly computed
+`rotationDegrees` (Camera2's standard sensor-orientation formula, not a screen-rotation guess), mirroring
+from `CameraSessionInfo.mirroredPreview` (never from `CanonicalViewConverter`, which is a dataset-storage
+convention unrelated to display). `PreviewStage` and `HandLandmarkPainter` both consume it, so the
+`Texture` widget's own rotation/mirror and every landmark pixel painted over it are computed by the same
+rule. Recording and recognition matching are untouched — they still consume the canonical stream exactly
+as before.
+
+**Status: shipped, but on-device testing showed the bug persists.** D23's architecture was never
+hardware-verified before it shipped — see
+[research.md → D24](./research.md#d24--coordinate-pipeline-investigation-whats-proven-whats-assumed-and-how-to-tell-them-apart)
+for the investigation that followed: what's actually proven (via an executable ground-truth test, not
+D23's original reasoning) versus still assumed, ranked hypotheses, and the instrumentation
+(`CoordinateDebugPainter` + throttled logging, Kotlin and Dart) added to resolve them on hardware
+without a further guess. No architecture changed for D24 — camera preview, canonicalization, recording,
+and recognition remain exactly as D23 left them.
+
+**Status: a screenshot after D24 showed the bug is actually two independent symptoms** — the preview
+itself rotated in portrait, and the overlay still misaligned on top of that — and two automatic-fix
+attempts had already failed. See
+[research.md → D25](./research.md#d25--developer-camera-calibration-panel-2026-07-27-same-day) for a
+new developer tool, `CameraCalibrationScreen`, that exposes every display transform (preview and overlay,
+fully independent) as a live runtime control, so the correct values can be found **by hand, on a real
+device**, before any further automatic fix is attempted. D25 changed no architecture — it was a new,
+standalone, `!kReleaseMode`-gated screen that reused the camera session already live rather than touching
+acquisition, and read/painted through its own manual pipeline, never `PreviewStage` or
+`DisplayOrientation`. **Superseded the same day by R3** below, once a working combination was actually
+found on the reference device.
+
+## Revision R3 — Persistent Per-Device Camera Calibration (2026-07-28)
+
+The values D25's calibration screen found by hand become this device's default, persisted per lens, and
+the screen that found them stays in the app permanently instead of being deleted. See
+[spec.md → Revision History → R3](./spec.md#r3--persistent-per-device-camera-calibration-2026-07-28) and
+[research.md → D26](./research.md#d26--persistent-per-device-calibration-system-2026-07-28).
+
+**Design**
+
+- `domain/canonical/camera_calibration.dart` — `CameraCalibration` (previewRotation/previewMirror/
+  previewFit + overlayRotation/overlayMirror/overlaySwapXY/overlayScale/overlayOffsetX/overlayOffsetY,
+  JSON-serializable) and `CameraCalibrationSet` (front + rear, `.defaults` = the values found on the
+  reference device). `PreviewFit` is a domain-local three-value enum standing in for `BoxFit`, so this
+  file needs no Flutter import — the layer-boundary test forbids `package:flutter/` anywhere under
+  `domain/`.
+- `domain/ports/ports.dart` gains `CalibrationStore` (`load`/`save`); `infrastructure/storage/
+  file_calibration_store.dart` persists it as `<storage root>/calibration.json` — a **sibling** of
+  `datasets/`, never inside it, so the exporter and integrity validator never see it (the same isolation
+  FR-115 already enforces between camera management and dataset storage, applied here between
+  calibration and dataset storage).
+- `application/debug/camera_calibration_notifier.dart` — `CameraCalibrationNotifier extends
+  AsyncNotifier<CameraCalibrationSet>`; `build()` loads via `CalibrationStore`, falling back to
+  `.defaults`. Every setter takes an explicit `LensPosition`, updates state, and persists in the same
+  call — no separate save action exists anywhere in this design.
+- `presentation/capture/preview_stage.dart` and `presentation/debug/hand_landmark_painter.dart` now take
+  a `CameraCalibration` directly instead of deriving `DisplayOrientation` from `CameraSessionInfo`'s
+  reported rotation — this is the actual behavior change: calibration now drives what a real user sees,
+  not just what the calibration screen shows. `DisplayOrientation` itself is unchanged and still used,
+  but only by the independent D24 coordinate-debug diagnostic, kept as the "automatic guess" to compare
+  against calibrated values.
+- `presentation/debug/camera_calibration_screen.dart` no longer renders through its own standalone
+  `_ManualPreview`/`_CalibratedOverlayPainter` pipeline — it now renders through the exact same
+  `PreviewStage`/`HandLandmarkPainter` production uses, so there is structurally one rendering
+  implementation, not two that could drift apart. Gained Reset (current lens only), Export (JSON dialog),
+  and Import (JSON paste dialog with inline parse-error handling).
+
+**A deliberate, disclosed contract change**: `PreviewStage`'s `overlays` list used to be confined to the
+letterboxed image sub-rect (spec.md FR-101, pre-R3). It is now scoped to the full outer preview pane,
+matching exactly the geometry the calibration screen used when the working values were found — reusing
+that geometry in production is what makes a value found on the calibration screen reproduce identically
+there. `spec.md`'s FR-101 was revised, not silently left stale, to describe this as the documented
+exception it now is.
+
+**Why no `data-model.md`/`contracts/` change**: calibration is presentation-only state with its own
+dedicated local file — not a dataset entity, and not a platform-channel contract (nothing about
+`CameraXController.kt` or the `EventChannel`/`MethodChannel` wire format changed).
+
+**Constitution re-check after R3**: unchanged, all gates still PASS. Principle I holds (`domain/canonical/
+camera_calibration.dart` imports nothing from `application/`, `presentation/`, or `infrastructure/`, and
+persistence is reached only through the `CalibrationStore` port); Principle II holds (calibration never
+touches a stored sample or pixel data); Principle V holds (calibration values are configuration a device
+owns, not a hardcoded tunable); Principle VI holds (no recognition, ML, or gameplay is added — this
+remains display-only developer tooling, unreachable in a release build).
+
 ## Complexity Tracking
 
 > No constitutional violations require justification. Table intentionally empty.
@@ -462,3 +603,19 @@ only behaviour change and touches no principle.
 > The two monorepo consequences recorded in the Constitution Check are *disclosures*, not deviations:
 > neither breaks the engine's ability to read what Capture writes, which is the property the rule
 > protects.
+>
+> The D23 bug fix introduces no new dependency, no persisted schema touch, and stays entirely within
+> `domain/canonical/` and `presentation/` — Principle I (dependencies point inward) and Principle II (no
+> pixel data) both hold unchanged, since the fix operates only on coordinates already produced for
+> recording/recognition and renders nothing new to disk.
+>
+> The D25 calibration panel introduced no new dependency, persisted nothing, and stayed entirely within
+> `application/debug/` + `presentation/debug/` — `!kReleaseMode`-gated like every other tool in that
+> package.
+>
+> R3 introduces exactly one new dependency-free persistence surface: `calibration.json`, written by
+> `infrastructure/storage/file_calibration_store.dart` through the existing `dart:io`/`dart:convert`
+> stack already used for `sessions.json` — no new package. It stays `!kReleaseMode`-reachable-only like
+> every other debug tool, and Principle I/II both hold unchanged (see the R3 constitution re-check
+> above); it is tracked here as a lasting architectural surface precisely because, unlike D25, it is no
+> longer temporary.

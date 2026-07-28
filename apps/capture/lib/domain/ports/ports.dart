@@ -7,6 +7,7 @@
 library;
 
 import 'package:capture/domain/camera/camera.dart';
+import 'package:capture/domain/canonical/camera_calibration.dart';
 import 'package:capture/domain/capture/recording_session.dart';
 import 'package:capture/domain/effects/effect_definition.dart';
 import 'package:capture/domain/export/manifest.dart';
@@ -97,6 +98,18 @@ abstract interface class SampleRepository {
 abstract interface class PoseCatalogSource {
   /// Returns the validated catalog, or throws `CatalogFailure`.
   Future<PoseCatalog> load();
+}
+
+/// Persists the developer camera-calibration panel's per-lens state
+/// (spec 003's persistent calibration system), so a device remembers its own
+/// values across restarts without any code change.
+abstract interface class CalibrationStore {
+  /// Loads the persisted calibration set, or `null` if this device has never
+  /// saved one — the caller falls back to [CameraCalibrationSet.defaults].
+  Future<CameraCalibrationSet?> load();
+
+  /// Persists [calibrationSet], overwriting whatever was saved before.
+  Future<void> save(CameraCalibrationSet calibrationSet);
 }
 
 /// Persists session records for the manifest and future analytics.

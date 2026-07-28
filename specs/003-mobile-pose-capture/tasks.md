@@ -64,6 +64,7 @@ repeats its letter.
 | **14 US9 Traceability** | **K Camera metadata** | **T123–T127** |
 | **15 US10 Capture layout** | **M Preview fidelity & layout** | **T128–T131** |
 | **16 R1 Polish** | **N Validation & docs** | **T132–T138** (incl. T133a, T133b) |
+| **17 R2 Debug overlay** | **R2 design** | **T139–T148** |
 
 ---
 
@@ -456,6 +457,221 @@ once without scrolling and nothing is clipped.
 
 ---
 
+## Phase 17: User Story 11 — See detected landmarks while developing (Priority: P3) — *plan phase R2*
+
+**Purpose**: A developer-only overlay drawing detected hand landmarks over the live preview, on both the
+capture screen and the recognition preview screen, with a runtime toggle unreachable in release builds.
+
+- [X] T139 [P] [US11] Add `Palette.leftHand`, `Palette.rightHand`, `Palette.unknownHand` to `apps/capture/lib/presentation/design/design.dart` (centralized tokens, Principle V)
+- [X] T140 [P] [US11] Add `DebugOverlayNotifier` (`Notifier<bool>`, default off, `toggle()`/`setEnabled()`) in `apps/capture/lib/application/debug/debug_overlay_notifier.dart`
+- [X] T141 [US11] Register `debugOverlayEnabledProvider` (`NotifierProvider<DebugOverlayNotifier, bool>`) in `apps/capture/lib/shared/di/providers.dart`
+- [X] T142 [P] [US11] Implement `HandLandmarkPainter` (`CustomPainter`) in `apps/capture/lib/presentation/debug/hand_landmark_painter.dart`: the fixed 21-point MediaPipe `HAND_CONNECTIONS` skeleton and points for every hand in a `LandmarkFrame?`, colored by `Handedness`, with `Paint` objects built once per color rather than per draw call (FR-118/FR-119)
+- [X] T143 [US11] Implement `HandLandmarkDebugOverlay` (`StatefulWidget`) in `apps/capture/lib/presentation/debug/hand_landmark_debug_overlay.dart`: subscribes to the `Stream<LandmarkFrame>` passed to it, repaints only itself via `CustomPaint(painter: HandLandmarkPainter(...))`, shows a compact panel with hand count/handedness/confidence, wrapped in `IgnorePointer`, cancels its subscription in `dispose()` and on stream change (FR-121/FR-122/FR-126)
+- [X] T144 [P] [US11] Implement `DebugOverlayToggleButton` (`ConsumerWidget`) in `apps/capture/lib/presentation/debug/debug_overlay_toggle_button.dart`: an `IconButton` bound to `debugOverlayEnabledProvider`, rendered only when `!kReleaseMode` (FR-123/FR-125)
+- [X] T145 [US11] Wire into `apps/capture/lib/presentation/capture/capture_screen.dart`: `DebugOverlayToggleButton` in the app bar actions, and `HandLandmarkDebugOverlay(frames: _controller.frames)` added to the preview's `overlays` list when `debugOverlayEnabledProvider` is true
+- [X] T146 [US11] Wire the same overlay and toggle into `apps/capture/lib/presentation/recognition/recognition_preview_screen.dart`, identically
+- [X] T147 [P] [US11] Tests: `debug_overlay_notifier_test.dart` (default off, toggle both directions), `hand_landmark_debug_overlay_test.dart` (renders 21×N points and skeleton for 0/1/2-hand frames without throwing, subscribes/unsubscribes as the widget mounts/unmounts, ignores pointer events)
+- [X] T148a `flutter analyze` is clean and `flutter test` is green (339 tests) from `apps/capture/`, including every new R2 test — confirmed 2026-07-27
+- [ ] T148b Manually run `quickstart.md` rows 48–53 on a physical device — **not done in this environment**, same hardware-only limitation as T135–T137
+
+**Checkpoint**: with the overlay off, every pre-existing test still passes unchanged (SC-035, verified by
+T148a). T148b is the only outstanding item: on-device confirmation of FR-117–FR-121 rendering fidelity.
+
+---
+
+## Bug fix: coordinate-pipeline rendering bug (D23, 2026-07-27)
+
+Not a new user story — a **bug fix** per the numbering policy (implementation didn't match the already-
+stated intent of FR-097–FR-101/FR-117–FR-126; no requirement changed). Tracked here for traceability
+only. Full root-cause writeup: `research.md` → D23. Wire-contract correction: `contracts/camera-
+channel.md` → *Preview dimensions*.
+
+- [X] T149 [P] Add `DisplayOrientation` (`lib/domain/canonical/display_orientation.dart`): the single
+  analysis-space → display-space transform (`mapPoint`, `mapSize`), validated `rotationDegrees` input,
+  unit-tested for all four rotations × mirrored/unmirrored (`test/domain/canonical/display_orientation_test.dart`)
+- [X] T150 Add `CameraSessionController.rawFrames` — pre-canonicalization frames, fed from the same
+  platform subscription `frames` already uses, so display consumers stop reusing the dataset-canonical
+  stream (the deterministic half of the bug, affecting the rear lens on every device)
+- [X] T151 [P] Rewrite `PreviewStage`'s `Texture` wrapping to rotate via `RotatedBox` (layout-time, not
+  paint-only) and mirror via a `Transform` applied after rotation; verified against real Flutter layout
+  at all four rotations and both mirror states via `tester.getRect()`, not just the underlying math
+  (`test/presentation/preview_stage_test.dart`)
+- [X] T152 [P] Update `HandLandmarkPainter`/`HandLandmarkDebugOverlay` to require a `DisplayOrientation`
+  and consume `rawFrames` instead of `frames`
+- [X] T153 Fix the pre-existing, same-root-cause bug in the recognition effect anchor
+  (`recognition_preview_screen.dart`'s `_anchorFor`): it was mapping canonical-stream coordinates
+  directly onto the preview box, the identical mistake R2's debug overlay made. Now sourced from a
+  `rawFrames` subscription and mapped through `DisplayOrientation`
+- [X] T154 [Kotlin] Replace `CameraXController.resolutionRotation()` (screen-rotation-only, ignored
+  sensor orientation and lens facing) with `requiredRotationDegrees()`, the standard Camera2 formula
+  using `CameraCharacteristics.SENSOR_ORIENTATION`; stop pre-swapping `previewWidth`/`previewHeight`
+  natively so Dart is the only place a rotation-aware swap happens — **not compiled/run in this
+  environment (no Android build toolchain available); reviewed by hand, not verified on hardware**
+- [X] T155 [P] Log `rotation_degrees` in the `camera_acquired` structured event, so the value the fix
+  depends on is auditable rather than inferred (extends FR-096's existing discipline)
+- [X] T156 Manually run `quickstart.md` rows 54–57 on a physical device — **done; failed**. The debug
+  overlay's landmarks are still visually misaligned with the preview. Continued in D24 below rather than
+  guessing at another fix.
+
+**Checkpoint**: `flutter analyze` clean, `flutter test` green (364 tests, +25 over T148a's 339) — every
+pre-existing assertion (including the exact FR-101/FR-097–FR-099 preview-shape tests, which exercise the
+quarterTurns-0 identity path every existing session used before rotation was reported at all) passed
+unchanged, and the new tests prove the fix's math and widget composition independently. **T156 shows the
+fix is nonetheless still wrong or incomplete** — the tests prove the pieces D23 built behave as D23
+intended, not that D23's intent matches reality.
+
+---
+
+## Investigation: coordinate-pipeline bug persists after D23 (D24, same day)
+
+Per explicit instruction: **no further architectural changes** — camera preview, canonicalization,
+recording, and recognition are all untouched below. This phase adds only instrumentation (logging +
+one independently-toggleable diagnostic overlay) and verifies, for the first time with an executable
+test, a claim D23 shipped without ever checking. Full writeup: `research.md` → D24.
+
+- [X] T157 Write and run a ground-truth test determining `RotatedBox`'s actual rotation **direction**
+  (never previously verified — D23's `preview_stage_test.dart` rotation tests only checked bounding-box
+  *aspect ratio*, which cannot distinguish a correct rotation from one rotated 180° wrong). Result:
+  `RotatedBox(quarterTurns: 1)` rotates clockwise, and `DisplayOrientation.mapPoint`'s formula matches it
+  exactly — **this hypothesis is ruled out**, not assumed ruled out
+- [X] T158 [P] Document the full coordinate-space table (width/height/rotation/mirror/origin/axis
+  direction per stage, sensor through canvas) and a worked numeric example of one landmark's journey
+  through every stage — `research.md` → D24
+- [X] T159 [P] Document, explicitly separated, what is **proven** (by an executable test in this
+  environment) versus **assumed** (architecturally reasonable, never measured) — three concrete,
+  unruled-out hypotheses identified, ranked, with the leading one (`Preview`/`ImageAnalysis` bound
+  without a shared `ViewPort`, so CameraX gives no field-of-view guarantee between them) explained
+  mathematically as something `DisplayOrientation.mapPoint` structurally cannot represent (it only
+  permutes/reflects `x`, `y`, `1-x`, `1-y` — never scales or crops)
+- [X] T160 [Kotlin] Add `Log.d("coord-debug", …)` at two sites in `CameraXController`: inside
+  `requiredRotationDegrees` (lensFacing/sensorOrientation/deviceRotationDegrees/result) and inside
+  `open()` (raw preview vs. requested-analysis dimensions side by side) — additive-only, no behavior
+  change; **not compiled/run in this environment**
+- [X] T161 [P] Add `CoordinateDebugNotifier`/`coordinateDebugEnabledProvider` and
+  `CoordinateDebugToggleButton` (`application/debug/`, `presentation/debug/`), mirroring
+  `DebugOverlayNotifier`/`DebugOverlayToggleButton` exactly, independently toggleable so the skeleton
+  view and the diagnostics can be shown separately
+- [X] T162 [P] Add `CoordinateDebugPainter` (`presentation/debug/coordinate_debug_painter.dart`):
+  canvas bounds, the mapped unit-square "image rect" with labeled corners, analysis +X/+Y axis arrows,
+  and landmarks #0/#5/#17 highlighted and labeled — tested for render-without-throw across all four
+  rotations × mirrored/unmirrored and `shouldRepaint` reactivity
+  (`test/presentation/debug/coordinate_debug_painter_test.dart`)
+- [X] T163 Wire `HandLandmarkDebugOverlay` to accept `CameraSessionInfo` directly (computing
+  `DisplayOrientation` internally, one source instead of two call sites each constructing it) and a
+  `showCoordinateDebug` flag; add throttled (≤1/s) `[coord-debug]` console logging of every value in the
+  transform, plus per-landmark raw and mapped coordinates, when that flag is on
+- [X] T164 [P] Update both screens' wiring and tests for the new `HandLandmarkDebugOverlay` API and the
+  second toggle button
+- [X] T165 Manually run `quickstart.md` rows 58–62 on a physical device — **done; inconclusive/superseded**.
+  A screenshot showed two independent symptoms (preview itself rotated 90° in portrait, overlay still
+  misaligned on top of that), which rows 58–62 did not anticipate — they assumed the preview was already
+  correct. Continued in D25 below rather than a fourth reasoning-only guess.
+
+**Checkpoint**: `flutter analyze` clean, `flutter test` green (389 tests, +25 over T156's 364) — the
+rotation-direction hypothesis is now the first one in this whole investigation to be **disproven by a
+test rather than assumed**. Every other hypothesis remains open until T165 — which, once run, revealed
+the investigation's scope itself was too narrow (T165 note above).
+
+---
+
+## Developer tool: camera calibration panel (D25, same day)
+
+Per explicit instruction: **no further architectural changes** — camera preview, canonicalization,
+recording, recognition, Kotlin, and CameraX bindings are all untouched below. This phase ships a runtime
+instrument, not a fix. Full writeup: `research.md` → D25. Procedure: `quickstart.md` → D25 (rows 63–72).
+
+- [X] T166 [P] Add `OverlayCalibration`/`PreviewCalibration`/`CameraCalibrationState`/
+  `CameraCalibrationNotifier` (`application/debug/camera_calibration_notifier.dart`): every control
+  independent, fixed and documented operation order for the overlay transform (swap → rotate → mirror →
+  scale → translate), unit-tested exhaustively including a combination that would differ under any other
+  order (`test/application/debug/camera_calibration_notifier_test.dart`)
+- [X] T167 Register `cameraCalibrationProvider`, scoped to the application run like every other debug
+  toggle (not `autoDispose` — values must survive leaving and reopening the panel)
+- [X] T168 Add `CameraCalibrationScreen` (`presentation/debug/camera_calibration_screen.dart`): reuses
+  the camera session already live on whichever screen opens it (never calls `request()` itself — the
+  provider is a singleton for the app run, kept alive by `ref.listenManual` on both screens); a fully
+  manual `_ManualPreview` (`RotatedBox` → mirror `Transform` → `FittedBox`, independent of `PreviewStage`)
+  and `_CalibratedOverlayPainter` (independent of `HandLandmarkPainter`/`DisplayOrientation`); every
+  control from the required list (rotation ×2, mirror ×2, swap X/Y, scale, X/Y offset, fit); current
+  values always visible in an on-screen banner and reproducible via a copy-values dialog
+- [X] T169 Wire a third debug icon into both `capture_screen.dart` and `recognition_preview_screen.dart`
+  (`!kReleaseMode`-gated, alongside the existing two toggles) opening `CameraCalibrationScreen` via
+  `Navigator.push`
+- [X] T170 Test `CameraCalibrationScreen` against a fake camera session already live: every control
+  renders and updates only its own half (preview changes never touch overlay state and vice versa,
+  asserted directly), the screen never calls `request()` itself, landmarks render through the manual
+  transform without throwing across a rotation change, reset returns both halves to identity
+  (`test/presentation/debug/camera_calibration_screen_test.dart`)
+- [ ] T171 Run `quickstart.md` D25 rows 63–72 on a physical device (both lenses, ideally two devices) and
+  record the winning Preview and Overlay values — **not done in this environment**; this is the
+  prerequisite for any further automatic fix to `requiredRotationDegrees`, `previewWidth`/`previewHeight`
+  reporting, `PreviewStage`'s fit assumption, or `DisplayOrientation`
+
+**Checkpoint**: `flutter analyze` clean, `flutter test` green (408 tests, +19 over T165's 389). One test-
+authoring pitfall found and documented (research D25): a `ProviderContainer` built in `setUp()` produced
+a `CameraSessionController` that silently never left `CameraClosed`; built inline per test, the exact
+same request-then-pump sequence resolves on the first pump. **Nothing about the actual remaining bug is
+diagnosed until T171 runs.**
+
+---
+
+## Revision R3: persistent per-device camera calibration (2026-07-28)
+
+T171 was run by hand and produced a working combination for the reference device (front/rear, both
+lenses — see `research.md` → D26 for the values). Per explicit instruction, this phase makes that
+combination the shipped default, persists it per device, and keeps the calibration screen permanently
+available rather than deleting it. `CameraXController.kt` is untouched. Full design: `plan.md` → Revision
+R3. Full writeup: `research.md` → D26. Requirements: `spec.md` → FR-127–FR-134, FR-101 (revised).
+Procedure: `quickstart.md` → D26 (rows 73–81).
+
+- [X] T172 [P] Add `CameraCalibration`/`CameraCalibrationSet` (`domain/canonical/camera_calibration.dart`):
+  nine flat fields, a domain-local `PreviewFit` enum (no `BoxFit`/Flutter import — the domain layer-
+  boundary test forbids it), `mapOverlayPoint` carrying over D25's fixed swap→rotate→mirror→scale→
+  translate order, JSON `toJson`/`fromJson`, and `.defaults` set to the values research D26 records
+  (`test/domain/canonical/camera_calibration_test.dart`)
+- [X] T173 [P] Add `CalibrationStore` port (`domain/ports/ports.dart`) and `FileCalibrationStore`
+  (`infrastructure/storage/file_calibration_store.dart`): one JSON document at `<storage
+  root>/calibration.json`, a sibling of `datasets/` and never inside it; a missing or corrupt file
+  degrades to `null` (→ defaults) rather than throwing (`test/infrastructure/calibration_store_test.dart`)
+- [X] T174 Add `calibrationFileName` to `CaptureConfig`; register `calibrationStoreProvider` and change
+  `cameraCalibrationProvider` to an `AsyncNotifierProvider<CameraCalibrationNotifier,
+  CameraCalibrationSet>` (`shared/di/providers.dart`)
+- [X] T175 Rewrite `CameraCalibrationNotifier` as an `AsyncNotifier<CameraCalibrationSet>`
+  (`application/debug/camera_calibration_notifier.dart`): `build()` loads via `CalibrationStore` falling
+  back to `.defaults`; every setter takes an explicit `LensPosition`, updates state, and persists in the
+  same call; `resetLens`/`importJson` added (`test/application/debug/camera_calibration_notifier_test.dart`)
+- [X] T176 Switch `PreviewStage` (`presentation/capture/preview_stage.dart`) and `HandLandmarkPainter`
+  (`presentation/debug/hand_landmark_painter.dart`) from deriving `DisplayOrientation.fromSession(info)`
+  to consuming a `CameraCalibration` parameter directly — the actual production behavior change.
+  `PreviewStage` switches from `AspectRatio`+`Center` to `FittedBox`+`SizedBox` so `previewFit` is a real
+  control, and its `overlays` list moves from the letterboxed image sub-rect to the full preview pane
+  (matching the geometry the calibration values were found against — see FR-101's revision)
+  (`test/presentation/preview_stage_test.dart`, including new `cover`/`fill` fit tests)
+- [X] T177 Thread the `calibration` parameter through `HandLandmarkDebugOverlay`, `CaptureScreen`, and
+  `RecognitionPreviewScreen`: each reads `cameraCalibrationProvider`, falls back to `.defaults` while
+  loading, and passes `calibrationSet.forLens(info.lens)` down; `RecognitionPreviewScreen._anchorFor` uses
+  `calibration.mapOverlayPoint` instead of `DisplayOrientation` (`test/presentation/debug/
+  hand_landmark_debug_overlay_test.dart`, `test/presentation/capture_screen_test.dart`,
+  `test/presentation/recognition/recognition_preview_screen_test.dart`)
+- [X] T178 Rewire `CameraCalibrationScreen` to render through `PreviewStage`/`HandLandmarkPainter`
+  directly, deleting the standalone `_ManualPreview`/`_CalibratedOverlayPainter` pipeline D25 built; add
+  Reset (current lens only), Export (JSON dialog), and Import (JSON paste dialog, inline parse-error
+  handling, dialog stays open on failure) (`test/presentation/debug/camera_calibration_screen_test.dart`)
+- [ ] T179 Run `quickstart.md` D26 rows 73–81 on a physical device (both lenses) — **not done in this
+  environment**; confirms the persisted defaults still look correct once routed through the changed
+  rendering geometry (research D26's stated hardware-only risk), not just that the numbers are unchanged
+
+**Checkpoint**: `flutter analyze` clean, `flutter test` green (429 tests, +21 over T171's 408 — 9 new in
+`camera_calibration_test.dart`, 5 in `calibration_store_test.dart`, 8 in the rewritten notifier suite, 2
+new `cover`/`fill` fit tests plus an updated FR-101 test in `preview_stage_test.dart`, and the rewritten
+`camera_calibration_screen_test.dart`). A real bug caught by the analyzer during T178 (`unnecessary_null_
+comparison`/`unnecessary_non_null_assertion`): the import dialog's `String? error` was originally declared
+**inside** the rebuilding `StatefulBuilder.builder` closure, so it silently reset to `null` on every
+rebuild and the error message could never actually render; fixed by hoisting it to the enclosing
+`showDialog` closure. **Nothing about on-device correctness is confirmed until T179 runs.**
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
@@ -476,6 +692,7 @@ once without scrolling and nothing is clipped.
 - **US9 (Phase 14)**: depends on Phase 8's converter and US7's settings
 - **US10 (Phase 15)**: depends on US6, US7, US8 (it surfaces their controls)
 - **R1 Polish (Phase 16)**: depends on all R1 stories
+- **US11 / R2 (Phase 17)**: depends on Phase 8's `CameraSessionController.frames` seam only — independent of every other R1 story, since it is a passive additional subscriber
 
 ### Critical path (baseline)
 

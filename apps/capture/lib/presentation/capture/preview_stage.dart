@@ -1,63 +1,133 @@
 /// The camera preview, at the camera's true proportions.
 ///
-/// `Texture` is a leaf widget: it fills whatever constraints it is given. Inside
-/// a `Stack(fit: StackFit.expand)` — what this replaces — it therefore stretches
-/// to the screen, which is the distortion FR-097 forbids.
+/// **Driven entirely by [CameraCalibration], not by [CameraSessionInfo]'s
+/// reported rotation.** Research D23–D25 established that inferring the
+/// correct rotate/mirror transform from platform-reported rotation and lens
+/// facing alone repeatedly failed on real hardware; the persistent
+/// per-device calibration system replaces that inference with values a
+/// developer found once by eye (or the shipped defaults) and that a device
+/// remembers. `CameraSessionInfo` still supplies the raw buffer's shape and
+/// the texture handle — everything about *orientation* now comes from
+/// [calibration].
 ///
-/// Wrapping it in an [AspectRatio] inside a [Center] produces letterboxing or
-/// pillarboxing as a **consequence of layout** (FR-098): no branching on which
-/// dimension is constrained, and no way to get one orientation right and the
-/// other wrong. The neutral bands are simply the container's own background.
+/// The texture is laid out at its raw (un-rotated) size inside a
+/// fixed-size box, rotated via [RotatedBox] (layout-time, not a paint-only
+/// `Transform.rotate`, so the leaf actually fills its rotated proportions),
+/// mirrored if [CameraCalibration.previewMirror], then the **whole** box is
+/// scaled into the available space via [FittedBox] using
+/// [CameraCalibration.previewFit] — contain by default, matching the
+/// letterboxing/pillarboxing every device already reports as its shipped
+/// default (FR-098).
 ///
-/// Overlays are children of the *same* [AspectRatio] box, which is what makes
-/// FR-101's alignment structural rather than a coordinate calculation somebody
-/// has to keep correct as the layout evolves.
-///
-/// The ratio comes from the dimensions the camera **actually reported** for the
-/// running session (FR-099), never from a constant — and those are already
-/// rotation-adjusted for display by the platform side.
+/// **Overlays fill the whole preview pane, not just the fitted image
+/// sub-rect.** This is a deliberate departure from this widget's pre-
+/// calibration contract: [CameraCalibrationScreen] found its working values
+/// (rotation, mirror, scale, offset) by sweeping them against an overlay
+/// sized to the full pane — reusing that exact geometry here is what makes
+/// a calibration found on the panel produce the identical result on the
+/// real capture and recognition screens. An overlay that needs to sit
+/// exactly over the visible image (rather than the calibrated landmark
+/// space) is expected to size and center itself accordingly; most chrome
+/// overlays (countdown, capture flash, summary card) are already centered
+/// and unaffected by the distinction.
 library;
 
 import 'package:capture/domain/camera/camera.dart';
+import 'package:capture/domain/canonical/camera_calibration.dart';
 import 'package:capture/presentation/design/design.dart';
 import 'package:flutter/material.dart';
 
-/// Renders the preview undistorted, centered, with overlays aligned to it.
+/// Renders the preview undistorted (per [calibration]'s fit), with overlays
+/// filling the same pane.
 class PreviewStage extends StatelessWidget {
   /// Creates a preview stage.
   const PreviewStage({
     required this.info,
+    required this.calibration,
     this.overlays = const [],
     super.key,
   });
 
-  /// What the live camera session reports; supplies the aspect ratio.
+  /// What the live camera session reports; supplies the texture handle and
+  /// the raw buffer's shape.
   final CameraSessionInfo info;
 
-  /// Widgets drawn over the visible image area, never over the bands.
+  /// This lens's persisted display calibration — the single source every
+  /// rotation, mirror, fit, and landmark-mapping decision comes from.
+  final CameraCalibration calibration;
+
+  /// Widgets drawn over the whole preview pane, in the same coordinate
+  /// space [calibration] maps overlay points into.
   final List<Widget> overlays;
 
   @override
   Widget build(BuildContext context) {
+    final swapped = calibration.previewQuarterTurns.isOdd;
+    final rawWidth = swapped ? info.previewHeight : info.previewWidth;
+    final rawHeight = swapped ? info.previewWidth : info.previewHeight;
+    // Same "degenerate size" fallback the pre-calibration implementation
+    // used: a plausible portrait ratio beats a zero-size box, and the
+    // fallback is still auditable via the reported (zero) dimensions in the
+    // logs.
+    final degenerate = rawWidth <= 0 || rawHeight <= 0;
+    final displayWidth = (degenerate ? 3 : rawWidth).toDouble();
+    final displayHeight = (degenerate ? 4 : rawHeight).toDouble();
+
     return ColoredBox(
       // The neutral band colour. Visually distinct from any camera image, so a
       // band is never mistakable for part of the picture.
       color: Colors.black,
-      child: Center(
-        child: AspectRatio(
-          aspectRatio: info.previewAspect,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              Texture(
-                key: const Key('camera-preview-texture'),
-                textureId: info.textureId,
-              ),
-              ...overlays,
-            ],
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          FittedBox(
+            fit: _toBoxFit(calibration.previewFit),
+            child: SizedBox(
+              width: displayWidth,
+              height: displayHeight,
+              child: _OrientedTexture(info: info, calibration: calibration),
+            ),
           ),
-        ),
+          ...overlays,
+        ],
       ),
+    );
+  }
+}
+
+BoxFit _toBoxFit(PreviewFit fit) => switch (fit) {
+  PreviewFit.contain => BoxFit.contain,
+  PreviewFit.cover => BoxFit.cover,
+  PreviewFit.fill => BoxFit.fill,
+};
+
+/// Rotates the raw preview buffer per [CameraCalibration.previewRotation],
+/// then mirrors it if [CameraCalibration.previewMirror].
+///
+/// [RotatedBox] rotates **at layout time**: it hands the `Texture` swapped
+/// constraints shaped like the raw buffer, so the leaf fills its true
+/// proportions — unlike `Transform.rotate`, which only repaints pixels
+/// after layout and would leave the buffer overflowing or letterboxed wrong.
+class _OrientedTexture extends StatelessWidget {
+  const _OrientedTexture({required this.info, required this.calibration});
+
+  final CameraSessionInfo info;
+  final CameraCalibration calibration;
+
+  @override
+  Widget build(BuildContext context) {
+    final rotated = RotatedBox(
+      quarterTurns: calibration.previewQuarterTurns,
+      child: Texture(
+        key: const Key('camera-preview-texture'),
+        textureId: info.textureId,
+      ),
+    );
+    if (!calibration.previewMirror) return rotated;
+    return Transform(
+      alignment: Alignment.center,
+      transform: Matrix4.diagonal3Values(-1.0, 1.0, 1.0),
+      child: rotated,
     );
   }
 }

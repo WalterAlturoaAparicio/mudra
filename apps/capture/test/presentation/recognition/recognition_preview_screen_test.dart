@@ -281,4 +281,34 @@ void main() {
       },
     );
   });
+
+  group('the hand landmark debug overlay (spec 003 Revision R2)', () {
+    testWidgets(
+      'is off by default and toggling it does not disturb recognition',
+      (tester) async {
+        await pumpScreen(tester);
+        await settle(tester);
+
+        expect(find.byKey(const Key('debug-overlay-toggle')), findsOneWidget);
+        expect(find.byKey(const Key('debug-overlay-paint')), findsNothing);
+
+        await tester.tap(find.byKey(const Key('debug-overlay-toggle')));
+        await tester.pump();
+
+        expect(find.byKey(const Key('debug-overlay-paint')), findsOneWidget);
+
+        await emitAndSettle(tester, source, makeEmptyFrame());
+        expect(
+          find.byType(PredictionHud),
+          findsOneWidget,
+          reason: 'FR-122: the overlay must not interfere with recognition',
+        );
+
+        await tester.tap(find.byKey(const Key('debug-overlay-toggle')));
+        await tester.pump();
+
+        expect(find.byKey(const Key('debug-overlay-paint')), findsNothing);
+      },
+    );
+  });
 }

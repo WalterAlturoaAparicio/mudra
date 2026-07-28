@@ -53,12 +53,12 @@ be recorded correctly.
 | Key | Type | Notes |
 |---|---|---|
 | `textureId` | `int` | Preview surface handle for the `Texture` widget |
-| `previewWidth` / `previewHeight` | `int` | **Display-oriented** preview size, actually in use — see *Preview dimensions* below (FR-099) |
-| `analysisWidth` / `analysisHeight` | `int` | Analysis frame dimensions — the resolution landmarks are normalized against, written into `metadata.camera.width/height` |
+| `previewWidth` / `previewHeight` | `int` | **Raw** (un-rotated, sensor-orientation) preview buffer size — see *Preview dimensions* below (FR-099) |
+| `analysisWidth` / `analysisHeight` | `int` | Analysis frame dimensions — the resolution landmarks are normalized against, written into `metadata.camera.width/height`. Same (raw, un-rotated) orientation as `previewWidth`/`previewHeight` |
 | `lens` | `String` | `"front"` or `"rear"`; MUST equal what was requested. Written into `metadata.camera.position` (FR-081) |
-| `mirrored` | `bool` | Whether the delivered frames and preview are in the mirrored (canonical) convention. Written into `metadata.camera.mirrored_preview` (FR-082) |
+| `mirrored` | `bool` | Whether the delivered frames and preview are in the mirrored (canonical) convention — `lens == front`. This is a **display/dataset convention** flag, unrelated to `rotationDegrees`. Written into `metadata.camera.mirrored_preview` (FR-082) |
 | `platformLensId` | `int` | The platform's own lens identifier, preserved verbatim — Android `CameraSelector` lens-facing (`0` back, `1` front). Written into `metadata.camera.lens_facing` (FR-084) |
-| `rotationDegrees` | `int` | Rotation applied to reach display orientation; reported so `previewWidth/Height` are auditable rather than inferred |
+| `rotationDegrees` | `int` | The clockwise rotation, in degrees (`0`/`90`/`180`/`270`), that the raw preview/analysis buffer needs to reach display orientation — computed from `CameraCharacteristics.SENSOR_ORIENTATION` and device rotation, never from screen rotation alone. Dart is the only place this value and `mirrored` are combined into an actual rotation/mirror transform (`DisplayOrientation`) |
 | `detectorVersion` | `String?` | Written into `metadata.versions.mediapipe` |
 | `deviceManufacturer` / `deviceModel` / `osVersion` | `String` | Feed the export manifest's `device` block (FR-047) |
 
@@ -96,15 +96,33 @@ with one total operation.
 
 ## Preview dimensions
 
-`previewWidth`/`previewHeight` MUST be the dimensions the preview will actually be **displayed** at:
+`previewWidth`/`previewHeight` MUST be the **raw** dimensions of the buffer the platform actually
+allocated for the preview surface — taken from the surface the platform provides, never from a
+compile-time constant, and **not** pre-rotated or axis-swapped by the platform. They are in the same
+(un-rotated, sensor) orientation as the analysis frame's `w`/`h` below.
 
-- taken from the surface the platform provides, never from a compile-time constant;
-- already adjusted for `rotationDegrees`, so a portrait screen consuming a landscape sensor stream
-  receives the ratio it will render.
+Dart derives the aspect ratio the preview is actually **displayed** at by combining these raw
+dimensions with `rotationDegrees` — exactly once, in `DisplayOrientation`
+(`lib/domain/canonical/display_orientation.dart`) — and letterboxes or pillarboxes to the result
+(FR-097–FR-099). Reporting a wrong or assumed size, or rotating it in two places that can disagree,
+produces a distorted or misaligned preview that no amount of Dart-side layout can correct on its own.
 
-Dart derives the preview aspect ratio from these values alone and letterboxes or pillarboxes to it
-(FR-097–FR-099). Reporting a wrong or assumed size produces a distorted preview that no amount of
-Dart-side layout can correct — which is exactly the pre-R1 behaviour, where `720×1280` was hardcoded.
+**(Bug fix, 2026-07-27) What changed and why**: R1 through this fix's predecessor had the platform
+pre-swap `previewWidth`/`previewHeight` using a rotation guess derived from **screen rotation alone**
+(`Display.rotation`), ignoring the camera's actual sensor-mounting orientation and lens facing — while
+never actually rotating the pixel buffer handed to the `Surface`, or the landmark coordinates MediaPipe
+produced. The result: the preview `Texture` displayed raw, un-rotated pixels while Dart sized its box
+using a differently (and sometimes wrongly) rotated aspect ratio, and any renderer painting landmarks
+directly onto that box inherited the same mismatch — the root cause of the "landmarks mirrored/rotated
+relative to the preview" bug the debug overlay (FR-117) surfaced. The fix moves to raw, unswapped
+dimensions on the wire plus a **correctly computed** `rotationDegrees` (the standard Camera2 formula:
+`CameraCharacteristics.SENSOR_ORIENTATION` combined with device rotation and lens facing — see
+`CameraXController.requiredRotationDegrees`), so there is exactly **one** rotation decision, made once
+on the Dart side, shared by the preview widget (`PreviewStage`, via `RotatedBox` + a mirror `Transform`)
+and by any landmark overlay (`HandLandmarkPainter`, via `DisplayOrientation.mapPoint`). Neither the
+bitmap MediaPipe analyzes nor the coordinates it returns are touched by this fix — analysis-space
+landmark values, recorded samples, and recognition matching are all unaffected; only how **display**
+consumers interpret them changed.
 
 ## Event stream (`EventChannel`)
 

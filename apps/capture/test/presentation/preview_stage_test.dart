@@ -1,4 +1,6 @@
-/// Preview fidelity (FR-097–FR-101, SC-022).
+/// Preview fidelity, now driven entirely by [CameraCalibration] rather than
+/// platform-reported rotation (research D23–D25, persistent per-device
+/// calibration system).
 ///
 /// A distorted preview does not corrupt a single stored landmark — which is
 /// exactly why it is dangerous. It silently biases how people position
@@ -10,6 +12,7 @@
 library;
 
 import 'package:capture/domain/camera/camera.dart';
+import 'package:capture/domain/canonical/camera_calibration.dart';
 import 'package:capture/presentation/capture/preview_stage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -30,10 +33,11 @@ void main() {
     platformLensId: lens == LensPosition.front ? 1 : 0,
   );
 
-  Future<Size> renderAt(
+  Future<void> pump(
     WidgetTester tester,
     Size surface,
     CameraSessionInfo sessionInfo, {
+    CameraCalibration calibration = const CameraCalibration(),
     List<Widget> overlays = const [],
   }) async {
     tester.view.physicalSize = surface;
@@ -43,12 +47,26 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: PreviewStage(info: sessionInfo, overlays: overlays),
+          body: PreviewStage(info: sessionInfo, calibration: calibration, overlays: overlays),
         ),
       ),
     );
+  }
 
-    return tester.getSize(find.byKey(const Key('camera-preview-texture')));
+  /// The texture's **on-screen** bounding box — `getRect` maps the render
+  /// object's local corners through every ancestor transform, which is what
+  /// makes this correct regardless of rotation, mirroring, or the
+  /// [FittedBox] scale [CameraCalibration.previewFit] introduces. `getSize`
+  /// would report the pre-transform local size instead, which is not what
+  /// actually appears on screen.
+  Future<Rect> renderedRectAt(
+    WidgetTester tester,
+    Size surface,
+    CameraSessionInfo sessionInfo, {
+    CameraCalibration calibration = const CameraCalibration(),
+  }) async {
+    await pump(tester, surface, sessionInfo, calibration: calibration);
+    return tester.getRect(find.byKey(const Key('camera-preview-texture')));
   }
 
   group('the preview keeps the camera aspect ratio (FR-097)', () {
@@ -63,10 +81,10 @@ void main() {
       testWidgets('at ${surface.width.toInt()}x${surface.height.toInt()}',
           (tester) async {
         final sessionInfo = info();
-        final rendered = await renderAt(tester, surface, sessionInfo);
+        final rect = await renderedRectAt(tester, surface, sessionInfo);
 
         expect(
-          rendered.width / rendered.height,
+          rect.width / rect.height,
           closeTo(sessionInfo.previewAspect, 0.02),
           reason: 'SC-022: a square held in frame must measure square within '
               '2% at every supported screen shape',
@@ -78,11 +96,11 @@ void main() {
   group('leftover space becomes bands, never stretch (FR-098)', () {
     testWidgets('a surface taller than the camera letterboxes', (tester) async {
       const surface = Size(400, 1200);
-      final rendered = await renderAt(tester, surface, info());
+      final rect = await renderedRectAt(tester, surface, info());
 
-      expect(rendered.width, closeTo(400, 0.5), reason: 'width is filled');
+      expect(rect.width, closeTo(400, 0.5), reason: 'width is filled');
       expect(
-        rendered.height,
+        rect.height,
         lessThan(1200),
         reason: 'the image must not stretch to fill the extra height',
       );
@@ -90,11 +108,11 @@ void main() {
 
     testWidgets('a surface wider than the camera pillarboxes', (tester) async {
       const surface = Size(1200, 600);
-      final rendered = await renderAt(tester, surface, info());
+      final rect = await renderedRectAt(tester, surface, info());
 
-      expect(rendered.height, closeTo(600, 0.5), reason: 'height is filled');
+      expect(rect.height, closeTo(600, 0.5), reason: 'height is filled');
       expect(
-        rendered.width,
+        rect.width,
         lessThan(1200),
         reason: 'the image must not stretch to fill the extra width',
       );
@@ -102,11 +120,8 @@ void main() {
 
     testWidgets('the image is centered in its area', (tester) async {
       const surface = Size(1200, 600);
-      await renderAt(tester, surface, info());
+      final rect = await renderedRectAt(tester, surface, info());
 
-      final rect = tester.getRect(
-        find.byKey(const Key('camera-preview-texture')),
-      );
       expect(rect.center.dx, closeTo(600, 1.0));
       expect(rect.center.dy, closeTo(300, 1.0));
     });
@@ -116,36 +131,168 @@ void main() {
     testWidgets('a landscape sensor produces a landscape preview',
         (tester) async {
       final sessionInfo = info(previewWidth: 1280, previewHeight: 720);
-      final rendered = await renderAt(tester, const Size(800, 800), sessionInfo);
+      final rect = await renderedRectAt(tester, const Size(800, 800), sessionInfo);
 
-      expect(rendered.width / rendered.height, closeTo(1280 / 720, 0.02));
-      expect(rendered.width, greaterThan(rendered.height));
+      expect(rect.width / rect.height, closeTo(1280 / 720, 0.02));
+      expect(rect.width, greaterThan(rect.height));
     });
 
     testWidgets('an unusual reported size is honoured, not normalized',
         (tester) async {
       final sessionInfo = info(previewWidth: 1000, previewHeight: 1333);
-      final rendered = await renderAt(tester, const Size(900, 900), sessionInfo);
+      final rect = await renderedRectAt(tester, const Size(900, 900), sessionInfo);
 
-      expect(rendered.width / rendered.height, closeTo(1000 / 1333, 0.02));
+      expect(rect.width / rect.height, closeTo(1000 / 1333, 0.02));
     });
 
     testWidgets('a degenerate reported size falls back rather than dividing by zero',
         (tester) async {
       final sessionInfo = info(previewWidth: 0, previewHeight: 0);
-      final rendered = await renderAt(tester, const Size(800, 800), sessionInfo);
+      final rect = await renderedRectAt(tester, const Size(800, 800), sessionInfo);
 
-      expect(rendered.width, greaterThan(0));
-      expect(rendered.height, greaterThan(0));
+      expect(rect.width, greaterThan(0));
+      expect(rect.height, greaterThan(0));
       expect(sessionInfo.previewAspect, closeTo(3 / 4, 1e-9));
     });
   });
 
-  group('overlays align to the image, not the bands (FR-101)', () {
-    testWidgets('an overlay matches the texture rect exactly', (tester) async {
-      await renderAt(
+  group('rotation comes from CameraCalibration, applied to the raw buffer at '
+      'layout time', () {
+    testWidgets(
+      '90°: a landscape raw buffer renders as a portrait-shaped box on screen',
+      (tester) async {
+        final sessionInfo = info(previewWidth: 1280, previewHeight: 720);
+        final rect = await renderedRectAt(
+          tester,
+          const Size(2000, 2000),
+          sessionInfo,
+          calibration: const CameraCalibration(previewRotation: 90),
+        );
+
+        expect(
+          rect.width / rect.height,
+          closeTo(720 / 1280, 0.02),
+          reason: 'a 90° calibrated rotation must swap the on-screen box to portrait',
+        );
+      },
+    );
+
+    testWidgets(
+      '270°: the same raw buffer also renders portrait-shaped',
+      (tester) async {
+        final sessionInfo = info(previewWidth: 1280, previewHeight: 720);
+        final rect = await renderedRectAt(
+          tester,
+          const Size(2000, 2000),
+          sessionInfo,
+          calibration: const CameraCalibration(previewRotation: 270),
+        );
+
+        expect(rect.width / rect.height, closeTo(720 / 1280, 0.02));
+      },
+    );
+
+    testWidgets(
+      '180°: shape is unchanged (no axis swap), only orientation flips',
+      (tester) async {
+        final sessionInfo = info(previewWidth: 1280, previewHeight: 720);
+        final rect = await renderedRectAt(
+          tester,
+          const Size(2000, 2000),
+          sessionInfo,
+          calibration: const CameraCalibration(previewRotation: 180),
+        );
+
+        expect(rect.width / rect.height, closeTo(1280 / 720, 0.02));
+      },
+    );
+
+    testWidgets(
+      '0°: the identity calibration — the regression baseline',
+      (tester) async {
+        final sessionInfo = info(previewWidth: 1280, previewHeight: 720);
+        final rect = await renderedRectAt(tester, const Size(2000, 2000), sessionInfo);
+
+        expect(rect.width / rect.height, closeTo(1280 / 720, 0.02));
+      },
+    );
+  });
+
+  group('mirroring never changes the on-screen box, only its pixel content', () {
+    testWidgets('a mirrored and an unmirrored calibration at the same raw '
+        'size occupy an identical rect', (tester) async {
+      final mirroredRect = await renderedRectAt(
         tester,
-        const Size(1200, 600),
+        const Size(1200, 1200),
+        info(),
+        calibration: const CameraCalibration(previewMirror: true),
+      );
+      final unmirroredRect = await renderedRectAt(
+        tester,
+        const Size(1200, 1200),
+        info(),
+        calibration: const CameraCalibration(),
+      );
+
+      expect(mirroredRect.width, closeTo(unmirroredRect.width, 0.5));
+      expect(mirroredRect.height, closeTo(unmirroredRect.height, 0.5));
+    });
+
+    testWidgets('a mirrored, rotated calibration still resolves to the '
+        'rotated (swapped) shape — rotation and mirroring compose correctly',
+        (tester) async {
+      final sessionInfo = info(previewWidth: 1280, previewHeight: 720);
+      final rect = await renderedRectAt(
+        tester,
+        const Size(2000, 2000),
+        sessionInfo,
+        calibration: const CameraCalibration(previewRotation: 90, previewMirror: true),
+      );
+
+      expect(rect.width / rect.height, closeTo(720 / 1280, 0.02));
+    });
+  });
+
+  group('previewFit selects how the buffer fills the pane', () {
+    testWidgets('cover fills the surface completely, cropping rather than '
+        'banding', (tester) async {
+      const surface = Size(1200, 600);
+      final rect = await renderedRectAt(
+        tester,
+        surface,
+        info(),
+        calibration: const CameraCalibration(previewFit: PreviewFit.cover),
+      );
+
+      expect(rect.height, greaterThanOrEqualTo(600 - 0.5));
+      expect(rect.width, greaterThanOrEqualTo(1200 - 0.5));
+    });
+
+    testWidgets('fill stretches to the surface exactly, ignoring aspect ratio',
+        (tester) async {
+      const surface = Size(1200, 600);
+      final rect = await renderedRectAt(
+        tester,
+        surface,
+        info(),
+        calibration: const CameraCalibration(previewFit: PreviewFit.fill),
+      );
+
+      expect(rect.width, closeTo(1200, 0.5));
+      expect(rect.height, closeTo(600, 0.5));
+    });
+  });
+
+  group('overlays fill the whole preview pane (persistent calibration '
+      'system): a calibration found by sweeping values against a full-pane '
+      'overlay must render identically in production, so overlays are no '
+      'longer confined to the (possibly letterboxed) image sub-rect', () {
+    testWidgets('an overlay matches the full outer pane, not the texture rect',
+        (tester) async {
+      const surface = Size(1200, 600);
+      await pump(
+        tester,
+        surface,
         info(),
         overlays: [
           const Positioned.fill(
@@ -157,13 +304,8 @@ void main() {
         ],
       );
 
-      final texture = tester.getRect(
-        find.byKey(const Key('camera-preview-texture')),
-      );
       final overlay = tester.getRect(find.byKey(const Key('test-overlay')));
-
-      expect(overlay, texture, reason: 'FR-101: overlays must not spill onto '
-          'the padded bands, which is structural here rather than computed');
+      expect(overlay, const Rect.fromLTWH(0, 0, 1200, 600));
     });
   });
 

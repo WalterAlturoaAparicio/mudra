@@ -19,6 +19,7 @@ class CaptureConfig {
     this.datasetRoot = 'datasets',
     this.posesDirname = 'poses',
     this.sessionsFileName = 'sessions.json',
+    this.calibrationFileName = 'calibration.json',
     this.filenamePrefix = 'sample_',
     this.filenameDigits = 6,
     this.jsonIndent = 2,
@@ -88,6 +89,13 @@ class CaptureConfig {
 
   /// File holding session records, stored outside the poses tree.
   final String sessionsFileName;
+
+  /// File holding the developer camera-calibration panel's per-lens state.
+  ///
+  /// Stored at the storage root, a sibling of [datasetRoot] rather than
+  /// inside it — display calibration is not dataset content, and must never
+  /// be swept into export scanning or integrity validation.
+  final String calibrationFileName;
 
   /// Sample filename prefix.
   final String filenamePrefix;

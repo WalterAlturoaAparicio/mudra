@@ -51,6 +51,17 @@ Recorded during the revision that folded the former specification 004 into this 
 - Q: Is the "canonical raw" rename conceptual, or does the persisted field name change too? → A: Conceptual only. The specification, domain model, and documentation adopt the term and the field's redefined meaning; persisted field names and sample structure are unchanged, so `schema_version` stays `1` and the engine needs no change.
 - Q: After a take completes, does the capture screen stay put or return to the pose list? → A: Stay, and show a per-take summary the user dismisses before the next take — so a bad take is noticed immediately — with a session option to turn that confirmation off.
 
+### Session 2026-07-27 (Revision R2 — developer debug overlay)
+
+- Q: This overlay attaches to the shared `PreviewStage`/camera-landmark pipeline used by both the capture screen and the recognition preview screen (specification 005). Which specification should own it? → A: This one. 003 already owns "the whole Mudra Capture mobile app, including the camera subsystem" (see Revision History); the overlay is camera/landmark debug tooling, not a recognition-specific capability, and 005's mandate stays untouched.
+- Q: Should the overlay be available on the capture screen, the recognition preview screen, or both? → A: Both. They already share the same camera session and the same `PreviewStage` widget, so supporting both costs nothing extra and a developer debugging either flow benefits equally.
+
+### Session 2026-07-28 (Revision R3 — persistent per-device camera calibration)
+
+- Q: A working preview/overlay transform was found by hand on the reference device using the D25 calibration screen — should the next step be another automatic fix attempt, or something else? → A: Something else. Stop trying to derive one universal transform for every Android device; instead make the found values this device's **default** calibration, persist them per device, and keep the calibration screen permanently available so any future device can find and keep its own.
+- Q: Should the calibration screen stay a standalone, disconnected instrument (as D25 deliberately built it) now that its values are the real production input? → A: No — it now renders through the same `PreviewStage`/landmark-overlay widgets the capture and recognition screens use, so a value found on the calibration screen is guaranteed to produce the identical result there. Two separate rendering pipelines is exactly the drift that caused the original bug.
+- Q: Does anything about `CameraXController.kt` or the native camera pipeline need to change to ship this? → A: No. There is no evidence the native side is wrong; the remaining device-specific differences are absorbed entirely by calibration. A native change stays a separate, future specification if evidence ever points there.
+
 ## Glossary
 
 | Term | Meaning |
@@ -63,6 +74,9 @@ Recorded during the revision that folded the former specification 004 into this 
 | **Operator Capture** | The capture mode for recording someone else: rear lens, unmirrored preview, countdown off. |
 | **Canonical convention** | The single mirroring convention every stored sample uses — the mirrored front-camera view. Captures from a lens that does not match it are converted before storage. |
 | **Canonical raw landmarks** | The earliest landmark set persisted with a sample, already expressed in the canonical convention. The earliest *canonical* observation, not a verbatim detector recording. |
+| **Hand Landmark Debug Overlay** | A developer-only visual layer, added in R2, that draws the live frame's detected landmarks and skeleton over the preview on the capture and recognition screens. Presentation-only: it reads the same frame stream recording and recognition already consume and never affects either. |
+| **Camera calibration** | A per-lens, per-device set of display transforms (preview rotation/mirror/fit; overlay rotation/mirror/swap-XY/scale/X-Y offset), added in R3, that governs how the live preview and the debug overlay are actually rendered. Persisted locally, defaulting to shipped values until a device saves its own. Display-only — it is never read by recording, dataset storage, or recognition. |
+| **Calibration screen** | The developer tool (originally D25's throwaway instrument, made permanent in R3) that lets a developer view and edit the active lens's camera calibration live, reset it to defaults, and export/import it as JSON. |
 
 ### The three sessions
 
@@ -386,6 +400,90 @@ clipped.
 
 ---
 
+### User Story 11 - See detected landmarks while developing (Priority: P3) *(added in R2)*
+
+A developer diagnosing a tracking problem — samples discarded for no obvious reason, handedness that
+looks wrong, jittery detection — turns on a debug overlay from either the capture screen or the
+recognition preview screen. The live preview now shows every detected hand's 21 landmarks and skeleton
+directly on top of the camera image, colored so the left and right hands are easy to tell apart, with
+each hand's handedness and confidence and the total hand count shown on screen. Turning the overlay off
+removes it immediately, with no restart and no effect on what is being recorded or recognized.
+
+**Why this priority**: Pure development tooling — it improves nobody's dataset and answers no product
+question, but it materially speeds up diagnosing detector and normalization problems while everything
+else in this specification is being built or debugged. It must never be reachable in a build an end user
+runs.
+
+**Independent Test**: With the overlay off, confirm recording and recognition behave exactly as before.
+Turn the overlay on, hold one and then two hands in frame, and confirm 21 landmarks and the correct
+skeleton are drawn per hand, colored by handedness, with handedness, confidence, and hand count shown
+on screen and updating every frame. Turn it off and confirm the drawing disappears at once.
+
+**Acceptance Scenarios**:
+
+1. **Given** the capture screen or the recognition preview screen with a live camera, **When** the
+   developer enables the debug overlay, **Then** every currently detected hand is drawn with all 21
+   landmarks and the standard MediaPipe hand-connection skeleton, aligned with the visible preview image.
+2. **Given** two hands are in frame, **When** the overlay is enabled, **Then** both hands are drawn
+   simultaneously, each in a color that identifies it as left or right.
+3. **Given** the overlay is enabled, **When** a new frame is processed, **Then** the on-screen landmarks,
+   handedness, confidence, and hand count update to match it, with no perceptible lag.
+4. **Given** the overlay is enabled, **When** the developer disables it, **Then** the drawing disappears
+   immediately, without leaving the screen or restarting the application.
+5. **Given** the overlay is enabled on the capture screen, **When** a take is recorded, **Then** the
+   recorded samples and the accepted/discarded counts are identical to what the same take would have
+   produced with the overlay off.
+6. **Given** the overlay is enabled on the recognition preview screen, **When** a pose is recognized and
+   confirmed, **Then** the recognition result and confirmation behave exactly as they would with the
+   overlay off.
+7. **Given** a release build of the application, **When** a user looks for a way to enable the overlay,
+   **Then** no such control exists anywhere in the interface.
+
+---
+
+### User Story 12 - Keep a working display calibration without re-finding it every time (Priority: P3) *(added in R3)*
+
+A developer finds, once, the exact combination of preview and overlay transforms that makes the live
+preview and the debug overlay actually line up on their device — using the calibration screen introduced
+alongside the debug overlay. That combination is not lost: the application remembers it per lens, applies
+it automatically every time the app runs on that device, and the same calibration screen stays reachable
+afterward to fine-tune it further, reset it, or compare it against a value exported from another device.
+
+**Why this priority**: Like User Story 11, this is development tooling — it produces no dataset artifact
+and answers no product question. It exists because the preview/overlay rendering that Users Stories 1–11
+depend on had no reliable way to be correct on every Android device from formula alone; a per-device,
+persisted calibration is the practical replacement for that formula.
+
+**Independent Test**: With no calibration ever saved, confirm the capture and recognition screens render
+using this lens's shipped default. Change a calibration value, confirm the live preview or overlay
+updates immediately, then fully restart the application and confirm the changed value is still in effect.
+Export the calibration, corrupt the exported text, attempt to import it, and confirm the calibration is
+unchanged and an error is shown.
+
+**Acceptance Scenarios**:
+
+1. **Given** a device with no previously saved calibration, **When** the capture or recognition screen
+   opens, **Then** the preview and overlay render using that lens's shipped default calibration, with no
+   manual adjustment required.
+2. **Given** the calibration screen is open with a live camera, **When** the developer changes any
+   control, **Then** the live preview or overlay updates immediately, with no restart, and the new value
+   is saved without a separate save action.
+3. **Given** a calibration value was changed and the application is fully restarted, **When** the capture
+   or recognition screen opens again, **Then** it renders using the previously changed value, not the
+   shipped default.
+4. **Given** the front lens has been calibrated, **When** the calibration screen is later opened against
+   the rear lens, **Then** the rear lens's own calibration is shown and edited, independent of the front
+   lens's values.
+5. **Given** a lens's calibration has been changed from its default, **When** the developer resets that
+   lens, **Then** only that lens returns to its shipped default; the other lens is unaffected.
+6. **Given** a calibration has been exported as JSON, **When** that exact document is imported — on the
+   same device or a different one — **Then** the resulting calibration matches what was exported exactly.
+7. **Given** the import dialog is open, **When** the developer submits text that is not valid JSON,
+   **Then** an error is shown, the dialog stays open, and the calibration active before the attempt is
+   unchanged.
+
+---
+
 ### Edge Cases
 
 - **Camera permission denied or revoked**: the app explains why the camera is needed and offers a
@@ -457,6 +555,35 @@ clipped.
 - **Backgrounded while a take summary is shown**: the camera is released as usual; on return the screen
   reacquires it and the user is ready for the next take without the completed take being repeated or
   lost.
+
+*Added in Revision R2:*
+
+- **Debug overlay enabled with no hand in view**: the overlay draws nothing and reports zero hands
+  rather than holding onto the last frame that had one.
+- **Debug overlay enabled before the camera is live**: nothing is drawn until the first frame arrives;
+  no error, no placeholder skeleton.
+- **Overlay toggled off mid-stream**: any frame subscription it opened is cancelled immediately, and no
+  further paint work happens for it.
+- **Overlay enabled during an active take or a recognition confirmation**: the take or confirmation
+  proceeds exactly as it would with the overlay off; the overlay only adds a visual layer.
+- **Overlay left enabled across a lens switch or mode change**: it keeps drawing the new session's
+  frames with no manual re-enable needed.
+
+*Added in Revision R3:*
+
+- **Calibration never saved on this device**: the shipped per-lens default is used; nothing about
+  startup is blocked or delayed waiting for a value that does not exist.
+- **A saved calibration file is missing or unreadable** (corrupted, hand-edited into invalid JSON):
+  treated exactly like no calibration ever saved — the shipped default is used, silently, rather than
+  crashing startup.
+- **A calibration value is changed while no camera is live**: the value is still saved; it takes effect
+  the next time a camera session for that lens becomes live, with no separate step required.
+- **Resetting a lens while the other lens has unsaved-from-default changes**: only the reset lens returns
+  to its default; the other lens's values are untouched.
+- **Importing a document that only contains one lens**: the missing lens falls back to its shipped
+  default rather than being left undefined or crashing the import.
+- **Importing malformed or non-JSON text**: the calibration active before the attempt is completely
+  unchanged, and the developer sees a clear error without leaving the screen.
 
 ## Requirements *(mandatory)*
 
@@ -792,8 +919,13 @@ clipped.
   reports for the active session, not from a fixed assumption.
 - **FR-100**: The preview MUST NOT be required to fill the display; the layout MUST prioritise
   simultaneous visibility of the reference pose, progress, and controls over preview size.
-- **FR-101**: Overlays drawn over the preview MUST align to the visible image area, not to the padded
-  bands.
+- **FR-101** *(revised in R3)*: Chrome overlays the user can see (countdown, capture indicator, take
+  summary, prediction HUD, effect playback) MUST remain visually centered on the visible image area, not
+  the padded bands. The developer landmark overlay is the one exception: its alignment is governed
+  entirely by this device's persisted camera calibration (FR-127–FR-130), which may legitimately extend
+  across the whole preview pane rather than being confined to the image sub-rect — the calibration values
+  a developer finds are only reproducible in production if the geometry they were found against is the
+  geometry production actually renders with.
 
 **Capture screen layout** *(added in R1)*
 
@@ -841,6 +973,58 @@ clipped.
   an alternative implementation of the camera boundary. The substitute MUST support the **complete**
   pipeline end to end — camera initialization, capture flow, validation, storage, and export — so the
   whole workflow is verifiable in automated testing with no hardware present.
+
+**Developer debug overlay** *(added in R2)*
+
+- **FR-117**: The application MUST provide a developer-only overlay that renders the current camera
+  session's detected hand landmarks directly on top of the live preview, on both the capture screen and
+  the recognition preview screen.
+- **FR-118**: When visible, the overlay MUST draw all 21 landmarks and the standard MediaPipe
+  hand-connection skeleton for every hand detected in the most recently processed frame.
+- **FR-119**: The overlay MUST support up to two simultaneously detected hands and MUST visually
+  distinguish the left hand from the right hand.
+- **FR-120**: The overlay MUST display, for the current frame: each detected hand's handedness, its
+  detection confidence, and the total number of hands detected.
+- **FR-121**: The overlay MUST update on every frame the live camera session emits, with no
+  user-perceptible lag beyond the frame's own arrival.
+- **FR-122**: The overlay MUST be a passive visual layer only: it MUST NOT alter, delay, block, or
+  duplicate the landmark data recording (FR-014) or recognition consumes, and MUST NOT intercept touch
+  input meant for the preview or its controls.
+- **FR-123**: A visible, user-operable control MUST let the user turn the overlay on or off at runtime,
+  on every screen it is available on, without restarting the application or leaving the screen.
+- **FR-124**: The overlay MUST be implemented as a self-contained, reusable rendering component that
+  depends on the existing landmark frame stream and nothing else — it MUST NOT depend on, and MUST NOT
+  be depended on by, any recording or recognition business logic.
+- **FR-125**: The overlay's toggle control MUST NOT be reachable in a release build, so it is never
+  visible to an end user; this MUST require no runtime configuration or settings screen.
+- **FR-126**: Disabling the overlay MUST release any frame subscription it opened; the overlay MUST NOT
+  retain state or continue consuming frames while hidden.
+
+**Persistent per-device camera calibration** *(added in R3)*
+
+- **FR-127**: The application MUST maintain, per lens (front and rear independently), a display
+  calibration — preview rotation, preview mirror, preview fit, overlay rotation, overlay mirror, overlay
+  swap-X/Y, overlay scale, and overlay X/Y offset — that governs how the live preview and the debug
+  overlay actually render on the capture screen and the recognition preview screen.
+- **FR-128**: A lens's calibration MUST default to that lens's shipped values whenever this device has
+  never saved a calibration of its own.
+- **FR-129**: A device's calibration MUST be persisted locally and MUST survive an application restart.
+  It MUST be stored isolated from dataset storage: no calibration value may ever be written into, or read
+  from, the dataset tree, and it MUST have no effect on recording or recognition.
+- **FR-130**: Changing any calibration control MUST update the live preview and/or the live overlay
+  immediately, with no restart, and MUST persist the new value as part of the same action — no separate
+  save step MUST be required.
+- **FR-131**: The calibration screen MUST remain reachable as a developer tool for as long as the
+  application exists, on the same terms as every other debug control (FR-125): unreachable in a release
+  build, requiring no runtime configuration.
+- **FR-132**: The calibration screen MUST let a developer reset the calibration of the lens currently
+  active on it to that lens's shipped default, without affecting the other lens's calibration.
+- **FR-133**: The calibration screen MUST let a developer export the full two-lens calibration as a
+  human-readable JSON document, and import a previously exported document to replace the full
+  calibration — so values found on one device can be compared against another.
+- **FR-134**: Importing a malformed or unparseable document MUST leave the calibration active before the
+  attempt completely unchanged and MUST show the developer a clear error; it MUST NOT crash the screen or
+  corrupt what is persisted.
 
 **Out of scope (explicitly not built)**
 
@@ -901,6 +1085,21 @@ clipped.
 - **Canonical raw landmarks**: The earliest landmark set persisted with a sample, already expressed in
   the canonical convention — the earliest *canonical* observation rather than a verbatim detector
   recording, and what a future normalization strategy is re-derived from.
+
+*Added in Revision R2:*
+
+- **Hand Landmark Debug Overlay**: A developer-only rendering layer drawn over the live preview,
+  showing every detected hand's 21 landmarks, skeleton, handedness, and confidence for the current
+  frame. Ephemeral presentation state — nothing it displays is stored, and it produces no dataset
+  artifact of any kind.
+
+*Added in Revision R3:*
+
+- **Camera calibration**: A per-lens set of display transforms (preview rotation/mirror/fit; overlay
+  rotation/mirror/swap-XY/scale/X-Y offset) that governs how the live preview and the debug overlay
+  render. Persisted locally per device, defaulting to shipped values until a device saves its own.
+  Display-only: it is never read by recording, dataset storage, or recognition, and is never included in
+  a dataset export.
 
 ## Success Criteria *(mandatory)*
 
@@ -976,6 +1175,30 @@ clipped.
 - **SC-032**: The countdown setting changes only when the user changes it: across a session involving
   mode initialization, lens switches, backgrounding, and screen lock, **zero** unrequested changes occur.
 
+*Added in Revision R2:*
+
+- **SC-033**: With the debug overlay enabled, every hand present in the current frame shows all 21
+  landmarks and the correct skeleton connections, in **100%** of sampled frames during manual
+  verification.
+- **SC-034**: Toggling the overlay on or off takes effect within one rendered frame and requires no
+  screen restart, in **100%** of trials.
+- **SC-035**: With the overlay disabled, every existing recording and recognition test passes unchanged
+  — **zero** behavioural differences from before this revision.
+- **SC-036**: The overlay's toggle control is absent from a release build in **100%** of inspected
+  release builds.
+
+*Added in Revision R3:*
+
+- **SC-037**: On a device with no previously saved calibration, the capture and recognition screens
+  render using the shipped per-lens default calibration, with **zero** manual adjustment required.
+- **SC-038**: A calibration value changed on the calibration screen is reflected in the live preview or
+  overlay within one rendered frame in **100%** of trials, and remains in effect after a full application
+  restart in **100%** of trials.
+- **SC-039**: Exporting a calibration and immediately importing that exact document reproduces the
+  exported calibration exactly, in **100%** of trials.
+- **SC-040**: A deliberately malformed import leaves the previously active calibration completely
+  unchanged, in **100%** of trials, and never crashes the calibration screen.
+
 ## Assumptions
 
 - **Capture window**: "approximately one second" is taken as a configurable window defaulting to
@@ -1038,6 +1261,14 @@ clipped.
   makes them reachable by the user.
 - **Android first**: the first release targets Android phones; nothing in this specification is
   Android-specific, so a later iOS release requires no behavioral change.
+- **The debug overlay is development tooling, not a product feature** *(R2)*: it exists to speed up
+  diagnosing detector and normalization problems while this application is built and maintained. It is
+  compiled out of reach in release builds (FR-125) precisely because it is not part of what a
+  contributor is meant to see or use.
+- **Camera calibration is development tooling, not a product feature** *(R3)*: like the debug overlay it
+  attaches to, it exists so a contributor can make the preview and overlay actually correct on whatever
+  device they are using, and is compiled out of reach in release builds for the same reason (FR-131). A
+  contributor never sees or interacts with it.
 
 ## Dependencies
 
@@ -1123,3 +1354,87 @@ except where stated**; no new features; no schema change.
 **What did not change**: the dataset schema, `schema_version`, the canonical convention, the capture
 modes, the metadata fields, and every other R1 decision. `session_uuid` still identifies a **recording
 session** — A1 renamed the concept in prose, never the persisted field.
+
+### R2 — Hand Landmark Debug Overlay (2026-07-27)
+
+**Status**: implemented. **Why this is a revision, not a new feature**: the overlay is developer-only
+tooling attached to the camera/landmark pipeline this specification already owns — it introduces no
+user-visible product capability, no new subsystem, and nothing an end user in a release build can ever
+reach (FR-125). Per the numbering policy in this section, that keeps it here rather than in a new
+specification, even though the same widget is composed onto both this specification's capture screen and
+specification 005's recognition preview screen (see *Clarifications → Session 2026-07-27*).
+
+**What changed**
+
+| Area | Change | Requirements |
+|---|---|---|
+| Debug overlay | Draws all 21 landmarks and the standard MediaPipe skeleton for every detected hand (up to two), colored by handedness, with handedness/confidence/hand-count shown on screen, updating every frame | FR-117–FR-121 (new) |
+| Non-interference | Passive rendering only; never touches recording or recognition data or input handling; releases its frame subscription when disabled | FR-122, FR-126 (new) |
+| Runtime toggle | A visible control turns the overlay on or off on each screen it appears on, without a restart | FR-123 (new) |
+| Architecture | A self-contained, reusable rendering component, decoupled from recording/recognition business logic | FR-124 (new) |
+| Production safety | The toggle is unreachable in a release build with no configuration required | FR-125 (new) |
+
+**Acceptance criteria**: User Story 11 added (P3). Success criteria SC-033–SC-036 added. Five edge cases
+added.
+
+**Decisions taken during this revision** (full Q&A in *Clarifications → Session 2026-07-27*):
+
+1. The overlay is a revision of this specification, not a new numbered one, because it is developer
+   tooling over an existing subsystem rather than a new product capability.
+2. It is available on both the capture screen and the recognition preview screen, since both already
+   share the same `PreviewStage` widget and the same camera session's frame stream.
+3. Visibility of the toggle is gated at compile time (`kReleaseMode`), not by a runtime setting, so
+   "unreachable in production" needs no configuration to get right or to accidentally get wrong.
+
+**Downstream artifacts**: `plan.md` and `tasks.md` were updated for R2 on 2026-07-27.
+`data-model.md`/`contracts/` were not touched — the overlay introduces no persisted entity and no new
+contract, only ephemeral presentation state over the existing `LandmarkFrame` stream.
+
+### R3 — Persistent Per-Device Camera Calibration (2026-07-28)
+
+**Status**: implemented. **Why this is a revision, not a new feature**: like R2, this is developer-only
+tooling attached to the camera/landmark pipeline this specification already owns — no user-visible
+product capability, no new subsystem, and nothing reachable in a release build (FR-131).
+
+**Context**: research D23–D25 (this document's companion `research.md`) established, on real hardware,
+that inferring the correct preview/overlay transform from platform-reported rotation and lens facing
+alone repeatedly failed, and built a manual calibration screen (D25) as a throwaway instrument to find
+working values by hand. A working combination was found for the reference device. R3 is the explicit
+decision that followed: stop trying to derive one universal transform, and instead treat "find it once,
+per device, by hand" as the permanent mechanism — the found values become this device's default, every
+device remembers its own, and the calibration screen that finds them stays in the app rather than being
+deleted.
+
+**What changed**
+
+| Area | Change | Requirements |
+|---|---|---|
+| Per-device calibration | A persisted, per-lens display calibration (preview rotation/mirror/fit, overlay rotation/mirror/swap-XY/scale/X-Y offset) now governs the live preview and debug overlay on both the capture and recognition screens, replacing rotation-degrees-based inference | FR-127, FR-130 (new) |
+| Defaults | Each lens defaults to the values found for the reference device until a device saves its own | FR-128 (new) |
+| Persistence & isolation | Survives an application restart; stored outside the dataset tree; has no effect on recording or recognition | FR-129 (new) |
+| Developer tool made permanent | The calibration screen (D25) is no longer deleted once a fix ships — it stays reachable exactly like the debug overlay's other controls | FR-131 (new) |
+| Developer UX | Reset the active lens to its default; export the full calibration as JSON; import a document to replace it, with malformed input rejected safely | FR-132–FR-134 (new) |
+| Overlay alignment scope | Chrome overlays still align to the visible image, not the bands; the developer landmark overlay is now the documented exception, aligned entirely by calibration | **FR-101 revised** |
+
+**Acceptance criteria**: User Story 12 added (P3). Success criteria SC-037–SC-040 added. Six edge cases
+added.
+
+**Decisions taken during this revision** (full Q&A in *Clarifications → Session 2026-07-28*):
+
+1. Calibration is a revision of this specification, not a new numbered one — same reasoning as R2: it is
+   developer tooling over an existing subsystem, not a new product capability.
+2. The calibration screen now renders through the same `PreviewStage`/landmark-overlay widgets the real
+   capture and recognition screens use, instead of D25's deliberately standalone pipeline — so a value
+   found on the calibration screen is guaranteed to produce the identical result in production. This is
+   also why FR-101 needed revising: the geometry the working values were tuned against (overlay filling
+   the whole preview pane) is now production's geometry too, not just the calibration screen's.
+3. `CameraXController.kt` and the native camera pipeline are explicitly untouched — there is no evidence
+   they are wrong, and the remaining device-specific differences are fully absorbed by calibration. A
+   native change, if evidence ever points there, is a separate future specification.
+4. Calibration is stored as a sibling of `datasets/`, never inside it, so it can never be swept into
+   export scanning or integrity validation — the same isolation discipline FR-115 already applies between
+   camera management and dataset storage.
+
+**Downstream artifacts**: `plan.md`, `research.md`, `quickstart.md`, and `tasks.md` were updated for R3
+on 2026-07-28. `data-model.md`/`contracts/` were not touched — calibration is presentation-only state with
+its own dedicated local file, not a dataset entity or a platform-channel contract change.

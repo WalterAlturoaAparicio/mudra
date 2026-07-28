@@ -13,12 +13,16 @@ import 'package:capture/application/camera/capture_settings_notifier.dart';
 import 'package:capture/application/capture/run_recording_session.dart';
 import 'package:capture/application/capture/session_ticker.dart';
 import 'package:capture/application/catalog/pose_progress_notifier.dart';
+import 'package:capture/application/debug/camera_calibration_notifier.dart';
+import 'package:capture/application/debug/coordinate_debug_notifier.dart';
+import 'package:capture/application/debug/debug_overlay_notifier.dart';
 import 'package:capture/application/export/export_dataset.dart';
 import 'package:capture/application/lifecycle/record_app_lifecycle.dart';
 import 'package:capture/application/recognition/load_exemplars.dart';
 import 'package:capture/application/recognition/recognition_session_controller.dart';
 import 'package:capture/domain/camera/camera.dart';
 import 'package:capture/domain/camera/capture_settings.dart';
+import 'package:capture/domain/canonical/camera_calibration.dart';
 import 'package:capture/domain/export/manifest.dart' show DeviceInfo;
 import 'package:capture/domain/normalization/translation_scale_normalizer.dart';
 import 'package:capture/domain/ports/ports.dart';
@@ -34,6 +38,7 @@ import 'package:capture/infrastructure/platform/ambient.dart';
 import 'package:capture/infrastructure/platform/platform_adapters.dart';
 import 'package:capture/infrastructure/recognition/file_exemplar_source.dart';
 import 'package:capture/infrastructure/recognition/weighted_euclidean_matcher.dart';
+import 'package:capture/infrastructure/storage/file_calibration_store.dart';
 import 'package:capture/infrastructure/storage/file_sample_repository.dart';
 import 'package:capture/infrastructure/storage/file_session_store.dart';
 import 'package:capture/shared/config/capture_config.dart';
@@ -94,6 +99,12 @@ final sampleRepositoryProvider = Provider<SampleRepository>((ref) {
 final sessionStoreProvider = Provider<SessionStore>((ref) {
   final root = ref.watch(storageRootProvider).requireValue;
   return FileSessionStore(rootPath: root, config: ref.watch(configProvider));
+});
+
+/// Persisted per-device camera-calibration state.
+final calibrationStoreProvider = Provider<CalibrationStore>((ref) {
+  final root = ref.watch(storageRootProvider).requireValue;
+  return FileCalibrationStore(rootPath: root, config: ref.watch(configProvider));
 });
 
 /// The pose catalog asset.
@@ -288,3 +299,27 @@ final recognitionSessionControllerProvider =
 /// Data-driven visual-effect definitions (FR-019/FR-020).
 final effectCatalogSourceProvider =
     FutureProvider<EffectCatalogSource>((ref) => AssetEffectCatalogSource.load());
+
+// -- Revision R2 — Developer debug overlay -----------------------------------
+
+/// Whether the hand landmark debug overlay is visible (spec 003 Revision R2,
+/// FR-117/FR-123). Its toggle control is only ever reachable outside a release
+/// build (FR-125); this provider itself is build-mode-agnostic.
+final debugOverlayEnabledProvider =
+    NotifierProvider<DebugOverlayNotifier, bool>(DebugOverlayNotifier.new);
+
+/// Whether the temporary coordinate-pipeline diagnostic overlay is visible
+/// (research D24) — independent of [debugOverlayEnabledProvider] so the
+/// skeleton view and the diagnostics can be toggled separately. Its toggle
+/// control is likewise only ever reachable outside a release build.
+final coordinateDebugEnabledProvider =
+    NotifierProvider<CoordinateDebugNotifier, bool>(CoordinateDebugNotifier.new);
+
+/// The developer camera-calibration panel's persisted, per-lens state
+/// (research D25; made permanent by the per-device calibration system).
+/// Loads whatever this device previously saved, falling back to
+/// [CameraCalibrationSet.defaults] when nothing has been saved yet.
+final cameraCalibrationProvider =
+    AsyncNotifierProvider<CameraCalibrationNotifier, CameraCalibrationSet>(
+  CameraCalibrationNotifier.new,
+);

@@ -13,6 +13,7 @@ import 'dart:async';
 import 'package:capture/application/camera/camera_session_controller.dart';
 import 'package:capture/application/recognition/recognition_session_controller.dart';
 import 'package:capture/domain/camera/camera.dart';
+import 'package:capture/domain/canonical/camera_calibration.dart';
 import 'package:capture/domain/effects/effect_definition.dart';
 import 'package:capture/domain/landmarks/landmarks.dart';
 import 'package:capture/domain/ports/ports.dart';
@@ -21,12 +22,17 @@ import 'package:capture/domain/recognition/catalog_readiness.dart';
 import 'package:capture/domain/recognition/recognition_result.dart';
 import 'package:capture/domain/recognition/stability.dart';
 import 'package:capture/presentation/capture/preview_stage.dart';
+import 'package:capture/presentation/debug/camera_calibration_screen.dart';
+import 'package:capture/presentation/debug/coordinate_debug_toggle_button.dart';
+import 'package:capture/presentation/debug/debug_overlay_toggle_button.dart';
+import 'package:capture/presentation/debug/hand_landmark_debug_overlay.dart';
 import 'package:capture/presentation/design/design.dart';
 import 'package:capture/presentation/recognition/catalog_readiness_sheet.dart';
 import 'package:capture/presentation/recognition/effect_overlay.dart';
 import 'package:capture/presentation/recognition/prediction_hud.dart';
 import 'package:capture/shared/di/providers.dart';
 import 'package:capture/shared/errors/failures.dart';
+import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -45,7 +51,9 @@ class _RecognitionPreviewScreenState
   CameraControllerState _camera = const CameraClosed();
   StreamSubscription<CameraControllerState>? _cameraSubscription;
   StreamSubscription<LandmarkFrame>? _frameSubscription;
+  StreamSubscription<LandmarkFrame>? _rawFrameSubscription;
   StreamSubscription<void>? _orientationSubscription;
+  LandmarkFrame? _lastRawFrame;
 
   late final CameraSessionController _controller;
   late final OrientationController _orientation;
@@ -110,6 +118,7 @@ class _RecognitionPreviewScreenState
     WidgetsBinding.instance.removeObserver(this);
     unawaited(_cameraSubscription?.cancel());
     unawaited(_frameSubscription?.cancel());
+    unawaited(_rawFrameSubscription?.cancel());
     unawaited(_orientationSubscription?.cancel());
     unawaited(_controller.release(CameraReleaseReason.screenLeft));
     unawaited(_orientation.unlock());
@@ -160,6 +169,12 @@ class _RecognitionPreviewScreenState
         _readiness = result.readiness;
       });
       _frameSubscription = _controller.frames.listen(_onFrame);
+      // Raw (uncanonicalized) frames, kept only for the effect anchor below —
+      // matching must stay on the canonical stream above (FR-004's dataset
+      // convention), but where the effect is *drawn* must agree with what the
+      // preview actually shows (see `DisplayOrientation`'s doc comment).
+      _rawFrameSubscription =
+          _controller.rawFrames.listen((frame) => _lastRawFrame = frame);
     } on ExemplarLoadFailure catch (failure) {
       if (!mounted) return;
       setState(() {
@@ -198,23 +213,38 @@ class _RecognitionPreviewScreenState
     if (!mounted) return;
     setState(() {
       _activeEffect = catalogSource.effectFor(event.poseId);
-      _activeEffectAnchor = _anchorFor(frame);
+      _activeEffectAnchor = _anchorFor(_lastRawFrame);
       _activeEffectKey = event.confirmedAt;
     });
   }
 
-  /// The centroid of every hand in [frame], in the same normalized `[0, 1]`
-  /// space `HandLandmarks` already use — a demo-quality anchor, not a
-  /// per-pose-tuned one (FR-021).
-  Offset _anchorFor(LandmarkFrame frame) {
-    if (frame.hands.isEmpty) return const Offset(0.5, 0.5);
+  /// The centroid of every hand in [frame], mapped into **display space**
+  /// via this lens's persisted [CameraCalibration] — a demo-quality anchor,
+  /// not a per-pose-tuned one (FR-021), but one that must still land on the
+  /// hand the user actually sees.
+  ///
+  /// [frame] MUST be a **raw** frame (`_lastRawFrame`, sourced from
+  /// `CameraSessionController.rawFrames`), never the canonicalized frame
+  /// [recognition] just matched against — canonicalization is a
+  /// dataset-storage convention (mirrored for the rear lens) unrelated to
+  /// what the rear lens's actual, unmirrored preview shows on screen. See
+  /// [CameraCalibration]'s doc comment for the full explanation.
+  Offset _anchorFor(LandmarkFrame? frame) {
+    final info = _controller.info;
+    if (frame == null || info == null || frame.hands.isEmpty) {
+      return const Offset(0.5, 0.5);
+    }
+    final calibrationSet =
+        ref.read(cameraCalibrationProvider).valueOrNull ?? CameraCalibrationSet.defaults;
+    final calibration = calibrationSet.forLens(info.lens);
     var sumX = 0.0;
     var sumY = 0.0;
     var count = 0;
     for (final hand in frame.hands) {
       for (final point in hand.landmarks.points) {
-        sumX += point.x;
-        sumY += point.y;
+        final (x, y) = calibration.mapOverlayPoint(point.x, point.y);
+        sumX += x;
+        sumY += y;
         count++;
       }
     }
@@ -236,6 +266,16 @@ class _RecognitionPreviewScreenState
               icon: const Icon(Icons.fact_check_outlined),
               onPressed: () => _openReadinessSheet(catalog),
             ),
+          if (!kReleaseMode) ...[
+            const DebugOverlayToggleButton(),
+            const CoordinateDebugToggleButton(),
+            IconButton(
+              key: const Key('open-camera-calibration'),
+              tooltip: 'Camera calibration',
+              icon: const Icon(Icons.tune),
+              onPressed: () => unawaited(openCameraCalibrationScreen(context)),
+            ),
+          ],
         ],
       ),
       body: SafeArea(
@@ -304,10 +344,20 @@ class _RecognitionPreviewScreenState
 
   Widget _preview(PoseCatalog catalog) {
     final camera = _camera;
+    final calibrationSet =
+        ref.watch(cameraCalibrationProvider).valueOrNull ?? CameraCalibrationSet.defaults;
     return switch (camera) {
       CameraLive(:final info) => PreviewStage(
         info: info,
+        calibration: calibrationSet.forLens(info.lens),
         overlays: [
+          if (!kReleaseMode && ref.watch(debugOverlayEnabledProvider))
+            HandLandmarkDebugOverlay(
+              frames: _controller.rawFrames,
+              info: info,
+              calibration: calibrationSet.forLens(info.lens),
+              showCoordinateDebug: ref.watch(coordinateDebugEnabledProvider),
+            ),
           PredictionHud(
             result: _result,
             // Safe: `_preview` is only reached once `_loadingExemplars` is

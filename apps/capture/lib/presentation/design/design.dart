@@ -47,6 +47,15 @@ class Palette {
 
   /// Elevated surface.
   static const Color elevated = Color(0xFF1E212A);
+
+  /// Debug overlay: left-hand skeleton color.
+  static const Color leftHand = Color(0xFF4FD8EB);
+
+  /// Debug overlay: right-hand skeleton color.
+  static const Color rightHand = Color(0xFFFFA94F);
+
+  /// Debug overlay: unknown-handedness skeleton color.
+  static const Color unknownHand = Color(0xFF9E9E9E);
 }
 
 /// The application theme.

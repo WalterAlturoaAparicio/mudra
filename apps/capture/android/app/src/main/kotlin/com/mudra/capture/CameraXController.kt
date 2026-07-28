@@ -2,8 +2,11 @@ package com.mudra.capture
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CameraManager
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.util.Size
 import android.view.Surface
 import androidx.camera.core.CameraSelector
@@ -115,23 +118,37 @@ class CameraXController(
         textureEntry = entry
         val surfaceTexture = entry.surfaceTexture()
 
+        // The rotation this session's frames need to reach display orientation, computed
+        // **once**, from the actual physical facts — the sensor's fixed mounting orientation
+        // and the lens facing — never from screen rotation alone. Screen rotation alone cannot
+        // account for a sensor that is not mounted the same way on every device, or for the
+        // sign flip a front lens needs relative to a rear one (root cause: the previous
+        // implementation read only `Display.rotation` and used the result solely to relabel
+        // `previewWidth`/`previewHeight`, never to actually rotate anything — the buffer handed
+        // to the `Surface` stayed in raw sensor orientation regardless).
+        //
+        // **What this value is NOT used for**: it never touches the bitmap MediaPipe analyzes
+        // (see `analyze()`) — landmark coordinates stay in raw analysis-frame space exactly as
+        // before, so recorded samples and recognition matching are unaffected. It exists purely
+        // so Dart can perform ONE rotation-aware transform, shared by the preview widget and any
+        // landmark-rendering overlay, instead of the preview and the overlay each guessing.
+        val lensFacingConstant = if (lens == LENS_FRONT) LENS_FACING_FRONT else LENS_FACING_BACK
+        val rotationDegrees = requiredRotationDegrees(lifecycleOwner, lensFacingConstant)
+
         // The preview size is whatever CameraX actually chose, reported back through the
-        // SurfaceRequest — never a compile-time constant. Dart derives the aspect ratio from
-        // it (FR-099), so a wrong value here produces a distorted preview that no amount of
-        // Dart-side layout can correct.
+        // SurfaceRequest — never a compile-time constant. Reported **raw**, in the same
+        // (un-rotated) sensor orientation the analysis frame uses; Dart is the single place that
+        // combines this with [rotationDegrees] to derive what will actually be displayed
+        // (FR-099), so there is exactly one rotation decision instead of one on each side that
+        // could disagree.
         var previewWidth = 0
         var previewHeight = 0
-        var rotationDegrees = 0
 
         val preview = Preview.Builder().build()
         preview.setSurfaceProvider { request: SurfaceRequest ->
             val resolution = request.resolution
-            rotationDegrees = resolutionRotation(lifecycleOwner)
-            // CameraX reports resolution in sensor orientation; a portrait screen consuming a
-            // landscape sensor stream must swap the axes to describe what will be displayed.
-            val swap = rotationDegrees == 90 || rotationDegrees == 270
-            previewWidth = if (swap) resolution.height else resolution.width
-            previewHeight = if (swap) resolution.width else resolution.height
+            previewWidth = resolution.width
+            previewHeight = resolution.height
 
             surfaceTexture.setDefaultBufferSize(resolution.width, resolution.height)
             val surface = Surface(surfaceTexture)
@@ -158,6 +175,17 @@ class CameraXController(
             previewWidth = analysisSize.width
             previewHeight = analysisSize.height
         }
+
+        // Temporary instrumentation (research D24): Preview and ImageAnalysis are two
+        // independent CameraX use cases, bound without a shared ViewPort — nothing guarantees
+        // they see the same field of view or aspect ratio. This line makes that comparison
+        // possible directly from Logcat instead of having to reconcile two separate reports.
+        Log.d(
+            "coord-debug",
+            "open($lens): preview=${previewWidth}x$previewHeight (raw) " +
+                "requestedAnalysis=${analysisSize.width}x${analysisSize.height} (raw) " +
+                "rotationDegrees=$rotationDegrees",
+        )
 
         return SessionInfo(
             textureId = entry.id(),
@@ -222,14 +250,76 @@ class CameraXController(
         else -> throw LensUnavailableException("Unknown lens \"$lens\".")
     }
 
-    private fun resolutionRotation(lifecycleOwner: LifecycleOwner): Int {
-        val display = (lifecycleOwner as? android.app.Activity)?.windowManager?.defaultDisplay
-        return when (display?.rotation) {
+    /**
+     * The clockwise rotation, in degrees, that must be applied to a raw frame from the
+     * [lensFacing] camera so it appears upright on the current display — the standard Camera2
+     * formula (unchanged since the platform's own `Camera2BasicFragment` sample), not a
+     * device-specific guess:
+     *
+     * - **rear-facing**: `(sensorOrientation - deviceRotationDegrees + 360) % 360`
+     * - **front-facing**: `(sensorOrientation + deviceRotationDegrees) % 360` — the sign flips
+     *   because a front sensor faces the same direction as the display, so its rotation
+     *   relative to the device compounds with the device's own rotation instead of opposing it.
+     *
+     * [sensorOrientation] is a fixed property of the physical camera (how many degrees clockwise
+     * its sensor's natural image must be rotated to match the device's natural orientation) and
+     * is read from [CameraCharacteristics], never assumed — different devices mount their
+     * sensors differently, including between a device's own front and rear cameras.
+     */
+    private fun requiredRotationDegrees(lifecycleOwner: LifecycleOwner, lensFacing: Int): Int {
+        val deviceRotationDegrees = when (
+            (lifecycleOwner as? android.app.Activity)?.windowManager?.defaultDisplay?.rotation
+        ) {
             Surface.ROTATION_90 -> 90
             Surface.ROTATION_180 -> 180
             Surface.ROTATION_270 -> 270
-            else -> 90 // Portrait-locked capture screen consuming a landscape sensor stream.
+            // No display to query (e.g. a non-Activity host): the device's natural orientation
+            // is the least presumptuous default, and is auditable via the returned value rather
+            // than silently baked in — a fixed-but-wrong screen rotation only skews the reported
+            // `rotationDegrees`, it never desyncs the preview from the landmarks, because both
+            // are transformed by that same reported value on the Dart side.
+            else -> 0
         }
+        val sensor = sensorOrientation(lensFacing)
+        val result = if (lensFacing == LENS_FACING_FRONT) {
+            (sensor + deviceRotationDegrees) % 360
+        } else {
+            (sensor - deviceRotationDegrees + 360) % 360
+        }
+        // Temporary instrumentation (research D24) — every input to `rotationDegrees` on one
+        // line, so a wrong final value can be traced to a wrong sensor reading, a wrong display
+        // reading, or the formula itself, without guessing. Grep "coord-debug" to find/remove.
+        Log.d(
+            "coord-debug",
+            "requiredRotationDegrees: lensFacing=$lensFacing " +
+                "sensorOrientation=$sensor deviceRotationDegrees=$deviceRotationDegrees " +
+                "-> rotationDegrees=$result",
+        )
+        return result
+    }
+
+    /**
+     * [CameraCharacteristics.SENSOR_ORIENTATION] for the first camera with [lensFacing].
+     *
+     * Falls back to `0` (natural sensor orientation) on any characteristics-query failure —
+     * this is queried purely to compute [rotationDegrees], a diagnostic value the Dart side uses
+     * for layout; a wrong-but-present value only skews the reported rotation, whereas letting an
+     * exception here abort [open] would refuse a camera CameraX itself already confirmed exists.
+     */
+    private fun sensorOrientation(lensFacing: Int): Int {
+        try {
+            val manager = context.getSystemService(Context.CAMERA_SERVICE) as? CameraManager
+                ?: return 0
+            for (id in manager.cameraIdList) {
+                val characteristics = manager.getCameraCharacteristics(id)
+                if (characteristics.get(CameraCharacteristics.LENS_FACING) == lensFacing) {
+                    return characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
+                }
+            }
+        } catch (error: Exception) {
+            // Best effort — see the fallback rationale above.
+        }
+        return 0
     }
 
     private fun buildLandmarker(): HandLandmarker {

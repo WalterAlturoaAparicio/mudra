@@ -119,6 +119,8 @@ class CameraSessionController {
       StreamController<CameraControllerState>.broadcast();
   final StreamController<LandmarkFrame> _frames =
       StreamController<LandmarkFrame>.broadcast();
+  final StreamController<LandmarkFrame> _rawFrames =
+      StreamController<LandmarkFrame>.broadcast();
 
   CameraSession? _current;
   StreamSubscription<LandmarkFrame>? _frameSubscription;
@@ -142,8 +144,23 @@ class CameraSessionController {
   /// Canonical landmark frames from whichever session is live (FR-053).
   ///
   /// Frames from a superseded session never reach here: its subscription is
-  /// cancelled before the next session is bound.
+  /// cancelled before the next session is bound. This is what recording
+  /// (FR-014) and recognition matching consume — canonicalization is a
+  /// **dataset-storage** convention, so anything comparing a live frame
+  /// against previously recorded exemplars must stay on this stream.
   Stream<LandmarkFrame> get frames => _frames.stream;
+
+  /// Landmark frames exactly as the session produced them, **before**
+  /// canonicalization — analysis-space coordinates, unmirrored, from
+  /// whichever session is live.
+  ///
+  /// This is what anything rendering onto the live preview must consume
+  /// instead of [frames]: canonicalization mirrors rear-lens coordinates to
+  /// match dataset-storage convention, which has no relationship to what the
+  /// rear lens's actual (unmirrored) preview pixels show on screen. Combine
+  /// this stream with [DisplayOrientation.fromSession] to map into display
+  /// space (see that class's doc for the full root-cause explanation).
+  Stream<LandmarkFrame> get rawFrames => _rawFrames.stream;
 
   /// Which lenses the device can provide (FR-064/FR-069).
   Future<Set<LensPosition>> availableLenses() => _source.availableLenses();
@@ -194,6 +211,7 @@ class CameraSessionController {
     _disposed = true;
     await _states.close();
     await _frames.close();
+    await _rawFrames.close();
   }
 
   // -- internals -------------------------------------------------------------
@@ -258,6 +276,12 @@ class CameraSessionController {
     _current = session;
     _frameSubscription = session.frames.listen(
       (frame) {
+        // One subscription to the platform stream, two independent
+        // publications: canonical for recording/recognition (unchanged
+        // behaviour), raw for anything rendering onto the live preview (see
+        // [rawFrames] and [DisplayOrientation]). Neither consumer's presence
+        // affects the other — both are ordinary broadcast listeners.
+        if (!_rawFrames.isClosed) _rawFrames.add(frame);
         if (_frames.isClosed) return;
         _frames.add(_converter.toCanonical(frame));
       },
@@ -276,6 +300,11 @@ class CameraSessionController {
       'preview': '${session.info.previewWidth}x${session.info.previewHeight}',
       'analysis': '${session.info.analysisWidth}x${session.info.analysisHeight}',
       'platform_lens_id': session.info.platformLensId,
+      // Auditable rather than inferred (D23): a wrong on-screen rotation is
+      // otherwise indistinguishable, from the logs alone, between "the
+      // platform reported the wrong value" and "Dart mistransformed a
+      // correct one".
+      'rotation_degrees': session.info.rotationDegrees,
       'duration_ms': DateTime.now().difference(startedAt).inMilliseconds,
     });
 

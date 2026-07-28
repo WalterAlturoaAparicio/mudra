@@ -244,4 +244,33 @@ void main() {
       expect(find.byKey(const Key('use-other-lens-button')), findsOneWidget);
     });
   });
+
+  group('the hand landmark debug overlay (spec 003 Revision R2)', () {
+    testWidgets('is off by default and toggling it does not disturb Record',
+        (tester) async {
+      await pumpScreen(tester);
+      await settle(tester);
+
+      expect(find.byKey(const Key('debug-overlay-toggle')), findsOneWidget);
+      expect(find.byKey(const Key('debug-overlay-paint')), findsNothing);
+
+      await tester.tap(find.byKey(const Key('debug-overlay-toggle')));
+      await tester.pump();
+
+      expect(find.byKey(const Key('debug-overlay-paint')), findsOneWidget);
+      final button = tester.widget<FilledButton>(
+        find.byKey(const Key('record-button')),
+      );
+      expect(
+        button.onPressed,
+        isNotNull,
+        reason: 'FR-122: the overlay must not interfere with recording',
+      );
+
+      await tester.tap(find.byKey(const Key('debug-overlay-toggle')));
+      await tester.pump();
+
+      expect(find.byKey(const Key('debug-overlay-paint')), findsNothing);
+    });
+  });
 }

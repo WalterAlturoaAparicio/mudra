@@ -24,7 +24,7 @@
       "display_name": "Domain Expansion",
       "description": "Both hands forming a wide circle in front of the chest.",
       "reference_image": "assets/poses/domain_expansion.png",
-      "required_hands": 2
+      "required_hands": 1
     },
     {
       "pose_id": "dragon",

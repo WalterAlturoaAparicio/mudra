@@ -22,6 +22,7 @@ recordings/*/
 
 # ML model assets (auto-downloaded on first run by resolve_model_path)
 assets/*.task
+assets/*.tflite
 
 # Environment / secrets
 .env

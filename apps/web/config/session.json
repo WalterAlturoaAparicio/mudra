@@ -1,0 +1,31 @@
+{
+  "activePoseSet": ["hi", "peace", "tp", "dragon"],
+  "recognition": {
+    "confidenceFloor": 0.5,
+    "ambiguityMargin": 0.12,
+    "softmaxTemperature": 0.35,
+    "topCandidateCount": 3,
+    "weights": [
+      0.5, 1.0, 1.0, 1.0, 2.0, 1.0, 1.0, 1.0, 2.0, 1.0, 1.0, 1.0, 2.0, 1.0, 1.0, 1.0, 2.0, 1.0, 1.0,
+      1.0, 2.0
+    ]
+  },
+  "events": {
+    "holdDurationMs": 1000
+  },
+  "bundle": {
+    "minSamples": 20,
+    "formatVersion": 1
+  },
+  "renderer": {
+    "particleRadius": 6,
+    "landmarkRadius": 3,
+    "connectionWidth": 2,
+    "trailWidth": 4
+  },
+  "budgets": {
+    "targetFps": 30,
+    "recognitionLatencyMs": 200,
+    "triggerToPaintMs": 200
+  }
+}

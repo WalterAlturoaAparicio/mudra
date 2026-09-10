@@ -1,6 +1,160 @@
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 1.6.0 → 1.7.0
+Rationale: Mudra Web's second milestone is authorized: a visual effect editor and Person
+Segmentation as a capability-gated addition, both explicitly excluded by v1.6.0. This amendment
+lifts exactly those two exclusions, bounded to the scope a new specification will detail, and
+nothing else. MINOR — a new authorized-milestone entry within Principle VI and one clarifying
+addition to the Web applications standards subsection; no principle is removed, weakened, or
+redefined incompatibly. The two architectural rules v1.6.0 made binding on the effect runtime —
+effects are data, and the runtime never draws — are restated as binding on the editor too: it
+authors data through the existing pipeline and never executes or draws effect output itself.
+
+Modified in this amendment (1.7.0):
+  - Principle VI (Scope Discipline) — adds the Mudra Web Milestone 2 authorization: a visual
+    effect editor (live camera/canvas stage, action palette, pose/trigger panel, a
+    schema-driven inspector reading each action's registered parameter metadata, and a
+    timeline over the existing absolute `at_ms` offsets — tracks, clips, select/move/resize/
+    delete/duplicate, no keyframes or curves) that authors `EffectDefinition`/`Timeline` data
+    through the unchanged `EffectRuntime → RenderCommand[] → Renderer` pipeline; a pose/trigger
+    panel that must not alter recognition thresholds, matching weights, softmax, or hold/
+    stability semantics; preview and test-trigger modes that inject a synthetic `PoseEvent`
+    into the same runtime and renderer a real pose confirmation uses; **local-only** project
+    persistence (create, save, load, duplicate, import, export); a small local asset library
+    compatible with the existing `AssetReference` indirection; and **Person Segmentation**,
+    authorized for the first time, as one more capability-registry entry using the existing
+    MediaPipe Tasks Vision family, gating segmentation-dependent actions (person visibility,
+    person-only tint, background replacement, background effects, foreground/background
+    compositing, person isolation) to the same inert-and-reported rule Milestone 1 already
+    established — never simulated by compositing over an undifferentiated full-frame camera
+    image. Publishing, accounts, cloud persistence, a marketplace, social or collaborative
+    features, gameplay mechanics, arbitrary user scripting, backend services, and any
+    WebGL/3D rendering stack remain explicitly NOT authorized; Canvas2D remains the default
+    and required renderer.
+  - Technology & Code Quality Standards, "Web applications" subsection — NEW bullet naming the
+    editor as a presentation-layer authoring surface with no parallel effect-execution path,
+    and Person Segmentation as accessed behind the same replaceable detection-interface
+    discipline already required for hand-landmark detection.
+  - Principle II is restated as binding without exception on the new persistence surface: a
+    saved project MUST NOT contain a camera frame, image, video, or any derivative of captured
+    imagery — only effect data.
+
+Principles I–VI: unchanged in intent. Principle VI gains one authorization entry; no principle
+text is weakened. Principle II is cited, not modified.
+
+Templates requiring updates:
+  - ✅ .specify/templates/plan-template.md — Constitution Check is principle-generic; the new
+    authorization is evaluated by the existing gate with no edit.
+  - ✅ .specify/templates/spec-template.md — no mandatory section added or removed.
+  - ✅ .specify/templates/tasks-template.md — no new principle-driven task category.
+
+Deferred / follow-up TODOs:
+  - Publishing, accounts, cloud persistence, a marketplace, social/collaborative features,
+    gameplay mechanics, arbitrary scripting, and backend services each require their own
+    explicit authorization amendment; none is granted here.
+  - The Mudra Web Milestone 2 feature specification itself is a separate SDD artifact under
+    specs/, produced by the normal /speckit-specify → /speckit-plan → /speckit-tasks flow.
+    This amendment authorizes that work to begin; it does not substitute for it.
+
+--- previous report (1.5.0 → 1.6.0) -------------------------------------------
+Version change: 1.5.0 → 1.6.0
+Rationale: Mudra Web — a browser-based, camera-driven interactive experience at apps/web/ — is
+authorized for its first milestone (a vertical slice proving camera → pose recognition → pose event
+→ effect execution → visible change on screen). Authorizing it requires three supporting rules the
+constitution did not previously state: standards for a TypeScript/browser application, an explicit
+position on sharing repository-level binary assets such as the MediaPipe model, and a verification
+obligation for algorithms that must be re-implemented in a language Engine cannot serve. MINOR — a
+new authorized-milestone entry, a new per-application standards subsection, and two new boundary
+rules; no principle is removed, weakened, or redefined incompatibly, and the versioned pose-sample
+JSON schema remains the only contract between independent applications.
+
+Modified in this amendment (1.6.0):
+  - Principle VI (Scope Discipline) — adds the Mudra Web Milestone 1 authorization: browser camera
+    capture, in-browser hand landmark detection, deterministic pose recognition over the existing
+    dataset, a data-driven effect runtime, and real-time compositing over the camera view. Two
+    architectural rules are made part of the authorization because they are what keep the milestone
+    extensible: effects MUST be data rather than per-effect code paths, and the effect runtime MUST
+    NOT draw (it emits declarative render output for a separate, replaceable renderer). A visual
+    effect editor, person segmentation, WebGL/3D, gameplay, ML/training, and any backend, accounts,
+    cloud, or social/user-generated-content capability are explicitly NOT authorized. Principle II
+    is restated as binding without exception: Mudra Web persists no imagery and builds no dataset.
+  - Technology & Code Quality Standards — NEW subsection: "Web applications (TypeScript,
+    apps/web/)", mirroring the existing Engine and Capture subsections. Names TypeScript and
+    browser platform APIs, names MediaPipe Tasks Vision as the detection backend behind a
+    replaceable interface (the same rule and reason as Engine's backend), mandates clean
+    architecture layers, typed immutable models, data-driven configuration, domain-layer tests,
+    clean static analysis, and permits Mudra-owned experience assets. Build tooling is deliberately
+    NOT named — that is a plan-level choice, not a constitutional one.
+  - Monorepo & Cross-Application Boundaries — the layout list now includes apps/web/ (TypeScript);
+    NEW rule "Shared binary assets are shared, not vendored" (repository-level assets such as
+    assets/hand_landmarker.task MAY be consumed directly by any application in any language, and
+    MUST NOT be copied into an application tree); NEW rule "Cross-language ports MUST be verified
+    against golden fixtures" (codifies the pattern apps/capture/ already established via
+    scripts/export_capture_fixtures.py, and makes it binding).
+
+Principles I–VI: unchanged in intent. Principle VI gains one authorization entry; no principle text
+is weakened. Principle II is cited, not modified.
+
+Templates requiring updates:
+  - ✅ .specify/templates/plan-template.md — Constitution Check is principle-generic and its
+    Language/Version field is already language-agnostic; the new authorization and the two new
+    boundary rules are evaluated by the existing gate with no edit.
+  - ✅ .specify/templates/spec-template.md — no mandatory section added or removed.
+  - ✅ .specify/templates/tasks-template.md — no new principle-driven task category.
+  - ⚠ README.md — pending: the Monorepo table and Folder Structure section must list apps/web/.
+    Tracked as work of the forthcoming Mudra Web feature, not as constitution follow-up — the same
+    disposition v1.5.0 gave the identical README gap for Studio.
+
+Deferred / follow-up TODOs:
+  - Mudra Web's later capabilities (visual effect editor, person segmentation, WebGL/3D rendering,
+    gameplay, and any user-generated or social functionality) each require their own explicit
+    authorization amendment; none is granted here.
+  - The Mudra Web feature specification itself is a separate SDD artifact under specs/, produced by
+    the normal /speckit-specify → /speckit-plan → /speckit-tasks flow. This amendment authorizes
+    that work to begin; it does not substitute for it.
+
+--- previous report (1.4.0 → 1.5.0) -------------------------------------------
+Version change: 1.4.0 → 1.5.0
+Rationale: Mudra Studio — the desktop IDE at apps/studio/ — is authorized for its first
+milestone (read-only dataset exploration and visual inspection), and Mudra Engine is
+reclassified as the repository's shared platform library so same-language applications may
+consume its public interfaces. MINOR — a new authorized-milestone entry and materially
+expanded Monorepo guidance; no principle is removed, weakened, or redefined incompatibly, and
+the versioned pose-sample JSON schema remains the only contract between independent
+applications.
+
+Modified in this amendment (1.5.0):
+  - Principle VI (Scope Discipline) — adds the Mudra Studio Milestone 1 authorization:
+    pose/sample browsing, landmark visualization (raw and normalized), multi-sample overlay,
+    per-pose statistics, and a navigation shell with placeholders. Model training, dataset
+    export, sample editing, camera capture, and pose recognition are explicitly NOT
+    authorized and remain deferred to later, separately-authorized milestones. The milestone
+    is read-only with respect to the dataset.
+  - Monorepo & Cross-Application Boundaries — reclassifies apps/engine/ as the repository's
+    shared platform library. Same-language applications under apps/ MAY import Engine's
+    documented public interfaces, one way only; Engine MUST NOT import from any application;
+    consuming applications MUST NOT modify, extend, or vendor Engine source, and MUST record
+    their consumed Engine surface in a contract document. Application-to-application source
+    imports remain forbidden, and the versioned JSON schema remains the only contract between
+    independent applications.
+
+Principles I–V: unchanged, not weakened.
+
+Templates requiring updates:
+  - ✅ .specify/templates/plan-template.md — Constitution Check is principle-generic; the new
+    authorization and the Engine-library rule are evaluated by the existing gate.
+  - ✅ .specify/templates/spec-template.md — no mandatory section added or removed.
+  - ✅ .specify/templates/tasks-template.md — no new principle-driven task category.
+  - ⚠ README.md — pending: the monorepo layout section should list apps/studio/ and describe
+    Engine as the shared platform library. Tracked as tasks T058/T059 of feature
+    006-studio-dataset-explorer, not as constitution follow-up.
+
+Deferred / follow-up TODOs:
+  - Mudra Studio's later capabilities (training, export, editing, capture, recognition) each
+    require their own explicit authorization amendment; none is granted here.
+
+--- previous report (1.3.0 → 1.4.0) -------------------------------------------
 Version change: 1.3.0 → 1.4.0
 Rationale: Phase 2.75 — Live Recognition Preview is authorized as a narrow, explicitly-bounded
 exception to Principle VI: deterministic (non-ML) pose recognition and demo-quality visual
@@ -201,11 +355,127 @@ authorize them in turn. This exception does not change Capture's core mandate: F
 of specification 003 stand unchanged for its dataset-collection flow; the recognition preview
 is a separate, additive capability, specified independently.
 
+**Mudra Studio — Milestone 1: Dataset Exploration (authorized, added in v1.5.0)**: the Mudra
+Studio milestone anticipated above is now explicitly authorized, for its **first milestone
+only**. Mudra Studio is a desktop application at `apps/studio/` whose first milestone is
+**read-only dataset exploration and visual inspection** — "VS Code for Mudra datasets". This
+authorization permits exactly: pose and sample browsing; landmark visualization in both raw
+and normalized coordinate spaces; multi-sample overlay comparison; per-pose statistics
+summaries; and a navigation shell whose non-Dataset entries are inert placeholders. It is
+**read-only with respect to the dataset**: Studio MUST NOT create, modify, rename, or delete
+any dataset or sample file, and the dataset on disk MUST be byte-for-byte identical before and
+after a session.
+
+This authorization explicitly does **not** cover **model training, dataset export, sample
+editing, camera capture, or pose recognition**. Those remain deferred and each requires its
+own explicit authorization amendment before any behavior for it is implemented. Per Principle
+III, extension points for them MAY exist as type signatures and interfaces; their behavior
+MUST NOT. Machine learning, neural networks, cloud services, a backend, and gameplay/"attacks"
+mechanics likewise remain unauthorized — the Studio milestone authorized here grants none of
+them.
+
+**Mudra Web — Milestone 1: Pose-Driven Effect Runtime (authorized, added in v1.6.0)**: a new
+application at `apps/web/` is authorized, for its **first milestone only**. Mudra Web is a
+browser-based, camera-driven interactive experience in which a recognized hand pose triggers a
+visible transformation of the scene. Its first milestone is a **vertical slice** proving exactly one
+interaction end to end: camera → pose recognition → pose event → effect execution → visible change
+on screen.
+
+This authorization permits exactly: browser camera capture; hand landmark detection in the browser;
+pose recognition over the existing normalized-landmark dataset by the same class of **deterministic**
+strategy Phase 2.75 authorized (distance- or similarity-based matching, no training); a **data-driven
+effect runtime**; and real-time compositing of effect output over the camera view. A small number of
+simple effects is the point of the slice; a large catalogue is not.
+
+Two architectural rules are part of the authorization rather than left to implementation, because
+they are the seams that let this milestone grow without a rewrite and are therefore Principle I
+obligations at the application's core:
+
+- **Effects MUST be data, not code paths.** Authoring or changing an effect MUST be a configuration
+  change. A conditional branch per named effect inside the runtime is prohibited.
+- **The effect runtime MUST NOT draw.** It produces declarative render output that a separate
+  renderer consumes, so the renderer stays replaceable per Principle I and the runtime stays
+  testable with no browser attached.
+
+It explicitly does **not** authorize: a visual effect editor; person segmentation; WebGL or any 3D
+rendering stack; gameplay or "attacks" mechanics; machine learning, model training, or neural
+networks; or any backend, accounts, cloud storage, marketplace, or social / user-generated-content
+capability. Each requires its own explicit authorization amendment and its own specification before
+any behavior for it is implemented. Per Principle III, extension points for them MAY exist as
+interfaces and type signatures; their behavior MUST NOT.
+
+**Principle II binds Mudra Web without exception.** It is a camera application, which is precisely
+where the temptation to persist a frame appears: it MUST NOT save images, video frames, screenshots,
+or recordings of the experience, and MUST NOT build any dataset from captured imagery. It reads the
+pose dataset and writes none.
+
+**Mudra Web — Milestone 2: Visual Effect Editor & Capability-Gated Person Segmentation (authorized,
+added in v1.7.0)**: with the vertical slice proven, a second milestone is authorized for `apps/web/`:
+a **visual effect editor** that authors the data Milestone 1 already defined, plus **Person
+Segmentation** as a capability-gated addition. Both were explicitly excluded in v1.6.0; this
+amendment lifts exactly the following, and nothing else.
+
+This authorization permits exactly: a browser-based editor UI — a live camera/canvas stage, an
+action palette, a pose/trigger selection panel, an inspector, and a timeline — that authors
+`EffectDefinition` and `Timeline` data through the pipeline Milestone 1 already established
+(`Editor → EffectDefinition/timeline data → EffectRuntime → RenderCommand[] → Renderer`); an
+inspector driven by each registered action's parameter schema (`ActionDescriptor.params`) rather
+than a hand-written UI per action type; a timeline editor over the existing absolute `at_ms` offsets
+(tracks, clips, select/move/resize/delete/duplicate — no keyframes, curves, expressions, or nested
+compositions); a pose/trigger panel that associates an active pose with a trigger without altering
+recognition thresholds, matching weights, the softmax formulation, or hold/stability semantics; a
+preview mode and a test-trigger mode that inject a synthetic `PoseEvent` into the same
+`EffectRuntime` and `Renderer` used by a real pose confirmation — never a second, preview-only
+effect implementation; **local-only** project persistence (create, save, load, duplicate, import,
+export) of effect projects; a small local asset library compatible with the existing
+`AssetReference`/logical-identifier indirection, scoped to the project's own assets; and **Person
+Segmentation**, using the existing MediaPipe Tasks Vision family, as one more entry in the
+capability registry Milestone 1 already defined (alongside `person_visibility`'s reservation) —
+gating segmentation-dependent actions (person visibility, person-only colour/tint, background
+replacement, background effects behind the person, foreground/background compositing, person
+isolation) exactly as Milestone 1's capability-gating rule requires: inert and explicitly reported
+when unavailable, never silently degraded, and never simulated by compositing over an
+undifferentiated full-frame camera image.
+
+Two rules from Milestone 1 are restated as binding on the editor specifically, because an editor is
+exactly where the temptation to shortcut them appears: **the editor MUST NOT execute effect logic**
+— it produces and edits data, and `EffectRuntime` remains the only component that schedules actions;
+and **the editor MUST NOT draw** effect output itself — the `Renderer` remains the only component
+that draws, including in preview. A camera-feed visual treatment (brightness, contrast, saturation,
+mirror, zoom, crop) introduced by the editor MUST be a render-time transformation, distinguished
+from true camera input configuration (device/track constraints), and MUST NOT be implemented as a
+third drawing path outside the existing Renderer.
+
+It explicitly does **not** authorize: publishing; user accounts; cloud persistence or storage; a
+marketplace; social or user-generated-content features; collaborative/multi-user editing; gameplay,
+combat, or scoring mechanics; arbitrary scripting by users; any backend service; or WebGL, Three.js,
+Pixi.js, or any 3D rendering stack — Canvas2D remains the default and required renderer unless a
+later amendment, backed by a concrete demonstrated incapability, says otherwise. Each of these, like
+Milestone 1's exclusions before it, requires its own explicit authorization amendment and its own
+specification before any behavior for it is implemented.
+
+**Principle II binds Milestone 2 without exception, restated because persistence is new here**:
+local project persistence MUST NOT write a camera frame, image, video, or any derivative of
+captured imagery to a project file, to local storage, or to any exported artifact. A saved project
+is effect data — timelines, action parameters, asset references, and pose/trigger selections — and
+nothing else.
+
 **Rationale**: Discipline protects the foundation. Building recognition or gameplay on an
 unproven data pipeline would bake in assumptions before the ground truth (the dataset format)
 is stable. The Phase 2.75 exception stays narrow — deterministic matching only, no training,
 no cloud — because its purpose is to test whether that foundation holds, not to start
-building on it before the question is answered.
+building on it before the question is answered. Studio's first milestone is narrow for the
+same reason and in the same direction: it exists to *see* whether the recorded data is any
+good, which is the question that must be answered before anything is built on top of it. A
+tool that only reads cannot corrupt the ground truth it was built to inspect. Mudra Web is the
+first milestone to *spend* that foundation rather than build or inspect it, which is why its
+authorization is a vertical slice: one interaction proven end to end answers whether the pipeline
+can drive an experience at all, and that answer is worth having before an editor, a rendering
+stack, or a content ecosystem is designed on top of an assumption. Milestone 2 is authorized only
+because that answer came back yes: an editor is worth building over a runtime already proven to
+work, not a speculative one, and Person Segmentation is worth gating rather than assuming, because
+the inert-and-reported discipline Milestone 1 established for `person_visibility` is precisely what
+makes shipping a capability that may be unavailable safe rather than merely convenient.
 
 ## Technology & Code Quality Standards
 
@@ -274,26 +544,119 @@ concrete language, layout, and tooling differ.
 - **Static analysis**: `flutter analyze` MUST be clean; analyzer rules live in
   `analysis_options.yaml` and are part of the definition of done.
 
+### Web applications (TypeScript, `apps/web/`)
+
+- **Language & platform**: TypeScript, targeting current evergreen browsers. Browser platform APIs
+  (camera capture, canvas, audio, animation timing) MAY be used directly, but every platform
+  capability MUST sit behind an application-defined interface so the rest of the application stays
+  testable in a plain runtime with no browser, no camera, and no display attached.
+- **Detection backend**: **MediaPipe Tasks Vision** is the browser hand-landmark backend, accessed
+  behind a detection interface so it can be replaced — the same rule, and the same reason, as
+  Engine's MediaPipe backend. It consumes the repository's existing `assets/hand_landmarker.task`
+  model directly, under the shared-asset rule below.
+- **Clean architecture layers** are mandatory and dependencies point inward only: a framework-free
+  **domain** (value objects, normalization, recognition, effect definitions, effect runtime), an
+  **application** layer (orchestration and session state), an **infrastructure** layer (camera,
+  detection backend, asset and dataset loading), and a **presentation** layer (rendering and UI).
+  Business logic inside rendering or UI code is prohibited; a view MAY read state and dispatch
+  intent, nothing more.
+- **Typed, immutable models**: every structured value is a typed, immutable value object — never an
+  untyped object literal, and never `any`. Public modules, types, and functions carry doc comments.
+  Magic numbers and duplicated logic are prohibited; named constants and shared helpers replace them.
+- **Configuration**, including pose and effect catalogs, MUST be data loaded and validated at
+  runtime, never hardcoded into rendering or UI code — the Principle V rule, restated for the browser.
+- **Tests**: an automated test runner MUST cover the domain layer — normalization, recognition, and
+  effect-runtime behavior — plus every cross-language port's golden-fixture verification (see the
+  boundary rules below). Camera, detection, and rendering are isolated behind interfaces precisely
+  so this suite runs without a browser or a webcam.
+- **Static analysis**: type checking and linting MUST be clean, and are part of the definition of done.
+- **Experience assets**: a web application MAY ship its own visual and audio assets (sprites,
+  particles, backgrounds, sound) inside its application tree. These are **experience content, never
+  dataset content** — the same separation Principle II already draws for Capture's reference imagery.
+  Assets MUST be Mudra-owned or otherwise licensed for the project's use; third-party protected
+  material MUST NOT be committed to the repository.
+- **Editor and segmentation** (Milestone 2, added in v1.7.0): the visual effect editor is a
+  **presentation-layer authoring surface** over the domain model already defined — it constructs
+  and edits `EffectDefinition`/`Timeline` data and reads `ActionRegistry` parameter metadata to
+  drive its inspector; it MUST NOT introduce a parallel effect-execution or rendering path, and
+  editor-only state (open project, selection, unsaved edits) is application/presentation state,
+  never domain state. When Person Segmentation is enabled it is accessed behind the same
+  replaceable detection-interface discipline already required for hand-landmark detection, using
+  the MediaPipe Tasks Vision family.
+- **Build tooling** (bundler, test runner, package manager) is a plan-level decision recorded in the
+  application's README and its feature plan, not fixed here.
+
 ## Monorepo & Cross-Application Boundaries
 
 Mudra is a monorepo containing multiple applications that share a data format, not a codebase.
 
-- **Layout**: **every application lives under `apps/`** — `apps/engine/` (Python) and
-  `apps/capture/` (Flutter) — each with its own toolchain, dependencies, and README. Concerns
+- **Layout**: **every application lives under `apps/`** — `apps/engine/` (Python),
+  `apps/capture/` (Flutter), `apps/studio/` (Python, authorized in v1.5.0), and `apps/web/`
+  (TypeScript, authorized in v1.6.0) — each with its
+  own toolchain, dependencies, and README. Concerns
   that belong to the repository rather than to one application (`tests/`, `datasets/`,
   `assets/`, `scripts/`, `specs/`, `pyproject.toml`) stay at the root. No application
   occupies the root.
-- **The ONLY contract between applications is the versioned pose-sample JSON schema**
-  (`schema_version`, currently 1), documented in the owning feature's `contracts/`. An
-  application MUST NOT import, vendor, or reach into another application's source. Datasets
+- **The ONLY contract between independent applications is the versioned pose-sample JSON
+  schema** (`schema_version`, currently 1), documented in the owning feature's `contracts/`.
+  An application MUST NOT import, vendor, or reach into another application's source. Datasets
   produced by any application MUST be consumable by the engine with zero manual processing.
+  The single exception is the Engine shared-platform-library rule immediately below; it does
+  not generalize.
+- **Engine is the repository's shared platform library** (added in v1.5.0). `apps/engine/` is
+  not merely a peer application: it owns the domain models, the dataset repository and
+  serializer, the landmark topology, and the configuration models that define what Mudra data
+  *is*. Applications under `apps/` written in the same language MAY import Engine's documented
+  public interfaces rather than reimplementing them. This relationship is governed by four
+  rules, all MUST:
+  - **One direction only.** Engine MUST NOT import from, know about, or be configured by any
+    application. The dependency arrow points at Engine and never away from it.
+  - **Consume, never touch.** A consuming application MUST NOT modify, extend, vendor, or copy
+    Engine source. If Engine genuinely needs a new capability, that is a separate, separately
+    authorized change to Engine itself, reviewed on its own merits — never a convenience edit
+    made from a consumer's feature branch.
+  - **Declare the surface.** Each consuming feature MUST record the exact set of Engine symbols
+    it depends on in a contract document under its `specs/<feature>/contracts/`. The list is
+    binding in both directions: the consumer uses nothing outside it, and Engine cannot break
+    what is on it without updating the consumer.
+  - **Engine only.** This exemption names Engine and nothing else. Application-to-application
+    source imports remain forbidden; two applications that both consume Engine still exchange
+    data with each other only through the versioned JSON schema.
+
+  **Rationale**: reimplementing the dataset parser in a second language-compatible application
+  would put two definitions of the same schema in one repository — the precise drift the
+  schema contract exists to prevent. Naming Engine a library makes the real architecture
+  explicit and keeps the parser singular, while the one-way and no-edit rules stop "shared
+  library" from decaying into "everything may reach into everything".
+- **Shared binary assets are shared, not vendored** (added in v1.6.0). Repository-level assets under
+  `assets/` — notably the MediaPipe `hand_landmarker.task` model — are shared infrastructure and MAY
+  be consumed directly by any application, in **any** language. An application MUST NOT copy such an
+  asset into its own tree, and MUST NOT commit a second, divergent copy of a model that already
+  exists at the repository level. **Rationale**: three applications already run the same MediaPipe
+  Tasks model; a per-application copy would let them drift silently onto different model versions and
+  produce landmarks that no longer mean the same thing across the monorepo — the same class of
+  failure the single-parser rule exists to prevent. An asset is data, not source, so sharing one
+  creates none of the source coupling the boundary rules forbid.
+- **Cross-language ports MUST be verified against golden fixtures** (added in v1.6.0). Where an
+  application cannot import Engine — because it is written in a language Engine cannot serve — and
+  must therefore independently implement an algorithm Engine already owns (normalization,
+  distance/similarity matching, and the schema mapping are the current cases), the port MUST be
+  verified against fixtures generated from Engine's own implementation, committed to the consuming
+  application's test suite, and regenerated whenever Engine's implementation changes; a resulting
+  diff is a cross-application event to be handled deliberately, not a file to re-baseline. A port
+  that cannot be checked against Engine's output is not authorized. **Rationale**: `apps/capture/`
+  already established this pattern (`scripts/export_capture_fixtures.py`), and it is the only thing
+  that makes the duplication the boundary rules *force* on non-Python applications safe rather than
+  merely unavoidable. Duplication is tolerated; unverified duplication is drift waiting to happen.
 - **Schema changes are cross-application events**: altering the persisted schema is at minimum
   a MINOR constitution event, MUST bump `schema_version` when incompatible, MUST preserve the
   ability to read prior append-only samples, and MUST be reflected in every application that
   reads or writes it before merge.
 - **No premature shared packages**: duplication of a small value object across applications is
   preferred over a shared library introduced speculatively. A shared package is justified only
-  when the same logic has independently appeared in two applications and drifted.
+  when the same logic has independently appeared in two applications and drifted. This rule
+  governs the extraction of *new* shared packages; it is not a reason to extract a package out
+  of Engine, which is already the shared library by the rule above.
 - **Application independence**: no application may depend on another being installed, running,
   or reachable. Exchange happens through exported dataset artifacts on disk.
 
@@ -334,4 +697,4 @@ against this document. Any justified deviation MUST be recorded in the plan's Co
 Tracking with the simpler alternative that was rejected and why. Unjustified complexity is
 grounds for rejection.
 
-**Version**: 1.4.0 | **Ratified**: 2026-07-24 | **Last Amended**: 2026-07-26
+**Version**: 1.7.0 | **Ratified**: 2026-07-24 | **Last Amended**: 2026-08-24

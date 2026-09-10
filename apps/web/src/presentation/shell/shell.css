@@ -1,0 +1,252 @@
+/*
+ * The visitor-facing screen.
+ *
+ * Deliberately small. The experience is the camera image and what happens over it; the
+ * chrome exists to get someone into that and then get out of the way (FR-087).
+ */
+
+:root {
+  color-scheme: dark;
+  --mudra-bg: #0b0d12;
+  --mudra-fg: #f2f4f8;
+  --mudra-accent: #6ee7f9;
+  --mudra-dim: rgba(242, 244, 248, 0.72);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--mudra-bg);
+  color: var(--mudra-fg);
+  font: 16px/1.5 system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+#mudra-root {
+  height: 100%;
+}
+
+.mudra {
+  position: relative;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.mudra__stage {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #000;
+}
+
+.mudra__overlay {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 2rem;
+  text-align: center;
+  transition: opacity 240ms ease;
+}
+
+.mudra__overlay.is-minimal {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 1rem;
+  opacity: 0.85;
+}
+
+.mudra__overlay.is-minimal .mudra__title {
+  display: none;
+}
+
+.mudra__title {
+  margin: 0;
+  font-size: clamp(2rem, 6vw, 3.5rem);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.mudra__message {
+  margin: 0;
+  max-width: 34rem;
+  color: var(--mudra-dim);
+}
+
+.mudra__start {
+  appearance: none;
+  border: 1px solid var(--mudra-accent);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--mudra-accent);
+  font: inherit;
+  font-weight: 600;
+  padding: 0.7rem 1.6rem;
+  cursor: pointer;
+  transition:
+    background 160ms ease,
+    color 160ms ease;
+}
+
+.mudra__start:hover:not(:disabled) {
+  background: var(--mudra-accent);
+  color: var(--mudra-bg);
+}
+
+.mudra__start:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.mudra__start[hidden] {
+  display: none;
+}
+
+.mudra-hints {
+  color: var(--mudra-dim);
+  font-size: 0.9rem;
+}
+
+.mudra-hints summary {
+  cursor: pointer;
+}
+
+.mudra-hints__list {
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  justify-content: center;
+}
+
+/* The hold build-up: a ring that fills. No number, by design (FR-088). */
+.mudra-hold {
+  position: absolute;
+  z-index: 3;
+  bottom: 6rem;
+  width: 80px;
+  height: 80px;
+  opacity: 0;
+  transition: opacity 140ms ease;
+  pointer-events: none;
+}
+
+.mudra-hold.is-visible {
+  opacity: 1;
+}
+
+.mudra-hold__svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.mudra-hold__track {
+  fill: none;
+  stroke: rgba(242, 244, 248, 0.2);
+  stroke-width: 6;
+}
+
+.mudra-hold__ring {
+  fill: none;
+  stroke: var(--mudra-accent);
+  stroke-width: 6;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 60ms linear;
+}
+
+/* Debug panels. Empty, and invisible, until debug mode is switched on (FR-090). */
+.mudra__debug {
+  position: absolute;
+  z-index: 4;
+  top: 0;
+  left: 0;
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 0.75rem;
+  font-family: ui-monospace, 'Cascadia Code', 'Consolas', monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  pointer-events: none;
+}
+
+.mudra__debug:empty {
+  display: none;
+}
+
+.mudra-panel {
+  margin-bottom: 0.5rem;
+  padding: 0.5rem 0.65rem;
+  border-radius: 6px;
+  background: rgba(11, 13, 18, 0.78);
+  border: 1px solid rgba(242, 244, 248, 0.12);
+  min-width: 15rem;
+}
+
+.mudra-panel h2 {
+  margin: 0 0 0.35rem;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--mudra-accent);
+}
+
+.mudra-panel dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0 0.75rem;
+}
+
+.mudra-panel dt {
+  color: var(--mudra-dim);
+}
+
+.mudra-panel dd {
+  margin: 0;
+}
+
+.mudra-panel ul {
+  margin: 0;
+  padding-left: 1rem;
+}
+
+.mudra-panel .is-over-budget {
+  color: #ff9f9f;
+}
+
+.mudra-panel .is-inactive {
+  color: var(--mudra-dim);
+}
+
+.mudra-panel .is-ineligible {
+  color: #ffb27a;
+}
+
+/* A capability that cannot run here (item 14) — dim/muted, deliberately quieter than a
+   warning: it is an environment fact, not something the author did wrong. */
+.mudra-panel .is-unavailable {
+  color: var(--mudra-dim);
+  font-style: italic;
+}
+
+/* A recoverable authoring slip — an unresolved anchor/asset reference — amber, distinct from
+   both the muted "unavailable" state above and an actual application error (which this panel
+   never represents; see the editor README for the XNNPACK/extension-console-message notes). */
+.mudra-panel .is-warning {
+  color: #ffb27a;
+}

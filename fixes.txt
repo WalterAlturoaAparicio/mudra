@@ -1,0 +1,16 @@
+- agregar una regla numérica en el timeline para saber cuanto duran los efectos.
+- revisar bug de las propiedades de la camara: Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+canvas2d-renderer.ts:126 Uncaught TypeError: Failed to execute 'drawImage' on 'CanvasRenderingContext2D': The provided value is not of type '(CSSImageValue or HTMLCanvasElement or HTMLImageElement or HTMLVideoElement or ImageBitmap or OffscreenCanvas or SVGImageElement or VideoFrame)'.
+
+- revisar: INFO: Created TensorFlow Lite XNNPACK delegate for CPU.
+- hacer que antes de hacer cualquier cosa se cree o se cargue un proyecto.
+- poner los botones de new, save, load, duplicate, export, import, set active. en un pestaña file como si fuera un programa de escritorio.
+- poner la parte del proyecto, inspección de archivos, assets al lado izquierdo de la pantalla
+- dejar lo que tenga que ver con propiedades a la derecha
+- hacer que sea modular y se pueda cambiar el layout de cada seccion estilo unity.
+- poner Tooltips de como usar en cada modulo y propiedad para mas informacion sobre esa funcionalidad
+- hacer que se pueda agrandar o reducir una seccion del layout hasta un mínimo y maximos establecidos.
+- crear un layout por default que el usuario pueda reestablecer en cualquier momento y agregar su propio layout para cambiarlo facilmente.
+- revisar capability unavailable: person_segmentation: 
+mediapipe-person-segmenter.ts:115  GET http://localhost:5173/selfie_segmenter.tflite 404 (Not Found)
+Person Segmentation is unavailable in this session. {capability: 'person_segmentation', reason: 'Failed to fetch model: /selfie_segmenter.tflite (404)'}

@@ -1,0 +1,142 @@
+{
+  "catalog_version": 1,
+  "effects": [
+    {
+      "id": "flash.greeting",
+      "name": "Greeting Flash",
+      "trigger": {
+        "on": "confirmed",
+        "pose_id": "hi",
+        "conditions": [
+          { "type": "confidence_at_least", "value": 0.5 },
+          { "type": "cooldown", "ms": 1200 }
+        ]
+      },
+      "timeline": {
+        "duration_ms": 700,
+        "entries": [
+          {
+            "at_ms": 0,
+            "duration_ms": 420,
+            "action": {
+              "type": "screen_flash",
+              "params": { "color": "#FFFFFF", "intensity": 0.85, "blend": "add" }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "burst.peace",
+      "name": "Peace Burst",
+      "trigger": {
+        "on": "confirmed",
+        "pose_id": "peace",
+        "conditions": [
+          { "type": "confidence_at_least", "value": 0.5 },
+          { "type": "cooldown", "ms": 1200 }
+        ]
+      },
+      "timeline": {
+        "duration_ms": 900,
+        "entries": [
+          {
+            "at_ms": 0,
+            "duration_ms": 850,
+            "action": {
+              "type": "particle_burst",
+              "params": {
+                "count": 64,
+                "color": "#FFD166",
+                "radius": 7,
+                "spread": 260,
+                "anchor": { "kind": "handCentroid", "hand": "first" }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "composed.teleport",
+      "name": "Teleport",
+      "trigger": {
+        "on": "confirmed",
+        "pose_id": "tp",
+        "conditions": [
+          { "type": "confidence_at_least", "value": 0.5 },
+          { "type": "cooldown", "ms": 2000 }
+        ]
+      },
+      "timeline": {
+        "duration_ms": 1600,
+        "entries": [
+          {
+            "at_ms": 0,
+            "action": {
+              "type": "play_audio",
+              "params": { "asset": "@audio/wash", "volume": 0.75 }
+            }
+          },
+          {
+            "at_ms": 0,
+            "duration_ms": 300,
+            "action": {
+              "type": "screen_flash",
+              "params": { "color": "#CFE9FF", "intensity": 0.9, "blend": "add" }
+            }
+          },
+          {
+            "at_ms": 60,
+            "duration_ms": 700,
+            "action": {
+              "type": "particle_burst",
+              "params": {
+                "count": 90,
+                "color": "#9BE7FF",
+                "radius": 5,
+                "spread": 340,
+                "anchor": { "kind": "handCentroid", "hand": "first" }
+              }
+            }
+          },
+          {
+            "at_ms": 100,
+            "duration_ms": 800,
+            "action": {
+              "type": "background_wash",
+              "params": {
+                "color": "#2B2D6E",
+                "opacity": 0.55,
+                "blend": "normal",
+                "fadeInFraction": 0.25,
+                "fadeOutFraction": 0.35
+              }
+            }
+          },
+          {
+            "at_ms": 0,
+            "duration_ms": 1600,
+            "action": {
+              "type": "landmark_trail",
+              "params": {
+                "anchor": { "kind": "landmark", "hand": "first", "index": 8 },
+                "color": "#6EE7F9",
+                "width": 7,
+                "length": 30
+              }
+            }
+          },
+          {
+            "at_ms": 200,
+            "duration_ms": 900,
+            "action": {
+              "type": "person_visibility",
+              "params": { "opacity": 0.25 }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

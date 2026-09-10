@@ -29,25 +29,40 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest",
+    "pytest-qt",
     "ruff",
+]
+# Mudra Studio (apps/studio/) — the desktop dataset explorer, authorized by the
+# project constitution v1.5.0. Declared as an OPTIONAL extra so the engine's
+# CLI-only footprint never pulls in Qt.
+#
+# The upper bound is not cosmetic: PySide6 6.11 declares
+# `Requires-Python: >=3.10,<3.15`, so moving the repository past Python 3.14
+# requires re-verifying this pin first (specs/006-studio-dataset-explorer/
+# research.md, "R2 resolution").
+studio = [
+    "PySide6>=6.11,<7",
 ]
 
 [project.scripts]
 # `mudra` and `mudra run` resolve to the same Typer app as `python -m engine.main`.
 mudra = "engine.main:app"
+# `mudra-studio` launches the desktop dataset explorer (apps/studio/).
+mudra-studio = "studio.main:main"
 
 [project.urls]
 Homepage = "https://github.com/mudra/mudra"
 
 [tool.hatch.build.targets.wheel]
 # The engine's source lives at apps/engine/ and installs as the `engine` package,
-# alongside its sibling application apps/capture/ (constitution v1.3.0).
-packages = ["apps/engine"]
+# alongside its sibling applications apps/capture/ (Flutter) and apps/studio/
+# (constitution v1.3.0, v1.5.0).
+packages = ["apps/engine", "apps/studio"]
 
 [tool.ruff]
 line-length = 100
 target-version = "py314"
-src = ["apps/engine", "tests"]
+src = ["apps/engine", "apps/studio", "tests"]
 
 [tool.ruff.lint]
 # Sensible, non-fussy default set: pycodestyle errors/warnings, pyflakes,

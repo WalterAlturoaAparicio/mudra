@@ -1,0 +1,304 @@
+/*
+ * Capture Mode's own styling.
+ *
+ * Deliberately utilitarian: this surface is optimised for repeated data collection by a handful of
+ * collaborators, not for a visitor's first impression. Big trigger, obvious state, readable counts.
+ */
+
+:root {
+  --capture-bg: #10131a;
+  --capture-surface: #191d27;
+  --capture-border: #2b3140;
+  --capture-text: #e6e9f0;
+  --capture-muted: #98a1b3;
+  --capture-accent: #7cc7ff;
+  --capture-recording: #ff5c5c;
+  --capture-ok: #6ee7a8;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--capture-bg);
+  color: var(--capture-text);
+  font: 15px/1.5 system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: var(--capture-surface);
+  border: 1px solid var(--capture-border);
+  border-radius: 6px;
+  padding: 0.5rem 0.9rem;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--capture-accent);
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+input,
+select {
+  font: inherit;
+  color: inherit;
+  background: var(--capture-bg);
+  border: 1px solid var(--capture-border);
+  border-radius: 6px;
+  padding: 0.45rem 0.6rem;
+  width: 100%;
+}
+
+input:read-only,
+select:disabled {
+  color: var(--capture-muted);
+}
+
+/* -- consent ------------------------------------------------------------- */
+
+.capture-consent {
+  max-width: 46rem;
+  margin: 3rem auto;
+  padding: 2rem;
+  background: var(--capture-surface);
+  border: 1px solid var(--capture-border);
+  border-radius: 10px;
+}
+
+.capture-consent h1 {
+  margin-top: 0;
+  font-size: 1.4rem;
+}
+
+.capture-consent__lead {
+  color: var(--capture-muted);
+}
+
+.capture-consent__points {
+  padding-left: 1.1rem;
+}
+
+.capture-consent__points li {
+  margin-bottom: 0.6rem;
+}
+
+.capture-consent__note {
+  color: var(--capture-muted);
+  font-size: 0.9rem;
+}
+
+.capture-consent__accept {
+  background: var(--capture-accent);
+  color: #06121c;
+  border-color: transparent;
+  font-weight: 600;
+}
+
+/* -- the persistent Capture Mode indicator (FR-008) ---------------------- */
+
+.capture-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 1rem;
+  background: var(--capture-surface);
+  border-bottom: 2px solid var(--capture-recording);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.capture-banner__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--capture-recording);
+}
+
+/* The in-take state must look different from merely being in Capture Mode (FR-009). */
+.capture-shell[data-take-state='countdown'] .capture-banner__dot,
+.capture-shell[data-take-state='recording'] .capture-banner__dot {
+  animation: capture-pulse 0.8s ease-in-out infinite;
+}
+
+@keyframes capture-pulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .capture-shell[data-take-state='countdown'] .capture-banner__dot,
+  .capture-shell[data-take-state='recording'] .capture-banner__dot {
+    animation: none;
+    box-shadow: 0 0 0 4px rgb(255 92 92 / 35%);
+  }
+}
+
+.capture-banner__count {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--capture-muted);
+}
+
+/* -- layout -------------------------------------------------------------- */
+
+.capture-shell {
+  min-height: 100vh;
+}
+
+.capture-shell__message {
+  margin: 1rem;
+  padding: 0.8rem 1rem;
+  border-radius: 8px;
+  background: var(--capture-surface);
+  border-left: 3px solid var(--capture-accent);
+}
+
+.capture-stage {
+  display: flex;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.capture-stage__canvas {
+  max-width: 100%;
+  border-radius: 10px;
+  background: #000;
+}
+
+.capture-panels {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+  gap: 1rem;
+  padding: 0 1rem 2rem;
+  align-items: start;
+}
+
+.capture-panels > section {
+  background: var(--capture-surface);
+  border: 1px solid var(--capture-border);
+  border-radius: 10px;
+  padding: 1rem;
+}
+
+.capture-panels h2 {
+  margin-top: 0;
+  font-size: 1rem;
+  color: var(--capture-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.capture-field {
+  margin-bottom: 0.75rem;
+}
+
+.capture-field label {
+  display: block;
+  margin-bottom: 0.25rem;
+  font-size: 0.85rem;
+  color: var(--capture-muted);
+}
+
+.capture-session-setup__hint,
+.capture-session-setup__problem {
+  font-size: 0.85rem;
+  color: var(--capture-muted);
+}
+
+.capture-session-setup__problem:not(:empty) {
+  color: var(--capture-recording);
+}
+
+/* -- takes --------------------------------------------------------------- */
+
+.capture-take__trigger {
+  width: 100%;
+  padding: 1rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  background: var(--capture-accent);
+  color: #06121c;
+  border-color: transparent;
+}
+
+.capture-take__state {
+  font-variant-numeric: tabular-nums;
+}
+
+.capture-take[data-take-state='countdown'] .capture-take__state,
+.capture-take[data-take-state='recording'] .capture-take__state {
+  color: var(--capture-recording);
+  font-weight: 600;
+}
+
+.capture-take__outcome[data-tone='rejected'] {
+  color: var(--capture-recording);
+}
+
+/* -- review -------------------------------------------------------------- */
+
+.capture-samples__list {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  max-height: 26rem;
+  overflow-y: auto;
+}
+
+.capture-samples__row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--capture-border);
+}
+
+.capture-thumbnail {
+  background: var(--capture-bg);
+  border-radius: 6px;
+  flex: none;
+}
+
+.capture-samples__facts {
+  display: flex;
+  gap: 0.75rem;
+  font-size: 0.85rem;
+  color: var(--capture-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.capture-samples__delete {
+  margin-left: auto;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.85rem;
+}
+
+.capture-samples__clear {
+  border-color: var(--capture-recording);
+}
+
+.capture-samples__empty {
+  color: var(--capture-muted);
+}
+
+/* -- export -------------------------------------------------------------- */
+
+.capture-export__button {
+  width: 100%;
+  font-weight: 600;
+}
+
+.capture-export__status {
+  font-size: 0.85rem;
+  color: var(--capture-muted);
+}

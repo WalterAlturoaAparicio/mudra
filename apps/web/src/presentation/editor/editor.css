@@ -1,0 +1,642 @@
+/*
+ * The visual effect editor (constitution v1.7.0, Milestone 2; stabilization/UX pass).
+ *
+ * Deliberately utilitarian: an authoring tool, not the visitor-facing experience shell.css
+ * already covers. Function over polish — every rule here exists to make the data-flow
+ * legible (what is selected, what is unavailable, where a clip sits in time), not to look
+ * like a shipped consumer product.
+ *
+ * Layout is `.mudra-layout` (`presentation/editor/dock-layout.ts`): a menu bar, then
+ * left/center/right columns with three draggable splitters, sized from CSS custom properties
+ * the layout class itself writes. Everything else here styles panel content, unchanged in
+ * kind from before this pass — only where it mounts changed.
+ */
+
+:root {
+  color-scheme: dark;
+  --mudra-editor-bg: #14161c;
+  --mudra-editor-panel: #1c1f27;
+  --mudra-editor-fg: #f2f4f8;
+  --mudra-editor-dim: rgba(242, 244, 248, 0.65);
+  --mudra-editor-accent: #6ee7f9;
+  --mudra-editor-danger: #ff6b6b;
+  --mudra-editor-warning: #ffb27a;
+  --mudra-editor-border: rgba(242, 244, 248, 0.12);
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--mudra-editor-bg);
+  color: var(--mudra-editor-fg);
+  font: 14px/1.4 system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+#mudra-editor-root {
+  height: 100%;
+}
+
+/* A consistent dark-theme control baseline (item 13) — the browser default light-chrome
+   button/select would otherwise clash with every panel around it. */
+body button,
+body select {
+  background: var(--mudra-editor-bg);
+  color: var(--mudra-editor-fg);
+  border: 1px solid var(--mudra-editor-border);
+  border-radius: 4px;
+  padding: 5px 10px;
+  font: inherit;
+  cursor: pointer;
+}
+
+body button:hover:not(:disabled) {
+  border-color: var(--mudra-editor-accent);
+}
+
+body button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ---------- Dock layout ---------- */
+
+.mudra-layout {
+  display: grid;
+  grid-template-columns: var(--mudra-layout-left-w, 260px) 6px 1fr 6px var(--mudra-layout-right-w, 340px);
+  grid-template-rows: auto 1fr 6px var(--mudra-layout-timeline-h, 220px);
+  height: 100%;
+  background: var(--mudra-editor-bg);
+}
+
+.mudra-layout__menu {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--mudra-editor-panel);
+  border-bottom: 1px solid var(--mudra-editor-border);
+}
+
+.mudra-layout__left {
+  grid-column: 1;
+  grid-row: 2 / span 3;
+  background: var(--mudra-editor-panel);
+  overflow-y: auto;
+  min-width: 0;
+}
+
+.mudra-layout__center {
+  grid-column: 3;
+  grid-row: 2;
+  background: var(--mudra-editor-bg);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.mudra-layout__timeline {
+  grid-column: 3;
+  grid-row: 4;
+  background: var(--mudra-editor-panel);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.mudra-layout__right {
+  grid-column: 5;
+  grid-row: 2 / span 3;
+  background: var(--mudra-editor-panel);
+  overflow-y: auto;
+  min-width: 0;
+}
+
+.mudra-layout__splitter {
+  position: relative;
+  background: transparent;
+}
+
+.mudra-layout__splitter::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--mudra-editor-border);
+}
+
+.mudra-layout__splitter:hover::after,
+.mudra-layout__splitter:active::after {
+  background: var(--mudra-editor-accent);
+}
+
+.mudra-layout__splitter--left,
+.mudra-layout__splitter--right {
+  grid-row: 2 / span 3;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.mudra-layout__splitter--left {
+  grid-column: 2;
+}
+
+.mudra-layout__splitter--right {
+  grid-column: 4;
+}
+
+.mudra-layout__splitter--timeline {
+  grid-column: 3;
+  grid-row: 3;
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+/* ---------- File menu (item 7) ---------- */
+
+.mudra-editor__file-menu {
+  position: relative;
+}
+
+.mudra-editor__file-menu > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 5px 12px;
+  border-radius: 4px;
+  border: 1px solid var(--mudra-editor-border);
+}
+
+.mudra-editor__file-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.mudra-editor__file-menu[open] > summary {
+  border-color: var(--mudra-editor-accent);
+}
+
+.mudra-editor__file-menu .mudra-editor__project-buttons {
+  position: absolute;
+  top: calc(100% + 4px);
+  /* The File trigger sits at the menu bar's right edge (after Reset Layout) — right-align the
+     dropdown so it opens onto the screen instead of off it. */
+  right: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  min-width: 160px;
+  background: var(--mudra-editor-panel);
+  border: 1px solid var(--mudra-editor-border);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.mudra-editor__file-menu .mudra-editor__project-buttons button {
+  text-align: left;
+}
+
+/* ---------- Panel sections (item 13) ---------- */
+
+.mudra-editor__panel-section {
+  padding: 12px;
+  border-bottom: 1px solid var(--mudra-editor-border);
+}
+
+.mudra-editor__panel-section:last-child {
+  border-bottom: none;
+}
+
+.mudra-editor__panel-title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--mudra-editor-dim);
+}
+
+/* ---------- Project-first start screen (item 6) ---------- */
+
+.mudra-editor__start-screen {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  box-sizing: border-box;
+}
+
+.mudra-editor__start-screen-card {
+  width: min(480px, 100%);
+  background: var(--mudra-editor-panel);
+  border: 1px solid var(--mudra-editor-border);
+  border-radius: 10px;
+  padding: 24px;
+}
+
+.mudra-editor__start-screen-card h1 {
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+
+.mudra-editor__start-screen-lede {
+  margin: 0 0 16px;
+  color: var(--mudra-editor-dim);
+}
+
+.mudra-editor__start-screen-notice {
+  margin: 0 0 16px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(255, 178, 122, 0.12);
+  color: var(--mudra-editor-warning);
+  font-size: 13px;
+}
+
+.mudra-editor__start-screen-primary {
+  background: var(--mudra-editor-accent);
+  color: #0b0d12;
+  border-color: transparent;
+  font-weight: 600;
+  margin-right: 8px;
+}
+
+.mudra-editor__start-screen-primary:hover:not(:disabled) {
+  border-color: transparent;
+  filter: brightness(1.1);
+}
+
+.mudra-editor__start-screen-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.mudra-editor__start-screen-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--mudra-editor-border);
+}
+
+.mudra-editor__start-screen-empty {
+  color: var(--mudra-editor-dim);
+  font-style: italic;
+}
+
+.mudra-editor__start-screen-status {
+  min-height: 1.2em;
+  margin: 8px 0 0;
+  color: var(--mudra-editor-danger);
+  font-size: 12px;
+}
+
+/* ---------- Effect toolbar ---------- */
+
+.mudra-editor__stage {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  background: #000;
+  object-fit: contain;
+}
+
+.mudra-editor__effect-bar {
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  background: var(--mudra-editor-panel);
+  border-top: 1px solid var(--mudra-editor-border);
+}
+
+/* ---------- Palette ---------- */
+
+.mudra-editor__palette-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.mudra-editor__palette-item {
+  padding: 6px 10px;
+  border-radius: 4px;
+}
+
+.mudra-editor__palette-item.is-unavailable {
+  opacity: 0.5;
+  border-style: dashed;
+}
+
+/* ---------- Pose/trigger panel ---------- */
+
+.mudra-editor__pose-standing {
+  margin: 4px 0 12px;
+  font-size: 12px;
+  color: var(--mudra-editor-dim);
+}
+
+.mudra-editor__pose-standing[data-standing='active'] {
+  color: var(--mudra-editor-accent);
+}
+
+/* ---------- Shared field/input styling ---------- */
+
+.mudra-editor__field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 8px;
+}
+
+.mudra-editor__field-label {
+  font-size: 12px;
+  color: var(--mudra-editor-dim);
+}
+
+.mudra-editor__input {
+  background: var(--mudra-editor-bg);
+  color: var(--mudra-editor-fg);
+  border: 1px solid var(--mudra-editor-border);
+  border-radius: 4px;
+  padding: 4px 6px;
+}
+
+.mudra-editor__input--small {
+  width: 70px;
+}
+
+.mudra-editor__input--checkbox {
+  width: auto;
+}
+
+.mudra-editor__anchor {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mudra-editor__anchor-fields {
+  display: flex;
+  gap: 4px;
+}
+
+.mudra-editor__inspector-notice {
+  font-size: 12px;
+  color: var(--mudra-editor-accent);
+}
+
+.mudra-editor__inspector-error {
+  font-size: 12px;
+  color: var(--mudra-editor-danger);
+  min-height: 1em;
+}
+
+.mudra-editor__inspector-empty {
+  color: var(--mudra-editor-dim);
+  font-style: italic;
+}
+
+/* ---------- Project panel / asset library (left column) ---------- */
+
+.mudra-editor__project-status,
+.mudra-editor__asset-broken-notice {
+  font-size: 12px;
+  color: var(--mudra-editor-warning);
+  min-height: 1.2em;
+}
+
+.mudra-editor__project-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.mudra-editor__asset-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.mudra-editor__asset-entry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border: 1px solid var(--mudra-editor-border);
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.mudra-editor__asset-entry:hover {
+  border-color: var(--mudra-editor-accent);
+}
+
+.mudra-editor__asset-entry.is-selected {
+  outline: 2px solid var(--mudra-editor-accent);
+}
+
+.mudra-editor__asset-kind {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--mudra-editor-bg);
+  color: var(--mudra-editor-dim);
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
+.mudra-editor__asset-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mudra-editor__asset-detail {
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: var(--mudra-editor-bg);
+  font-size: 12px;
+}
+
+.mudra-editor__asset-detail p {
+  margin: 0 0 4px;
+}
+
+.mudra-editor__asset-detail p:last-child {
+  margin-bottom: 0;
+}
+
+.mudra-editor__asset-add-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* ---------- Timeline (item 1: ruler; items 9–11: hover/zoom/snap) ---------- */
+
+.mudra-editor__timeline {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 8px;
+  box-sizing: border-box;
+}
+
+.mudra-editor__timeline-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.mudra-editor__timeline-header .mudra-editor__panel-title {
+  margin: 0;
+}
+
+.mudra-editor__timeline-zoom {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mudra-editor__timeline-zoom button {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  line-height: 1;
+}
+
+.mudra-editor__timeline-zoom-label {
+  min-width: 3.5em;
+  text-align: center;
+  font-size: 11px;
+  color: var(--mudra-editor-dim);
+}
+
+.mudra-editor__timeline-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.mudra-editor__timeline-ruler {
+  position: relative;
+  height: 22px;
+  border-bottom: 1px solid var(--mudra-editor-border);
+}
+
+.mudra-editor__ruler-tick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid var(--mudra-editor-border);
+  padding-left: 4px;
+  font-size: 10px;
+  line-height: 22px;
+  color: var(--mudra-editor-dim);
+  white-space: nowrap;
+}
+
+.mudra-editor__ruler-duration-marker {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 2px solid var(--mudra-editor-accent);
+}
+
+.mudra-editor__ruler-duration-marker::after {
+  content: 'end';
+  position: absolute;
+  top: 2px;
+  left: 4px;
+  font-size: 9px;
+  color: var(--mudra-editor-accent);
+}
+
+.mudra-editor__timeline-tracks {
+  position: relative;
+  height: calc(var(--mudra-editor-lanes, 1) * 40px + 8px);
+  background: var(--mudra-editor-bg);
+  border-radius: 4px;
+}
+
+.mudra-editor__clip {
+  position: absolute;
+  height: 32px;
+  border-radius: 4px;
+  background: #2a3a4a;
+  border: 1px solid var(--mudra-editor-border);
+  color: var(--mudra-editor-fg);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 4px;
+  cursor: grab;
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.mudra-editor__clip:hover {
+  border-color: var(--mudra-editor-accent);
+  filter: brightness(1.2);
+}
+
+.mudra-editor__clip.is-selected {
+  outline: 2px solid var(--mudra-editor-accent);
+}
+
+.mudra-editor__clip.is-selected:hover {
+  filter: brightness(1.35);
+}
+
+/* A drag currently snapped to a grid line (item 11) — distinct from both hover and selection. */
+.mudra-editor__clip.is-snapped {
+  outline: 2px dashed var(--mudra-editor-warning);
+}
+
+.mudra-editor__clip--instantaneous {
+  background: #4a2a3a;
+  border-radius: 16px;
+}
+
+.mudra-editor__clip--continuous {
+  background: #2a4a3a;
+}
+
+.mudra-editor__clip-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mudra-editor__clip-duplicate,
+.mudra-editor__clip-delete {
+  border: none;
+  background: transparent;
+  color: var(--mudra-editor-dim);
+  cursor: pointer;
+  padding: 0 2px;
+}
+
+.mudra-editor__clip-resize-handle {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: ew-resize;
+  background: rgba(255, 255, 255, 0.15);
+}

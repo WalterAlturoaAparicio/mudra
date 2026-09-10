@@ -132,11 +132,36 @@ describe('a camera that opens', () => {
     return video;
   }
 
+  it('draws into the canvas it was given rather than making one of its own', async () => {
+    const { stream } = fakeStream();
+    const canvas = fakeCanvas();
+    let built = 0;
+    const camera = new GetUserMediaCamera({
+      mediaDevices: { getUserMedia: () => Promise.resolve(stream) },
+      createVideo: fakeVideo,
+      createCanvas: () => {
+        built += 1;
+        return canvas;
+      },
+    });
+
+    const session = await camera.open();
+    session.surface.update();
+
+    expect(built).toBe(1);
+    // Sized from the video, in the injected canvas — the mirroring happens somewhere the
+    // test can actually see, which is the whole reason the factory is an option.
+    expect(canvas.width).toBe(640);
+    expect(canvas.height).toBe(480);
+    expect(session.surface.image).toBe(canvas);
+  });
+
   it('exposes a mirrored surface sized to the camera', async () => {
     const { stream } = fakeStream();
     const camera = new GetUserMediaCamera({
       mediaDevices: { getUserMedia: () => Promise.resolve(stream) },
       createVideo: fakeVideo,
+      createCanvas: fakeCanvas,
     });
     const session = await camera.open();
     expect(session.surface.update()).toBe(true);
@@ -149,6 +174,7 @@ describe('a camera that opens', () => {
     const camera = new GetUserMediaCamera({
       mediaDevices: { getUserMedia: () => Promise.resolve(stream) },
       createVideo: fakeVideo,
+      createCanvas: fakeCanvas,
     });
     const session = await camera.open();
 
@@ -187,6 +213,7 @@ describe('a camera that opens', () => {
         };
         return video;
       },
+      createCanvas: fakeCanvas,
     });
 
     const session = await camera.open();

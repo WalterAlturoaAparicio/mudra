@@ -18,9 +18,7 @@ def _samples(n: int):
 def _state(samples) -> DatasetViewState:
     return DatasetViewState(
         selected_pose_id=samples[0].pose.pose_id,
-        selected_samples=frozenset(
-            SampleKey(s.pose.pose_id, s.sample_number) for s in samples
-        ),
+        selected_samples=frozenset(SampleKey(s.pose.pose_id, s.sample_number) for s in samples),
     )
 
 

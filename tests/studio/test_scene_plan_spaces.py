@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from engine.models.landmarks import HandLandmarks, Handedness, Landmark
+from engine.models.landmarks import Handedness, HandLandmarks, Landmark
 from engine.models.pose import HandSample
 from engine.models.topology import HAND_CONNECTIONS
 from studio.application.build_scene_plan import build_scene_plan
@@ -22,9 +22,7 @@ def _frame_like_sample():
     normalized = HandLandmarks(
         points=tuple(Landmark(x=-0.05 + 0.005 * i, y=-0.04 + 0.004 * i, z=0.0) for i in range(21))
     )
-    hand = HandSample(
-        handedness=Handedness.RIGHT, confidence=0.95, raw=raw, normalized=normalized
-    )
+    hand = HandSample(handedness=Handedness.RIGHT, confidence=0.95, raw=raw, normalized=normalized)
     return make_pose_sample(hands=(hand,))
 
 
@@ -39,9 +37,7 @@ def _state(sample, **kwargs) -> DatasetViewState:
 def test_raw_space_stays_inside_the_unit_square() -> None:
     """Raw coordinates are frame-relative, so the hand sits where the camera saw it."""
     sample = _frame_like_sample()
-    plan = build_scene_plan(
-        [sample], _state(sample, coordinate_space=CoordinateSpace.RAW), CONFIG
-    )
+    plan = build_scene_plan([sample], _state(sample, coordinate_space=CoordinateSpace.RAW), CONFIG)
 
     for point in plan.hands[0].points:
         assert 0.0 <= point.x <= 1.0

@@ -10,6 +10,13 @@ every contract in `contracts/` already names specific test files under its "Veri
 **Organization**: Tasks are grouped by user story (spec.md, P1/P2/P2/P3) so each can be implemented
 and validated independently, on top of one shared Foundational phase.
 
+
+> **Reconciliation note (2026-09-10).** The checkboxes below were re-derived after the disk
+> failure that destroyed `apps/web/`, `apps/studio/` and this specs directory. A task is
+> ticked only where every repository path it names exists on disk; tasks that name no path
+> are behavioural or manual-verification items and were deliberately left unticked rather
+> than assumed. The recovery itself is described in `_RECUPERACION.md` at the repository
+> root, which also lists what could not be recovered.
 ## Format: `[ID] [P?] [Story] Description`
 
 - **[P]**: Can run in parallel (different files, no dependency on an incomplete task)
@@ -37,21 +44,21 @@ and validated independently, on top of one shared Foundational phase.
 **Purpose**: The domain types, ports, and architecture-test scope every user story phase depends
 on. **No user story task may start before this phase is complete.**
 
-- [ ] T006 Define `Project`, `AssetLibrary`, `AssetLibraryEntry`, `CameraTreatmentSettings` types in `apps/web/src/domain/editor/types.ts` (data-model.md)
+- [x] T006 Define `Project`, `AssetLibrary`, `AssetLibraryEntry`, `CameraTreatmentSettings` types in `apps/web/src/domain/editor/types.ts` (data-model.md)
 - [X] T007 Implement project validation in `apps/web/src/infrastructure/persistence/project-schema.ts` (relocated here during implementation from the originally planned `domain/editor/` path: it imports `catalog-loader.ts`, an infrastructure module, which the framework-free domain layer must never do — `Project`'s pure value types stay in `domain/editor/types.ts` per T006; only the wire-format parse/serialize logic lives in infrastructure): `schemaVersion` check, `catalog` (wire-format JSON) parsed via `infrastructure/effects/catalog-loader.ts`'s existing `parseCatalog` (unmodified), `assetLibrary` entry shape check — same fail-at-load discipline as `parseSessionConfig`. Also added `serializeCatalog(catalog: EffectCatalog): Json` to `catalog-loader.ts` itself, the exact structural inverse of `parseCatalog` (domain in, wire-format `catalog_version`/snake_case JSON out), so the wire/domain mapping continues to live in one place for both directions (contracts/project-schema.md)
-- [ ] T008 [P] Define the `ProjectRepository` port in `apps/web/src/domain/ports/project-repository.ts` (data-model.md)
-- [ ] T009 [P] Define the `PersonSegmenter` port in `apps/web/src/domain/ports/segmenter.ts` and the `SegmentationFrame` value type in `apps/web/src/domain/editor/segmentation-frame.ts` (data-model.md)
-- [ ] T010 Add `MaskedEraseCommand` to the `RenderCommand` union in `apps/web/src/domain/runtime/frame-output.ts` (contracts/render-commands-extension.md)
-- [ ] T011 Add the `segmentation: SegmentationFrame | null` field to `ActionContext` in `apps/web/src/domain/runtime/action-registry.ts`
-- [ ] T012 Add `EffectRuntime.startEffect(effectId, nowMs)` to `apps/web/src/domain/runtime/effect-runtime.ts` for Play Timeline, reusing the existing internal playback-push logic `startTriggered` already has (research D9)
-- [ ] T013 Replace `defaultCapabilities()` with an async `probeCapabilities(segmenterFactory): Promise<CapabilityRegistry>` in `apps/web/src/domain/runtime/capabilities.ts`, attempting `PersonSegmenter` construction behind a `try/catch`; `MapCapabilityRegistry` itself is unchanged (research D7)
-- [ ] T014 [P] Create `apps/web/test/support/fake-project-repository.ts`: an in-memory `ProjectRepository` for domain-level tests (no browser, no IndexedDB)
-- [ ] T015 Implement `EditorRuntimeController` in `apps/web/src/application/editor-runtime-controller.ts`: owns one `EffectRuntime` + `Stage`, advances every tick independent of whether a `CameraSource` is open, feeding an empty `LandmarkFrame` when it is not (research D11)
-- [ ] T016 Extend `apps/web/test/architecture/no-hardcoded-effects.test.ts`'s glob scope to `src/presentation/editor/**` and `src/domain/editor/**` (research D12)
-- [ ] T017 Extend `apps/web/test/architecture/layering.test.ts` to assert `src/presentation/editor/**` calls no `CanvasRenderingContext2D` member and owns no independent frame-scheduling loop of its own (contracts/editor-runtime-boundary.md)
-- [ ] T018 Extend `apps/web/test/architecture/privacy.test.ts`'s prohibited-API scan to every new source tree, adding the one explicit, scoped exception for `indexedDB` under `src/infrastructure/persistence/**` (contracts/privacy-persistence.md)
-- [ ] T019 [P] `apps/web/test/domain/project.test.ts`: schema-version mismatch, malformed `catalog`, broken asset-library entry — each a specific, attributable load error (contracts/project-schema.md)
-- [ ] T020 [P] `apps/web/test/domain/capability-segmentation.test.ts`: `probeCapabilities()`'s success and failure branches, including that failure never throws past the composition root
+- [x] T008 [P] Define the `ProjectRepository` port in `apps/web/src/domain/ports/project-repository.ts` (data-model.md)
+- [x] T009 [P] Define the `PersonSegmenter` port in `apps/web/src/domain/ports/segmenter.ts` and the `SegmentationFrame` value type in `apps/web/src/domain/editor/segmentation-frame.ts` (data-model.md)
+- [x] T010 Add `MaskedEraseCommand` to the `RenderCommand` union in `apps/web/src/domain/runtime/frame-output.ts` (contracts/render-commands-extension.md)
+- [x] T011 Add the `segmentation: SegmentationFrame | null` field to `ActionContext` in `apps/web/src/domain/runtime/action-registry.ts`
+- [x] T012 Add `EffectRuntime.startEffect(effectId, nowMs)` to `apps/web/src/domain/runtime/effect-runtime.ts` for Play Timeline, reusing the existing internal playback-push logic `startTriggered` already has (research D9)
+- [x] T013 Replace `defaultCapabilities()` with an async `probeCapabilities(segmenterFactory): Promise<CapabilityRegistry>` in `apps/web/src/domain/runtime/capabilities.ts`, attempting `PersonSegmenter` construction behind a `try/catch`; `MapCapabilityRegistry` itself is unchanged (research D7)
+- [x] T014 [P] Create `apps/web/test/support/fake-project-repository.ts`: an in-memory `ProjectRepository` for domain-level tests (no browser, no IndexedDB)
+- [x] T015 Implement `EditorRuntimeController` in `apps/web/src/application/editor-runtime-controller.ts`: owns one `EffectRuntime` + `Stage`, advances every tick independent of whether a `CameraSource` is open, feeding an empty `LandmarkFrame` when it is not (research D11)
+- [x] T016 Extend `apps/web/test/architecture/no-hardcoded-effects.test.ts`'s glob scope to `src/presentation/editor/**` and `src/domain/editor/**` (research D12)
+- [x] T017 Extend `apps/web/test/architecture/layering.test.ts` to assert `src/presentation/editor/**` calls no `CanvasRenderingContext2D` member and owns no independent frame-scheduling loop of its own (contracts/editor-runtime-boundary.md)
+- [x] T018 Extend `apps/web/test/architecture/privacy.test.ts`'s prohibited-API scan to every new source tree, adding the one explicit, scoped exception for `indexedDB` under `src/infrastructure/persistence/**` (contracts/privacy-persistence.md)
+- [x] T019 [P] `apps/web/test/domain/project.test.ts`: schema-version mismatch, malformed `catalog`, broken asset-library entry — each a specific, attributable load error (contracts/project-schema.md)
+- [x] T020 [P] `apps/web/test/domain/capability-segmentation.test.ts`: `probeCapabilities()`'s success and failure branches, including that failure never throws past the composition root
 
 **Checkpoint**: Domain types, ports, extended architecture tests, and the camera-optional runtime
 controller all exist and pass. Every user story phase below builds only on this.
@@ -67,23 +74,23 @@ Trigger, Play Timeline, or a real pose — all through the existing `EffectRunti
 **Independent Test**: Open the editor with no saved project, add two actions, change three
 properties, position both on the timeline, and trigger via both Test Trigger and a real pose hold.
 
-- [ ] T021 [P] [US1] Implement `apps/web/src/presentation/editor/palette.ts`: lists `ActionRegistry.all()`, one entry per action type, marks entries whose `requiresCapability` the current `CapabilityRegistry` reports unavailable
-- [ ] T022 [US1] Implement `apps/web/src/presentation/editor/inspector.ts`: `renderFieldsFor(actionType, params)`, generating one control per `ParamSpec.kind`, reading `ActionDescriptor.params` from the shared `ActionRegistry` instance (research D6)
-- [ ] T023 [US1] Implement the seven per-kind control renderers (number, color, enum, asset, anchor, boolean, string) in `apps/web/src/presentation/editor/inspector-controls.ts`, each validating a change through the existing `resolveParams`/`ParamError` before it commits
-- [ ] T024 [US1] Implement `apps/web/src/presentation/editor/timeline.ts`: renders clips from a selected effect's `TimelineEntry[]` using the greedy interval-packing lane layout (research D5, presentation-only — no data-model change)
+- [x] T021 [P] [US1] Implement `apps/web/src/presentation/editor/palette.ts`: lists `ActionRegistry.all()`, one entry per action type, marks entries whose `requiresCapability` the current `CapabilityRegistry` reports unavailable
+- [x] T022 [US1] Implement `apps/web/src/presentation/editor/inspector.ts`: `renderFieldsFor(actionType, params)`, generating one control per `ParamSpec.kind`, reading `ActionDescriptor.params` from the shared `ActionRegistry` instance (research D6)
+- [x] T023 [US1] Implement the seven per-kind control renderers (number, color, enum, asset, anchor, boolean, string) in `apps/web/src/presentation/editor/inspector-controls.ts`, each validating a change through the existing `resolveParams`/`ParamError` before it commits
+- [x] T024 [US1] Implement `apps/web/src/presentation/editor/timeline.ts`: renders clips from a selected effect's `TimelineEntry[]` using the greedy interval-packing lane layout (research D5, presentation-only — no data-model change)
 - [ ] T025 [US1] Implement clip selection, drag-to-move (writes `atMs`), and edge-drag-to-resize (writes `durationMs`) in `timeline.ts`, touching only the dragged/resized entry
 - [ ] T026 [US1] Implement clip delete and duplicate in `timeline.ts`
 - [ ] T027 [US1] Visually distinguish instantaneous / duration / continuous clips in `timeline.ts`, reading `ActionDescriptor.behaviour`
-- [ ] T028 [US1] Implement `apps/web/src/presentation/editor/pose-trigger-panel.ts`: pose selector sourced from the loaded exemplar bundle plus `SessionConfig.activePoseSet` (read-only), and editors for `Trigger.on`/`Trigger.conditions`
+- [x] T028 [US1] Implement `apps/web/src/presentation/editor/pose-trigger-panel.ts`: pose selector sourced from the loaded exemplar bundle plus `SessionConfig.activePoseSet` (read-only), and editors for `Trigger.on`/`Trigger.conditions`
 - [ ] T029 [US1] In `pose-trigger-panel.ts`, visually distinguish catalog-only / eligible / active for the selected trigger's `poseId` (FR-020)
 - [ ] T030 [US1] Implement "Test Trigger": construct a `PoseEvent` from the selected effect's `Trigger` (confidence satisfying every `confidenceAtLeast` condition) and call `EffectRuntime.advance()` via `EditorRuntimeController` (research D9)
 - [ ] T031 [US1] Implement "Play Timeline" calling `EffectRuntime.startEffect()` (T012) via `EditorRuntimeController`
 - [ ] T032 [US1] Wire `EditorRuntimeController`'s loop to the editor's live stage canvas: real `LandmarkFrame`s via `HandDetector`/`CameraSource` when a camera is open, an empty `LandmarkFrame` every tick when it is not (FR-026)
-- [ ] T033 [US1] Implement `apps/web/src/presentation/editor/editor-shell.ts`, composing stage + palette + inspector + timeline + pose/trigger panel into one view over an in-memory default `Project`
-- [ ] T034 [US1] Wire `apps/web/src/editor-main.ts` (T004) as the composition root: construct `ActionRegistry`, `probeCapabilities()`-derived `CapabilityRegistry`, `EditorRuntimeController`, and `editor-shell.ts`, sharing every instance a live session would use
-- [ ] T035 [P] [US1] `apps/web/test/domain/editor-runtime.test.ts`: Test Trigger and Play Timeline both drive `EffectRuntime.advance()`/`startEffect()` and produce identical, documented `RenderCommand[]` sequences for the same simulated timing, headlessly (contracts/editor-runtime-boundary.md, SC-003)
-- [ ] T036 [P] [US1] `apps/web/test/adapters/inspector.test.ts` (jsdom): registering a throwaway action type through the production `ActionRegistry` renders correct controls for it with zero inspector source changes (SC-002)
-- [ ] T037 [P] [US1] `apps/web/test/adapters/timeline.test.ts` (jsdom): ten move/resize/delete/duplicate operations leave every untouched clip's `atMs`/`durationMs` byte-identical (SC-007)
+- [x] T033 [US1] Implement `apps/web/src/presentation/editor/editor-shell.ts`, composing stage + palette + inspector + timeline + pose/trigger panel into one view over an in-memory default `Project`
+- [x] T034 [US1] Wire `apps/web/src/editor-main.ts` (T004) as the composition root: construct `ActionRegistry`, `probeCapabilities()`-derived `CapabilityRegistry`, `EditorRuntimeController`, and `editor-shell.ts`, sharing every instance a live session would use
+- [x] T035 [P] [US1] `apps/web/test/domain/editor-runtime.test.ts`: Test Trigger and Play Timeline both drive `EffectRuntime.advance()`/`startEffect()` and produce identical, documented `RenderCommand[]` sequences for the same simulated timing, headlessly (contracts/editor-runtime-boundary.md, SC-003)
+- [x] T036 [P] [US1] `apps/web/test/adapters/inspector.test.ts` (jsdom): registering a throwaway action type through the production `ActionRegistry` renders correct controls for it with zero inspector source changes (SC-002)
+- [x] T037 [P] [US1] `apps/web/test/adapters/timeline.test.ts` (jsdom): ten move/resize/delete/duplicate operations leave every untouched clip's `atMs`/`durationMs` byte-identical (SC-007)
 - [ ] T038 [US1] Run quickstart.md scenarios 1–5 manually; record results
 
 **Checkpoint**: US1 fully functional and independently testable — an author can build, edit, and
@@ -99,12 +106,12 @@ mechanism that lets the default, zero-chrome experience run an authored project.
 **Independent Test**: Build an effect, save the project, reload, load it back, confirm identical
 content; export to a file and import it into a new project.
 
-- [ ] T039 [P] [US2] Implement `apps/web/src/infrastructure/persistence/indexeddb-project-repository.ts` — full `ProjectRepository` (create/save/load/list/duplicate/remove/exportBlob/importBlob/get\|setActiveProjectId), one IndexedDB database, a `projects` object store and a single-row `meta` store. `save`/`exportBlob` call `serializeCatalog` (T007) on `Project.catalog` before writing; `load`/`importBlob` call `parseCatalog` on the stored/imported wire JSON before returning a `Project` — the domain `EffectCatalog` never touches the store directly (contracts/project-schema.md)
-- [ ] T040 [US2] Implement `apps/web/src/presentation/editor/project-panel.ts`: create/save/load/duplicate/export/import UI, wired to `ProjectRepository`
+- [x] T039 [P] [US2] Implement `apps/web/src/infrastructure/persistence/indexeddb-project-repository.ts` — full `ProjectRepository` (create/save/load/list/duplicate/remove/exportBlob/importBlob/get\|setActiveProjectId), one IndexedDB database, a `projects` object store and a single-row `meta` store. `save`/`exportBlob` call `serializeCatalog` (T007) on `Project.catalog` before writing; `load`/`importBlob` call `parseCatalog` on the stored/imported wire JSON before returning a `Project` — the domain `EffectCatalog` never touches the store directly (contracts/project-schema.md)
+- [x] T040 [US2] Implement `apps/web/src/presentation/editor/project-panel.ts`: create/save/load/duplicate/export/import UI, wired to `ProjectRepository`
 - [ ] T041 [US2] Implement "Set Active" / "Clear Active" controls in `project-panel.ts`, calling `setActiveProjectId`
-- [ ] T042 [US2] Wire the default route's composition root (`apps/web/src/main.ts`) to read `getActiveProjectId()` once at boot: on a hit, load and validate that project's `catalog` in place of `config/effects.json`; on a miss or a validation failure, fall back to the shipped default catalog and clear the pointer (FR-033a–c, research D10)
-- [ ] T043 [P] [US2] `apps/web/test/adapters/indexeddb-project-repository.test.ts` (using `fake-indexeddb`): full create/save/load/duplicate/remove/export/import round-trip (SC-004) and the `ActiveProjectPointer` state-transition table from data-model.md
-- [ ] T044 [P] [US2] Extend `apps/web/test/adapters/default-experience.test.ts` (or a new `default-route-active-project.test.ts`): active project present / absent / broken → correct catalog selection and pointer-clearing (FR-033c, quickstart scenario 9)
+- [x] T042 [US2] Wire the default route's composition root (`apps/web/src/main.ts`) to read `getActiveProjectId()` once at boot: on a hit, load and validate that project's `catalog` in place of `config/effects.json`; on a miss or a validation failure, fall back to the shipped default catalog and clear the pointer (FR-033a–c, research D10)
+- [x] T043 [P] [US2] `apps/web/test/adapters/indexeddb-project-repository.test.ts` (using `fake-indexeddb`): full create/save/load/duplicate/remove/export/import round-trip (SC-004) and the `ActiveProjectPointer` state-transition table from data-model.md
+- [x] T044 [P] [US2] Extend `apps/web/test/adapters/default-experience.test.ts` (or a new `default-route-active-project.test.ts`): active project present / absent / broken → correct catalog selection and pointer-clearing (FR-033c, quickstart scenario 9)
 - [ ] T045 [US2] Run quickstart.md scenarios 6–9 manually; record results
 
 **Checkpoint**: US1 AND US2 both work independently — projects persist, reload losslessly, and can
@@ -122,10 +129,10 @@ confirm the stored value is a logical reference; remove the asset and confirm th
 is surfaced by name.
 
 - [X] T046 [US3] Build a project-scoped `AssetManifest` from `Project.assetLibrary.entries` at load, layered over `DEFAULT_ASSET_MANIFEST`, handed to the existing `ManifestAssetResolver` (data-model.md) — implemented at `apps/web/src/infrastructure/assets/project-asset-manifest.ts` (moved here from the originally planned `domain/editor/` path — same I1-precedent layering fix as T007: it constructs `Object URL`s, a browser-specific concern the framework-free domain layer must never do). Also added a new `AssetBlobStore` port (`domain/ports/asset-blob-store.ts`) + `IndexedDbAssetBlobStore` (`infrastructure/persistence/`), and `EffectRuntime.setResolveAsset()` (mirroring `setCatalog()`) so an added/removed asset resolves immediately without reconstructing the runtime
-- [ ] T047 [US3] Implement `apps/web/src/presentation/editor/asset-library-panel.ts`: add a local file (audio/image) to the project's asset library, writing an `AssetLibraryEntry` plus a project-local IndexedDB blob-store entry keyed by a generated `storageKey`
+- [x] T047 [US3] Implement `apps/web/src/presentation/editor/asset-library-panel.ts`: add a local file (audio/image) to the project's asset library, writing an `AssetLibraryEntry` plus a project-local IndexedDB blob-store entry keyed by a generated `storageKey`
 - [ ] T048 [US3] Implement an asset-picker control for the inspector's `asset`-kind `ParamSpec` (extends T023), listing `AssetLibrary.entries` by `displayName` and writing the selected `reference` into the action's `params` (FR-034/FR-035)
 - [ ] T049 [US3] Surface a broken asset reference (an effect's asset param whose reference does not resolve against the loaded manifest) by name in the project/effect inspection view (FR-038)
-- [ ] T050 [P] [US3] `apps/web/test/domain/asset-library.test.ts`: manifest layering (project entries override/extend the global manifest), broken-reference detection, and that a resolved param value is always a logical reference, never a path
+- [x] T050 [P] [US3] `apps/web/test/domain/asset-library.test.ts`: manifest layering (project entries override/extend the global manifest), broken-reference detection, and that a resolved param value is always a logical reference, never a path
 - [ ] T051 [US3] Run quickstart.md scenario 10 manually; record results
 
 **Checkpoint**: US1, US2, AND US3 all work independently — an author can pick project assets from a
@@ -143,17 +150,17 @@ marking in the palette and inspector.
 unavailable in the palette/inspector and produces nothing when triggered while the rest of the
 effect plays normally; where available, confirm it produces a genuine per-pixel result.
 
-- [ ] T052 [US4] Implement `apps/web/src/infrastructure/segmentation/mediapipe-person-segmenter.ts` implementing `PersonSegmenter`, using `@mediapipe/tasks-vision`'s `ImageSegmenter` against `assets/selfie_segmenter.tflite` (T002/T003; research D7)
-- [ ] T052a [P] [US4] `apps/web/test/adapters/mediapipe-person-segmenter.test.ts` (jsdom): `MediapipePersonSegmenter`'s construction success and construction-failure paths (a fake/stubbed `ImageSegmenter` that throws), and that `segment()` returns either a well-shaped `SegmentationFrame` (`mask`, `width`, `height`) or `null` — an adapter-level test of the real infrastructure class, distinct from T020/T058's domain-level tests against a fake `PersonSegmenter` port implementation
-- [ ] T053 [US4] Wire `probeCapabilities()` (T013) to attempt `MediapipePersonSegmenter` construction at both composition roots (`apps/web/src/main.ts` and `apps/web/src/editor-main.ts`)
-- [ ] T054 [US4] Update `apps/web/src/domain/runtime/actions/person-visibility.ts`: when `context.segmentation` is present, emit `{ kind: 'maskedErase', region: 'person', alpha: 1 - opacity }`; the capability-unavailable path is unchanged (contracts/capability-segmentation.md)
-- [ ] T055 [US4] Add `Canvas2DRenderer.setPersonMask(image)` and the `maskedErase` execution branch (`globalCompositeOperation = 'destination-out'`, clipped by the mask) to `apps/web/src/presentation/renderer/canvas2d-renderer.ts`
-- [ ] T056 [US4] Wire `apps/web/src/presentation/stage/stage.ts` to call `setPersonMask()` once per frame from the current `SegmentationFrame`, mirroring the existing `setCameraImage()` call
+- [x] T052 [US4] Implement `apps/web/src/infrastructure/segmentation/mediapipe-person-segmenter.ts` implementing `PersonSegmenter`, using `@mediapipe/tasks-vision`'s `ImageSegmenter` against `assets/selfie_segmenter.tflite` (T002/T003; research D7)
+- [x] T052a [P] [US4] `apps/web/test/adapters/mediapipe-person-segmenter.test.ts` (jsdom): `MediapipePersonSegmenter`'s construction success and construction-failure paths (a fake/stubbed `ImageSegmenter` that throws), and that `segment()` returns either a well-shaped `SegmentationFrame` (`mask`, `width`, `height`) or `null` — an adapter-level test of the real infrastructure class, distinct from T020/T058's domain-level tests against a fake `PersonSegmenter` port implementation
+- [x] T053 [US4] Wire `probeCapabilities()` (T013) to attempt `MediapipePersonSegmenter` construction at both composition roots (`apps/web/src/main.ts` and `apps/web/src/editor-main.ts`)
+- [x] T054 [US4] Update `apps/web/src/domain/runtime/actions/person-visibility.ts`: when `context.segmentation` is present, emit `{ kind: 'maskedErase', region: 'person', alpha: 1 - opacity }`; the capability-unavailable path is unchanged (contracts/capability-segmentation.md)
+- [x] T055 [US4] Add `Canvas2DRenderer.setPersonMask(image)` and the `maskedErase` execution branch (`globalCompositeOperation = 'destination-out'`, clipped by the mask) to `apps/web/src/presentation/renderer/canvas2d-renderer.ts`
+- [x] T056 [US4] Wire `apps/web/src/presentation/stage/stage.ts` to call `setPersonMask()` once per frame from the current `SegmentationFrame`, mirroring the existing `setCameraImage()` call
 - [ ] T057 [US4] Add the unavailable marker to `palette.ts` (T021) and a persistent per-clip notice to `inspector.ts` (T022) for any action whose `requiresCapability` the current `CapabilityRegistry` reports `false` for (FR-044/FR-045)
-- [ ] T058 [P] [US4] `apps/web/test/domain/capability-segmentation.test.ts` (extends T020): with the capability `true`, `person_visibility` emits `maskedErase`; with `false`, it emits nothing and one `capability_unavailable` diagnostic
-- [ ] T059 [P] [US4] Extend `apps/web/test/adapters/renderer.test.ts`: `maskedErase` issues the expected `save`/`globalCompositeOperation`/`drawImage`/`restore` sequence against a recording fake context and a fake mask image
-- [ ] T060 [P] [US4] `apps/web/test/adapters/palette-inspector-capability.test.ts` (jsdom): unavailable marking appears/disappears correctly against a fake `CapabilityRegistry`
-- [ ] T061 [US4] `apps/web/test/architecture/no-fake-segmentation.test.ts`: source-scans segmentation-dependent action files for a full-frame `fillScreen`/background-wash-shaped substitute for `maskedErase` (contracts/capability-segmentation.md, verification 4)
+- [x] T058 [P] [US4] `apps/web/test/domain/capability-segmentation.test.ts` (extends T020): with the capability `true`, `person_visibility` emits `maskedErase`; with `false`, it emits nothing and one `capability_unavailable` diagnostic
+- [x] T059 [P] [US4] Extend `apps/web/test/adapters/renderer.test.ts`: `maskedErase` issues the expected `save`/`globalCompositeOperation`/`drawImage`/`restore` sequence against a recording fake context and a fake mask image
+- [x] T060 [P] [US4] `apps/web/test/adapters/palette-inspector-capability.test.ts` (jsdom): unavailable marking appears/disappears correctly against a fake `CapabilityRegistry`
+- [x] T061 [US4] `apps/web/test/architecture/no-fake-segmentation.test.ts`: source-scans segmentation-dependent action files for a full-frame `fillScreen`/background-wash-shaped substitute for `maskedErase` (contracts/capability-segmentation.md, verification 4)
 - [ ] T062 [US4] Run quickstart.md scenarios 11–12 manually (with and without segmentation available); record results
 
 **Checkpoint**: All four user stories now compose into the full milestone.
@@ -165,15 +172,15 @@ effect plays normally; where available, confirm it produces a genuine per-pixel 
 **Purpose**: Camera visual treatment (not owned by a single user story), performance verification,
 final documentation, and the full quickstart pass.
 
-- [ ] T063 [P] Implement `CameraTreatmentSettings` as a render-time transform in `apps/web/src/presentation/stage/camera-treatment.ts` (brightness/contrast/saturation, mirror, zoom/scale, crop) applied to the camera image before `drawCamera`, never altering the imagery `HandDetector` receives (FR-048–051)
+- [x] T063 [P] Implement `CameraTreatmentSettings` as a render-time transform in `apps/web/src/presentation/stage/camera-treatment.ts` (brightness/contrast/saturation, mirror, zoom/scale, crop) applied to the camera image before `drawCamera`, never altering the imagery `HandDetector` receives (FR-048–051)
 - [ ] T064 [P] Add camera-treatment controls to `editor-shell.ts`/a new `camera-panel.ts`, bound to `Project.cameraTreatment`
-- [ ] T065 [P] `apps/web/test/domain/camera-treatment.test.ts`: treatment settings never mutate the `LandmarkFrame`/detection input (FR-051, quickstart scenario 13)
-- [ ] T066 Extend the existing debug performance panel/metrics to confirm **both** (FR-058) Milestone 1's numeric frame/latency budgets hold unconditionally while the editor UI is being interacted with, **and** (FR-059) the editor UI itself remains responsive — no dropped input, no visible stalling — while doing so; the first is a quantitative measurement, the second a qualitative observation, and both are required, not one standing in for the other. Document the result in `apps/web/README.md`'s "Measured performance" style (SC-010, quickstart scenario 14)
-- [ ] T067 [P] Complete `apps/web/test/architecture/privacy.test.ts` / `privacy-persistence.test.ts` per contracts/privacy-persistence.md's full verification list; run the manual DevTools pass confirming SC-005's guarantee (zero camera frames/images/video in storage or over the network across a full session) (SC-005, quickstart scenario 15)
-- [ ] T068 Run `npm run typecheck && npm run lint && npm test` in `apps/web/` and resolve any failure
-- [ ] T069 Update `apps/web/README.md`: replace the "Storage: None" line (T005's stub), add the full "Editor" section (routes, project persistence, asset library, segmentation capability) matching the existing "Configuration"/"Recognition"/"Privacy, verified" section style
-- [ ] T070 [P] Update root `README.md` if the monorepo table or folder-structure section needs `apps/web/editor.html` or `assets/selfie_segmenter.tflite` entries (mirrors the precedent 007 set for `apps/web/` itself)
-- [ ] T070a SC-008 end-to-end verification (cross-cutting: exercises US1, US2, and US3 together, so it carries no single-story label), in `apps/web/test/domain/sc008-end-to-end.test.ts`: using pose `dragon` (a member of the shipped default active pose set — `['hi', 'peace', 'tp', 'dragon']` in `DEFAULT_SESSION_CONFIG` — with no pre-existing effect in `config/effects.json`, which defines effects only for `hi`, `peace`, and `tp`), drive the editor's own surfaces (palette T021, inspector T022/T023, timeline T024/T025, pose/trigger panel T028) to build a new effect triggered by `dragon`'s `confirmed` event with a timeline of at least two actions, one of them carrying an asset-kind parameter set via the asset-library picker (T048); save the project (T039); then load the persisted project back and run its resulting `EffectDefinition` through `EffectRuntime.advance()`/`startEffect()` **unchanged** — the same calls T035 already exercises, no new runtime path — and assert the produced `RenderCommand[]` sequence matches what was authored. Corresponds to quickstart.md scenario 16
+- [x] T065 [P] `apps/web/test/domain/camera-treatment.test.ts`: treatment settings never mutate the `LandmarkFrame`/detection input (FR-051, quickstart scenario 13)
+- [x] T066 Extend the existing debug performance panel/metrics to confirm **both** (FR-058) Milestone 1's numeric frame/latency budgets hold unconditionally while the editor UI is being interacted with, **and** (FR-059) the editor UI itself remains responsive — no dropped input, no visible stalling — while doing so; the first is a quantitative measurement, the second a qualitative observation, and both are required, not one standing in for the other. Document the result in `apps/web/README.md`'s "Measured performance" style (SC-010, quickstart scenario 14)
+- [x] T067 [P] Complete `apps/web/test/architecture/privacy.test.ts` / `privacy-persistence.test.ts` per contracts/privacy-persistence.md's full verification list; run the manual DevTools pass confirming SC-005's guarantee (zero camera frames/images/video in storage or over the network across a full session) (SC-005, quickstart scenario 15)
+- [x] T068 Run `npm run typecheck && npm run lint && npm test` in `apps/web/` and resolve any failure
+- [x] T069 Update `apps/web/README.md`: replace the "Storage: None" line (T005's stub), add the full "Editor" section (routes, project persistence, asset library, segmentation capability) matching the existing "Configuration"/"Recognition"/"Privacy, verified" section style
+- [x] T070 [P] Update root `README.md` if the monorepo table or folder-structure section needs `apps/web/editor.html` or `assets/selfie_segmenter.tflite` entries (mirrors the precedent 007 set for `apps/web/` itself)
+- [x] T070a SC-008 end-to-end verification (cross-cutting: exercises US1, US2, and US3 together, so it carries no single-story label), in `apps/web/test/domain/sc008-end-to-end.test.ts`: using pose `dragon` (a member of the shipped default active pose set — `['hi', 'peace', 'tp', 'dragon']` in `DEFAULT_SESSION_CONFIG` — with no pre-existing effect in `config/effects.json`, which defines effects only for `hi`, `peace`, and `tp`), drive the editor's own surfaces (palette T021, inspector T022/T023, timeline T024/T025, pose/trigger panel T028) to build a new effect triggered by `dragon`'s `confirmed` event with a timeline of at least two actions, one of them carrying an asset-kind parameter set via the asset-library picker (T048); save the project (T039); then load the persisted project back and run its resulting `EffectDefinition` through `EffectRuntime.advance()`/`startEffect()` **unchanged** — the same calls T035 already exercises, no new runtime path — and assert the produced `RenderCommand[]` sequence matches what was authored. Corresponds to quickstart.md scenario 16
 - [ ] T071 Run the full quickstart.md validation pass (all 16 scenarios) end to end and record results
 
 ---

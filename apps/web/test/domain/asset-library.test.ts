@@ -167,7 +167,10 @@ describe('findBrokenEffectAssetReferences', () => {
 });
 
 describe('referencedBy (P1.3 — the inverse of findBrokenEffectAssetReferences)', () => {
-  function projectReferencing(reference: string, effectName = 'E1'): ReturnType<typeof createProject> {
+  function projectReferencing(
+    reference: string,
+    effectName = 'E1',
+  ): ReturnType<typeof createProject> {
     return createProject(
       {
         version: 1,
@@ -222,7 +225,9 @@ describe('referencedBy (P1.3 — the inverse of findBrokenEffectAssetReferences)
             trigger: { on: 'confirmed', poseId: 'hi', conditions: [] },
             timeline: {
               durationMs: 100,
-              entries: [{ atMs: 0, action: { type: 'play_audio', params: { asset: '@audio/shared' } } }],
+              entries: [
+                { atMs: 0, action: { type: 'play_audio', params: { asset: '@audio/shared' } } },
+              ],
             },
           },
         ],

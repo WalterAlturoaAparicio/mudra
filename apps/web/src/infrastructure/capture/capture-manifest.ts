@@ -49,7 +49,10 @@ export interface CaptureManifest {
 /** What the manifest builder needs. */
 export interface BuildManifestInput {
   /** Sessions included in this export, with the sample count actually written for each. */
-  readonly sessions: readonly { readonly session: CaptureSession; readonly writtenSamples: number }[];
+  readonly sessions: readonly {
+    readonly session: CaptureSession;
+    readonly writtenSamples: number;
+  }[];
   readonly versions: ApplicationVersions;
   /** The bundle this build was made against, or `null` when there was none. */
   readonly datasetFingerprint: string | null;
@@ -80,7 +83,9 @@ export function buildCaptureManifest(input: BuildManifestInput): CaptureManifest
     dataset_fingerprint: input.datasetFingerprint,
     total_samples: total,
     // Sorted so the manifest itself is deterministic for a given store.
-    pose_counts: Object.fromEntries(Object.entries(poseCounts).sort(([a], [b]) => a.localeCompare(b))),
+    pose_counts: Object.fromEntries(
+      Object.entries(poseCounts).sort(([a], [b]) => a.localeCompare(b)),
+    ),
     sessions: input.sessions.map(({ session, writtenSamples }) => ({
       session_uuid: session.id,
       contributor_label: session.contributorLabel,

@@ -12,22 +12,24 @@ import { describe, expect, it } from 'vitest';
 import { landmarkFrame } from '../../src/domain/landmarks/types';
 import { scheduleEntries } from '../../src/domain/runtime/timeline-scheduler';
 import type { TimelineEntry } from '../../src/domain/effects/types';
+import type { Action } from '../../src/domain/effects/types';
 import { catalog, effect, entry, poseEvent, runtimeFor } from '../support/effects';
 
 const emptyFrame = landmarkFrame([], 0, 1280, 720);
 
 const flash = { type: 'screen_flash', params: { color: '#FFFFFF' } };
 const wash = { type: 'background_wash', params: { color: '#112233' } };
-const burst = {
+const burst: Action = {
   type: 'particle_burst',
   params: { count: 8, anchor: { kind: 'screen', x: 0.5, y: 0.5 } },
 };
 
 /** Run a timeline at 60 fps and record the first frame each entry produced output on. */
-function firstOutputTimes(entries: readonly TimelineEntry[], durationMs: number): Map<number, number> {
-  const runtime = runtimeFor(
-    catalog(effect({ id: 'e', poseId: 'p', durationMs, entries })),
-  );
+function firstOutputTimes(
+  entries: readonly TimelineEntry[],
+  durationMs: number,
+): Map<number, number> {
+  const runtime = runtimeFor(catalog(effect({ id: 'e', poseId: 'p', durationMs, entries })));
   const seen = new Map<number, number>();
   const step = 1000 / 60;
 
@@ -50,7 +52,9 @@ function firstOutputTimes(entries: readonly TimelineEntry[], durationMs: number)
 describe('entries begin at their absolute offsets (FR-046, SC-014)', () => {
   it('each within 50 ms of where it was configured', () => {
     const entries = [entry(0, flash, 200), entry(300, burst, 400), entry(700, wash, 500)];
-    const runtime = runtimeFor(catalog(effect({ id: 'e', poseId: 'p', durationMs: 1200, entries })));
+    const runtime = runtimeFor(
+      catalog(effect({ id: 'e', poseId: 'p', durationMs: 1200, entries })),
+    );
 
     const starts = new Map<string, number>();
     const step = 1000 / 60;

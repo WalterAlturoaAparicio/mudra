@@ -112,7 +112,10 @@ export class CaptureExportPanel {
    * immediately after the click so the bytes are not held alive by a dangling reference.
    */
   private offer(archive: CaptureExport): void {
-    const blob = new Blob([archive.bytes], { type: 'application/zip' });
+    // Copied into a view whose buffer is known to be a plain `ArrayBuffer`: a `Uint8Array`
+    // may sit on a `SharedArrayBuffer`, which is not a `BlobPart`, and the archive is small
+    // enough that one copy costs nothing next to the download it feeds.
+    const blob = new Blob([new Uint8Array(archive.bytes)], { type: 'application/zip' });
     const url = URL.createObjectURL(blob);
     const link = this.document.createElement('a');
     link.href = url;

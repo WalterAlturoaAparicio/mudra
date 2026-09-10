@@ -11,7 +11,9 @@ import { PoseTriggerPanel } from '../../src/presentation/editor/pose-trigger-pan
 import type { PoseOption } from '../../src/presentation/editor/pose-trigger-panel';
 import type { Trigger } from '../../src/domain/effects/types';
 
-const poses: PoseOption[] = [{ poseId: 'dragon', displayName: 'Dragon', eligible: true, active: true }];
+const poses: PoseOption[] = [
+  { poseId: 'dragon', displayName: 'Dragon', eligible: true, active: true },
+];
 
 function buildPanel() {
   const changes: Trigger[] = [];
@@ -29,7 +31,8 @@ function fireChange(input: HTMLInputElement, value: string): void {
 describe('PoseTriggerPanel — confidence out of [0, 1] is rejected, never committed', () => {
   it('typing 50 into confidence never calls onChange, and shows an inline error', () => {
     const { panel, changes } = buildPanel();
-    const confidenceInput = panel.root.querySelectorAll<HTMLInputElement>('input[type="number"]')[0]!;
+    const confidenceInput =
+      panel.root.querySelectorAll<HTMLInputElement>('input[type="number"]')[0]!;
     fireChange(confidenceInput, '50');
 
     expect(changes).toHaveLength(0);
@@ -39,7 +42,8 @@ describe('PoseTriggerPanel — confidence out of [0, 1] is rejected, never commi
 
   it('a valid confidence commits normally and clears any prior error', () => {
     const { panel, changes } = buildPanel();
-    const confidenceInput = panel.root.querySelectorAll<HTMLInputElement>('input[type="number"]')[0]!;
+    const confidenceInput =
+      panel.root.querySelectorAll<HTMLInputElement>('input[type="number"]')[0]!;
     fireChange(confidenceInput, '50');
     expect(changes).toHaveLength(0);
 
@@ -75,7 +79,8 @@ describe('PoseTriggerPanel — cooldown must not be negative', () => {
 describe('PoseTriggerPanel — render() clears a stale error from a previous selection', () => {
   it('selecting a different effect resets the error text', () => {
     const { panel } = buildPanel();
-    const confidenceInput = panel.root.querySelectorAll<HTMLInputElement>('input[type="number"]')[0]!;
+    const confidenceInput =
+      panel.root.querySelectorAll<HTMLInputElement>('input[type="number"]')[0]!;
     fireChange(confidenceInput, '50');
     expect(panel.root.querySelector('.mudra-editor__inspector-error')!.textContent).not.toBe('');
 

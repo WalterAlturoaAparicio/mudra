@@ -7,7 +7,12 @@
  */
 
 import type { CaptureSample, CaptureSession } from '../../src/domain/capture/types';
-import { withAcceptedSample, withDeletedSample, withDiscardedFrame, closeSession } from '../../src/domain/capture/session';
+import {
+  withAcceptedSample,
+  withDeletedSample,
+  withDiscardedFrame,
+  closeSession,
+} from '../../src/domain/capture/session';
 import type { CaptureRepository } from '../../src/domain/ports/capture-repository';
 import { CaptureNotFoundError } from '../../src/domain/ports/capture-repository';
 

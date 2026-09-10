@@ -179,8 +179,8 @@ describe('the default screen', () => {
     shell.update(snapshot());
 
     expect(mount.querySelectorAll('a[download]')).toHaveLength(0);
-    const labels = [...mount.querySelectorAll('button, a, summary')].map(
-      (element) => (element.textContent ?? '').toLowerCase(),
+    const labels = [...mount.querySelectorAll('button, a, summary')].map((element) =>
+      (element.textContent ?? '').toLowerCase(),
     );
     for (const label of labels) {
       expect(label).not.toMatch(/record|capture|screenshot|save|download|share/);
@@ -272,7 +272,9 @@ describe('debug mode, by contrast', () => {
     });
     debug.update(snapshot());
 
-    expect(shell.debugContainer.textContent).toContain('capability unavailable: person_segmentation');
+    expect(shell.debugContainer.textContent).toContain(
+      'capability unavailable: person_segmentation',
+    );
   });
 
   it('unmounts everything again when switched off', () => {

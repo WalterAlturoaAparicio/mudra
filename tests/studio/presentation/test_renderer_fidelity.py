@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import pytest
 from engine.models.landmarks import Handedness
-from PySide6.QtCore import QSize, Qt
+from PySide6.QtCore import QSize
 from PySide6.QtGui import QColor, QImage, QPainter
 from PySide6.QtWidgets import QGraphicsItem, QGraphicsSimpleTextItem
 from studio.application.build_scene_plan import build_scene_plan
@@ -192,8 +192,7 @@ def test_markers_are_small_relative_to_the_rendered_hand(qtbot) -> None:
 
     assert hand_extent_px > 0
     assert largest_marker_px < 0.25 * hand_extent_px, (
-        f"largest marker is {largest_marker_px:.0f}px across against a "
-        f"{hand_extent_px:.0f}px hand"
+        f"largest marker is {largest_marker_px:.0f}px across against a {hand_extent_px:.0f}px hand"
     )
 
 

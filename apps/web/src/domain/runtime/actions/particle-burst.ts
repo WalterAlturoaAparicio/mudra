@@ -21,7 +21,12 @@
  * `test/domain/effect-runtime.test.ts`'s single-command and determinism assertions still hold.
  */
 
-import type { ActionContext, ActionDescriptor, ActionOutput, ActionPreset } from '../action-registry';
+import type {
+  ActionContext,
+  ActionDescriptor,
+  ActionOutput,
+  ActionPreset,
+} from '../action-registry';
 import type { DrawCirclesCommand, Point } from '../frame-output';
 import { numberParam, stringParam } from '../param-schema';
 import { simulateParticles } from './particle-model';

@@ -284,9 +284,7 @@ class DatasetPage(QWidget):
             return
         names = ", ".join(s.filename for s in loaded.skipped[:3])
         more = "" if loaded.skipped_count <= 3 else f" (+{loaded.skipped_count - 3} more)"
-        self.skipped_banner.setText(
-            f"{loaded.skipped_count} sample(s) skipped: {names}{more}"
-        )
+        self.skipped_banner.setText(f"{loaded.skipped_count} sample(s) skipped: {names}{more}")
         self.skipped_banner.show()
 
     # -- rendering -----------------------------------------------------------
@@ -310,9 +308,7 @@ class DatasetPage(QWidget):
                 self._apply_pose_state(self._loaded)
             return
 
-        plan = build_scene_plan(
-            self._loaded.samples, self._state, self._config.visualization
-        )
+        plan = build_scene_plan(self._loaded.samples, self._state, self._config.visualization)
         self.canvas_stack.setCurrentIndex(_CANVAS_INDEX)
         self.landmark_view.show_plan(plan, refit=refit)
 

@@ -213,7 +213,8 @@ export class PoseTriggerPanel {
     } catch (error) {
       // Rejected inline, exactly as `Inspector.commit()` rejects an invalid param — the
       // invalid value is never handed to `onChange`, so it can never reach the `Project`.
-      this.errorText.textContent = error instanceof ConditionValueError ? error.message : String(error);
+      this.errorText.textContent =
+        error instanceof ConditionValueError ? error.message : String(error);
       return;
     }
     this.errorText.textContent = '';

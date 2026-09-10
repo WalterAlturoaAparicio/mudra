@@ -458,8 +458,7 @@ async function bootstrap(): Promise<void> {
       debugEnabled = enabled;
       runtimeController.setOverlayProvider(
         enabled
-          ? (frame) =>
-              landmarkOverlayCommands(frame, config.renderer, frame.width, frame.height)
+          ? (frame) => landmarkOverlayCommands(frame, config.renderer, frame.width, frame.height)
           : null,
       );
       dockLayout.root.dataset['debug'] = enabled ? 'true' : 'false';
@@ -467,25 +466,21 @@ async function bootstrap(): Promise<void> {
     setDebug(false);
 
     const viewMenuItems: readonly MenuItem[] = [
-      ...dockLayout.listPanels().map(
-        (panel): MenuItem => ({
-          kind: 'checkbox',
-          label: panel.label,
-          description: 'Show or hide the ' + panel.label + ' panel.',
-          isChecked: () => dockLayout.isPanelVisible(panel.id),
-          onToggle: () => dockLayout.togglePanel(panel.id),
-        }),
-      ),
+      ...dockLayout.listPanels().map((panel): MenuItem => ({
+        kind: 'checkbox',
+        label: panel.label,
+        description: 'Show or hide the ' + panel.label + ' panel.',
+        isChecked: () => dockLayout.isPanelVisible(panel.id),
+        onToggle: () => dockLayout.togglePanel(panel.id),
+      })),
       { kind: 'separator' },
-      ...Object.keys(LAYOUT_PRESETS).map(
-        (preset): MenuItem => ({
-          kind: 'checkbox',
-          label: 'Layout: ' + preset,
-          description: 'Apply the ' + preset + ' panel arrangement.',
-          isChecked: () => dockLayout.currentPreset === preset,
-          onToggle: () => dockLayout.applyPreset(preset),
-        }),
-      ),
+      ...Object.keys(LAYOUT_PRESETS).map((preset): MenuItem => ({
+        kind: 'checkbox',
+        label: 'Layout: ' + preset,
+        description: 'Apply the ' + preset + ' panel arrangement.',
+        isChecked: () => dockLayout.currentPreset === preset,
+        onToggle: () => dockLayout.applyPreset(preset),
+      })),
       { kind: 'separator' },
       {
         label: 'Remember This Layout',
@@ -502,10 +497,7 @@ async function bootstrap(): Promise<void> {
             }
             dockLayout.applyPreset(stored.preset ?? dockLayout.currentPreset);
             for (const panel of dockLayout.listPanels()) {
-              dockLayout.setPanelVisible(
-                panel.id,
-                !(stored.hiddenPanels ?? []).includes(panel.id),
-              );
+              dockLayout.setPanelVisible(panel.id, !(stored.hiddenPanels ?? []).includes(panel.id));
             }
           });
         },

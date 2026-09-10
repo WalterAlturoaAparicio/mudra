@@ -17,7 +17,10 @@ import {
   CAPTURE_DATABASE_NAME,
   IndexedDbCaptureRepository,
 } from '../../src/infrastructure/persistence/indexeddb-capture-repository';
-import { CaptureSchemaError, parseStoredSample } from '../../src/infrastructure/persistence/capture-schema';
+import {
+  CaptureSchemaError,
+  parseStoredSample,
+} from '../../src/infrastructure/persistence/capture-schema';
 import { sample, session } from '../support/capture';
 
 /**
@@ -69,8 +72,12 @@ describe('sessions', () => {
   });
 
   it('lists most recently started first', async () => {
-    await repository.createSession(session({ id: 'a', startedAt: '2026-09-07T10:00:00.000000+00:00' }));
-    await repository.createSession(session({ id: 'b', startedAt: '2026-09-07T12:00:00.000000+00:00' }));
+    await repository.createSession(
+      session({ id: 'a', startedAt: '2026-09-07T10:00:00.000000+00:00' }),
+    );
+    await repository.createSession(
+      session({ id: 'b', startedAt: '2026-09-07T12:00:00.000000+00:00' }),
+    );
     expect((await repository.listSessions()).map((s) => s.id)).toEqual(['b', 'a']);
   });
 
@@ -89,14 +96,20 @@ describe('samples', () => {
 
   it('appends a sample and increments the session count', async () => {
     await repository.appendSample(sample({ id: 'a' }));
-    await repository.appendSample(sample({ id: 'b', capturedAt: '2026-09-07T13:20:01.000000+00:00' }));
+    await repository.appendSample(
+      sample({ id: 'b', capturedAt: '2026-09-07T13:20:01.000000+00:00' }),
+    );
     expect(await repository.countAll()).toBe(2);
     expect((await repository.listSessions())[0]?.sampleCount).toBe(2);
   });
 
   it('lists a session’s samples in capture order', async () => {
-    await repository.appendSample(sample({ id: 'b', capturedAt: '2026-09-07T13:20:05.000000+00:00' }));
-    await repository.appendSample(sample({ id: 'a', capturedAt: '2026-09-07T13:20:01.000000+00:00' }));
+    await repository.appendSample(
+      sample({ id: 'b', capturedAt: '2026-09-07T13:20:05.000000+00:00' }),
+    );
+    await repository.appendSample(
+      sample({ id: 'a', capturedAt: '2026-09-07T13:20:01.000000+00:00' }),
+    );
     expect((await repository.listSamples('session-0001')).map((s) => s.id)).toEqual(['a', 'b']);
   });
 
@@ -128,7 +141,9 @@ describe('deletion removes, and does not flag (FR-044, FR-045, SC-006)', () => {
   beforeEach(async () => {
     await repository.createSession(session());
     await repository.appendSample(sample({ id: 'a' }));
-    await repository.appendSample(sample({ id: 'b', capturedAt: '2026-09-07T13:20:02.000000+00:00' }));
+    await repository.appendSample(
+      sample({ id: 'b', capturedAt: '2026-09-07T13:20:02.000000+00:00' }),
+    );
   });
 
   it('deletes one sample — the record is absent from the store, not marked', async () => {

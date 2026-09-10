@@ -11,11 +11,7 @@ import type {
 } from '../../src/domain/recognition/types';
 import { handLandmarks } from '../../src/domain/landmarks/types';
 import type { Handedness } from '../../src/domain/landmarks/types';
-import {
-  bundleFromFixture,
-  readMatcherFixture,
-  toHandLandmarks,
-} from '../support/fixture-bundle';
+import { bundleFromFixture, readMatcherFixture, toHandLandmarks } from '../support/fixture-bundle';
 import { linearHand, spiralHand } from '../support/hands';
 
 const fixture = readMatcherFixture();
@@ -51,9 +47,7 @@ describe('golden fixtures generated from Engine-derived exemplars (FR-029)', () 
       );
       const byPose = new Map(scores.map((s) => [s.poseId, s.distance]));
 
-      expect(new Set(byPose.keys())).toEqual(
-        new Set(testCase.candidates.map((c) => c.pose_id)),
-      );
+      expect(new Set(byPose.keys())).toEqual(new Set(testCase.candidates.map((c) => c.pose_id)));
       for (const candidate of testCase.candidates) {
         const actual = byPose.get(candidate.pose_id);
         expect(actual).toBeDefined();
@@ -95,7 +89,11 @@ function bundleOf(
   poses: {
     poseId: string;
     requiredHands: number;
-    hands: { sampleId: string; handedness: Handedness; points: readonly { x: number; y: number; z: number }[] }[];
+    hands: {
+      sampleId: string;
+      handedness: Handedness;
+      points: readonly { x: number; y: number; z: number }[];
+    }[];
   }[],
 ): ExemplarBundle {
   const floatsPerHand = 63;
@@ -142,7 +140,11 @@ const B = spiralHand(1.7).points;
 
 describe('one-handed matching is hand-agnostic (FR-021)', () => {
   const oneHanded = bundleOf([
-    { poseId: 'wave', requiredHands: 1, hands: [{ sampleId: 's1', handedness: 'right', points: A }] },
+    {
+      poseId: 'wave',
+      requiredHands: 1,
+      hands: [{ sampleId: 's1', handedness: 'right', points: A }],
+    },
   ]);
   const m = new NearestNeighbourMatcher(oneHanded, defaultLandmarkWeights());
 
@@ -262,8 +264,18 @@ describe('two-handed distances combine as the mean, not the sum (FR-023)', () =>
       { handedness: 'right', landmarks: handLandmarks([...B]) },
     ];
     const perHand = [
-      weightedDistance(live[0]!, bundleTwo, bundleTwo.poses[0]!.hands[0]!, defaultLandmarkWeights()),
-      weightedDistance(live[1]!, bundleTwo, bundleTwo.poses[0]!.hands[1]!, defaultLandmarkWeights()),
+      weightedDistance(
+        live[0]!,
+        bundleTwo,
+        bundleTwo.poses[0]!.hands[0]!,
+        defaultLandmarkWeights(),
+      ),
+      weightedDistance(
+        live[1]!,
+        bundleTwo,
+        bundleTwo.poses[0]!.hands[1]!,
+        defaultLandmarkWeights(),
+      ),
     ];
     const scores = m.score(live, ['clasp']);
     const mean = (perHand[0]! + perHand[1]!) / 2;
@@ -279,7 +291,11 @@ describe('the distance itself', () => {
   it('weights the wrist least and the fingertips most', () => {
     const flat = linearHand().points;
     const single = bundleOf([
-      { poseId: 'x', requiredHands: 1, hands: [{ sampleId: 's', handedness: 'right', points: flat }] },
+      {
+        poseId: 'x',
+        requiredHands: 1,
+        hands: [{ sampleId: 's', handedness: 'right', points: flat }],
+      },
     ]);
     const w = defaultLandmarkWeights();
 

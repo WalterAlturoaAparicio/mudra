@@ -11,7 +11,11 @@
  * the file looks like.
  */
 
-import { ConditionValueError, KNOWN_CONDITION_TYPES, validateConditionValue } from '../../domain/effects/conditions';
+import {
+  ConditionValueError,
+  KNOWN_CONDITION_TYPES,
+  validateConditionValue,
+} from '../../domain/effects/conditions';
 import type {
   Action,
   Anchor,

@@ -98,9 +98,7 @@ export async function buildCaptureExport(options: CaptureExportOptions): Promise
       const number = sampleNumber(position);
       sampleEntries.push({
         name: `${poseDirectory(session.poseId)}/${number}.json`,
-        bytes: utf8(
-          serializePoseSampleJson({ session, sample, sampleNumber: number, versions }),
-        ),
+        bytes: utf8(serializePoseSampleJson({ session, sample, sampleNumber: number, versions })),
       });
     }
     included.push({ session, writtenSamples: samples.length });

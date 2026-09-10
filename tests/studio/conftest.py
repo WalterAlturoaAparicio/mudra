@@ -14,10 +14,11 @@ from __future__ import annotations
 
 import json
 import math
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 import pytest
+from engine.config.models import NormalizationConfig
 from engine.dataset.serializer import PoseSerializer
 from engine.models.landmarks import Handedness, HandLandmarks, Landmark
 from engine.models.pose import (
@@ -29,6 +30,7 @@ from engine.models.pose import (
     PoseMetadata,
     PoseSample,
 )
+from engine.normalization.translation_scale import TranslationScaleNormalizer
 
 # --------------------------------------------------------------------------- #
 # Builders

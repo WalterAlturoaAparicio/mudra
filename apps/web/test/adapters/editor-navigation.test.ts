@@ -71,12 +71,14 @@ function twoEffects(): EffectDefinition[] {
   ];
 }
 
-function buildShell(project: Project = createProject(
-  { version: 1, effects: twoEffects() },
-  'p1',
-  'Project One',
-  1000,
-)) {
+function buildShell(
+  project: Project = createProject(
+    { version: 1, effects: twoEffects() },
+    'p1',
+    'Project One',
+    1000,
+  ),
+) {
   const runtime = new EffectRuntime({
     catalog: project.catalog,
     registry,
@@ -152,9 +154,10 @@ describe('effect rename (item 11)', () => {
     input.value = 'Greeting';
     input.dispatchEvent(new Event('change', { bubbles: true }));
 
-    const labels = treeRows(layout, '.mudra-editor__tree-row--effect .mudra-editor__tree-label').map(
-      (row) => row.textContent,
-    );
+    const labels = treeRows(
+      layout,
+      '.mudra-editor__tree-row--effect .mudra-editor__tree-label',
+    ).map((row) => row.textContent);
     expect(labels).toContain('Greeting');
     expect(labels).not.toContain('First effect');
   });
@@ -186,9 +189,7 @@ describe('effect rename (item 11)', () => {
     input.dispatchEvent(new Event('change', { bubbles: true }));
 
     expect(shell.currentProject.catalog.effects[0]!.name).toBe('First effect');
-    expect(layout.effect.querySelector('.mudra-editor__inspector-error')!.textContent).not.toBe(
-      '',
-    );
+    expect(layout.effect.querySelector('.mudra-editor__inspector-error')!.textContent).not.toBe('');
   });
 
   it('two effects may carry the same name and still have distinct ids', () => {
@@ -235,7 +236,9 @@ describe('the project tree (item 10)', () => {
 
     expect(shell.selection).toEqual({ effectId: 'e1', entryIndex: 1 });
     const labels = [
-      ...layout.right.querySelectorAll('.mudra-editor__inspector-fields .mudra-editor__field-label'),
+      ...layout.right.querySelectorAll(
+        '.mudra-editor__inspector-fields .mudra-editor__field-label',
+      ),
     ].map((element) => element.textContent);
     // background_wash's own schema, not screen_flash's.
     expect(labels).toContain('fadeInFraction');
@@ -250,9 +253,12 @@ describe('the project tree (item 10)', () => {
 
     shell.setProjectIsActive(true);
 
-    const standings = treeRows(layout, '.mudra-editor__tree-standing').map(
-      (row) => row.dataset['standing'],
-    );
+    // Scoped to effect rows: the tree's project root carries a standing badge of its own,
+    // about the project rather than about any one effect, and this test is about the effects.
+    const standings = treeRows(
+      layout,
+      '.mudra-editor__tree-row--effect .mudra-editor__tree-standing',
+    ).map((row) => row.dataset['standing']);
     // "alpha" is in the active pose set; "beta" is not.
     expect(standings).toEqual(['active', 'eligible']);
   });

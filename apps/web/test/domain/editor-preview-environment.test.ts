@@ -51,6 +51,8 @@ class RecordingStage implements StagePresenter {
 
 const realCamera: CameraSession = {
   surface: { width: 640, height: 480, image: null, update: () => true },
+  // Frames are pushed by the test, not by the camera, so subscribing is a no-op.
+  onFrame: () => () => {},
   close: () => {},
 };
 
@@ -138,9 +140,7 @@ describe('the stand-in hand', () => {
 
     const frame = runtime.advance([], landmarkFrame([], 0, 640, 480), 10);
     expect(frame.commands).toEqual([]);
-    expect(frame.diagnostics.map((diagnostic) => diagnostic.reason)).toContain(
-      'anchor_unresolved',
-    );
+    expect(frame.diagnostics.map((diagnostic) => diagnostic.reason)).toContain('anchor_unresolved');
   });
 
   it('is never substituted while a camera is attached — a real empty frame stays empty', () => {

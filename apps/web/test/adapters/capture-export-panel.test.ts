@@ -159,9 +159,7 @@ describe('a failed export', () => {
     p.instance.setSampleCount(1);
 
     p.button.click();
-    await vi.waitFor(() =>
-      expect(p.status.textContent).toMatch(/no captured samples to export/i),
-    );
+    await vi.waitFor(() => expect(p.status.textContent).toMatch(/no captured samples to export/i));
     expect(p.button.disabled).toBe(false);
   });
 });

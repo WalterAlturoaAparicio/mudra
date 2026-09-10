@@ -71,9 +71,7 @@ def test_bounds_are_non_degenerate_for_a_single_point_scene() -> None:
     from engine.models.pose import HandSample
 
     flat = HandLandmarks(points=tuple(Landmark(x=0.5, y=0.5, z=0.0) for _ in range(21)))
-    hand = HandSample(
-        handedness=Handedness.RIGHT, confidence=0.9, raw=flat, normalized=flat
-    )
+    hand = HandSample(handedness=Handedness.RIGHT, confidence=0.9, raw=flat, normalized=flat)
     sample = make_pose_sample(hands=(hand,))
 
     plan = build_scene_plan([sample], _state([sample]), CONFIG)

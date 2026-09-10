@@ -65,10 +65,7 @@ export class HoldIndicator {
   update(progress: number): void {
     const clamped = progress < 0 ? 0 : progress > 1 ? 1 : progress;
     this.setVisible(clamped > 0);
-    this.ring.setAttribute(
-      'stroke-dashoffset',
-      String(this.circumference * (1 - clamped)),
-    );
+    this.ring.setAttribute('stroke-dashoffset', String(this.circumference * (1 - clamped)));
   }
 
   private setVisible(visible: boolean): void {

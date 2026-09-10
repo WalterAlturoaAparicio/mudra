@@ -22,7 +22,6 @@ from engine.models.landmarks import Handedness
 from engine.models.topology import HAND_LANDMARK_COUNT, LandmarkIndex
 from studio.application.build_scene_plan import build_scene_plan
 from studio.config.models import VisualizationConfig
-from studio.domain.scene import MarkerShape
 from studio.domain.selection import CoordinateSpace, DatasetViewState, SampleKey
 
 from tests.studio.conftest import (

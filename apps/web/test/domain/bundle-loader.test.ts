@@ -98,9 +98,9 @@ describe('a well-formed bundle', () => {
 describe('rejections', () => {
   it('rejects an unknown format_version rather than misreading it (FR-083)', () => {
     const manifest = { ...wellFormedManifest(), format_version: 99 };
-    expect(() => parseBundle(manifest, payloadFor(3), { supportedFormatVersion: SUPPORTED })).toThrow(
-      /format_version 99 is not supported/,
-    );
+    expect(() =>
+      parseBundle(manifest, payloadFor(3), { supportedFormatVersion: SUPPORTED }),
+    ).toThrow(/format_version 99 is not supported/);
   });
 
   it('rejects a payload whose size disagrees with the manifest', () => {

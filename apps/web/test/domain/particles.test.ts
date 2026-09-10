@@ -74,9 +74,7 @@ function angles(command: DrawCirclesCommand): readonly number[] {
 
 /** Radial distance from the origin, per particle. */
 function reaches(command: DrawCirclesCommand): readonly number[] {
-  return command.points.map((point) =>
-    Math.hypot(point.x - 320, point.y - 240),
-  );
+  return command.points.map((point) => Math.hypot(point.x - 320, point.y - 240));
 }
 
 describe('the shipped defaults reproduce the pre-configuration burst', () => {
@@ -188,7 +186,13 @@ describe('multiple colours', () => {
 
   it('a gradient mix produces colours between the two ends', () => {
     const commands = circles(
-      { count: 20, colorMix: 'gradient', color: '#000000', colorEnd: '#ffffff', emissionFraction: 0.9 },
+      {
+        count: 20,
+        colorMix: 'gradient',
+        color: '#000000',
+        colorEnd: '#ffffff',
+        emissionFraction: 0.9,
+      },
       0.6,
     );
     const colors = new Set(commands.map((command) => command.color));

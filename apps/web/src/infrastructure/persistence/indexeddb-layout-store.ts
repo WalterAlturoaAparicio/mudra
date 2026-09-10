@@ -9,17 +9,19 @@
  * repository's.
  */
 
-import type { LayoutStore, PanelSizes } from '../../domain/ports/layout-store';
+import type { EditorLayout, LayoutStore } from '../../domain/ports/layout-store';
 
 /** The database name every production session uses. Tests supply their own. */
 export const DEFAULT_DATABASE_NAME = 'mudra-editor-layout';
 const DATABASE_VERSION = 1;
 const LAYOUT_STORE = 'layout';
-const SIZES_KEY = 'panel-sizes';
+const LAYOUT_KEY = 'panel-sizes';
 
-interface StoredSizesRecord {
-  readonly key: typeof SIZES_KEY;
-  readonly sizes: PanelSizes;
+interface StoredLayoutRecord {
+  readonly key: typeof LAYOUT_KEY;
+  /** Still named `sizes` so records written before hidden panels and presets existed load
+   *  unchanged — the added fields are optional on `EditorLayout` for exactly this reason. */
+  readonly sizes: EditorLayout;
 }
 
 function promisify<T>(request: IDBRequest): Promise<T> {
@@ -43,7 +45,7 @@ function openIndexedDb(databaseName: string): Promise<IDBDatabase> {
   });
 }
 
-/** Local-only dock-layout panel size persistence, backed by IndexedDB. */
+/** Local-only editor chrome persistence — sizes, hidden panels, preset — backed by IndexedDB. */
 export class IndexedDbLayoutStore implements LayoutStore {
   private readonly dbPromise: Promise<IDBDatabase>;
 
@@ -51,19 +53,19 @@ export class IndexedDbLayoutStore implements LayoutStore {
     this.dbPromise = openIndexedDb(databaseName);
   }
 
-  async load(): Promise<PanelSizes | null> {
+  async load(): Promise<EditorLayout | null> {
     const db = await this.dbPromise;
     const tx = db.transaction(LAYOUT_STORE, 'readonly');
-    const record = await promisify<StoredSizesRecord | undefined>(
-      tx.objectStore(LAYOUT_STORE).get(SIZES_KEY),
+    const record = await promisify<StoredLayoutRecord | undefined>(
+      tx.objectStore(LAYOUT_STORE).get(LAYOUT_KEY),
     );
     return record?.sizes ?? null;
   }
 
-  async save(sizes: PanelSizes): Promise<void> {
+  async save(layout: EditorLayout): Promise<void> {
     const db = await this.dbPromise;
     const tx = db.transaction(LAYOUT_STORE, 'readwrite');
-    const record: StoredSizesRecord = { key: SIZES_KEY, sizes };
+    const record: StoredLayoutRecord = { key: LAYOUT_KEY, sizes: layout };
     await promisify(tx.objectStore(LAYOUT_STORE).put(record));
   }
 }

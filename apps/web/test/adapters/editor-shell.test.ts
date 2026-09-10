@@ -245,7 +245,9 @@ describe('keyboard deletion of the selected clip (item 12)', () => {
     keydown('Delete');
 
     expect(shell.currentProject.catalog.effects).toHaveLength(2); // no effect/project deleted
-    expect(shell.currentProject.catalog.effects[1]).toEqual(projectWithEffects().catalog.effects[1]);
+    expect(shell.currentProject.catalog.effects[1]).toEqual(
+      projectWithEffects().catalog.effects[1],
+    );
   });
 
   it('does nothing when no clip is selected', () => {

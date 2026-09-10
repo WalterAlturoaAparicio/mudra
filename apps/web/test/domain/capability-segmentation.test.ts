@@ -93,7 +93,11 @@ describe('person_visibility, driven by capability state (T058, FR-042, FR-046)',
           timeline: {
             durationMs: 500,
             entries: [
-              { atMs: 0, durationMs: 400, action: { type: 'person_visibility', params: { opacity } } },
+              {
+                atMs: 0,
+                durationMs: 400,
+                action: { type: 'person_visibility', params: { opacity } },
+              },
             ],
           },
         },
@@ -124,7 +128,12 @@ describe('person_visibility, driven by capability state (T058, FR-042, FR-046)',
 
     expect(result.commands).toEqual([]);
     expect(result.diagnostics).toEqual([
-      { effectId: 'e1', actionType: 'person_visibility', reason: 'capability_unavailable', detail: PERSON_SEGMENTATION },
+      {
+        effectId: 'e1',
+        actionType: 'person_visibility',
+        reason: 'capability_unavailable',
+        detail: PERSON_SEGMENTATION,
+      },
     ]);
   });
 
@@ -141,7 +150,12 @@ describe('person_visibility, driven by capability state (T058, FR-042, FR-046)',
 
     expect(result.commands).toEqual([]);
     expect(result.diagnostics).toEqual([
-      { effectId: 'e1', actionType: 'person_visibility', reason: 'capability_unavailable', detail: PERSON_SEGMENTATION },
+      {
+        effectId: 'e1',
+        actionType: 'person_visibility',
+        reason: 'capability_unavailable',
+        detail: PERSON_SEGMENTATION,
+      },
     ]);
   });
 });

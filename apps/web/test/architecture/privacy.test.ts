@@ -142,19 +142,46 @@ describe('no recording, capture, download or share affordance exists for the CAM
    * output"), so this one file is scoped out; every other file remains fully checked.
    */
   const PROJECT_PANEL_PATH = 'src/presentation/editor/project-panel.ts';
-  const markupSources = readSources(SRC_ROOT).filter((f) => f.path !== PROJECT_PANEL_PATH);
+  /**
+   * Capture Mode's dataset export — the second and last download exemption (constitution
+   * v1.8.0, contracts/privacy-capture.md). Exporting a **landmark dataset** is a download by
+   * definition, and it is still never camera imagery.
+   */
+  const CAPTURE_EXPORT_PATH = 'src/presentation/capture/capture-export-panel.ts';
+  const DOWNLOAD_EXEMPTIONS = [PROJECT_PANEL_PATH, CAPTURE_EXPORT_PATH];
+  /**
+   * Capture Mode's session controls are correctly labelled "Capture" — they record landmark
+   * samples, which is the feature. The label exemption is that tree and the project panel,
+   * and nothing else.
+   */
+  const LABEL_EXEMPTIONS = [PROJECT_PANEL_PATH, 'src/presentation/capture/'];
+
+  const isExempt = (path: string, exemptions: readonly string[]): boolean =>
+    exemptions.some((entry) => (entry.endsWith('/') ? path.startsWith(entry) : path === entry));
+
+  const downloadSources = readSources(SRC_ROOT).filter(
+    (f) => !isExempt(f.path, DOWNLOAD_EXEMPTIONS),
+  );
+  const markupSources = readSources(SRC_ROOT).filter((f) => !isExempt(f.path, LABEL_EXEMPTIONS));
   const markup = markupSources.map((f) => f.raw);
 
-  it('creates no download link outside project export', () => {
+  it('creates no download link outside project export and dataset export', () => {
     // `<a download>` is the shortest path from "look at this" to "keep this", in markup or
     // in code that builds an anchor.
-    const offenders = markup.filter(
-      (source) => /download\s*=/.test(source) || /\.download\b/.test(source),
-    );
+    const offenders = downloadSources
+      .map((f) => f.raw)
+      .filter((source) => /download\s*=/.test(source) || /\.download\b/.test(source));
     expect(offenders).toEqual([]);
   });
 
-  it('labels no control record / capture / save / download / share, outside project export', () => {
+  it('keeps both exemption lists exactly as short as they are', () => {
+    // Adding a third entry is then a deliberate edit to a test that fails first — which is
+    // the point of naming the exemptions rather than relaxing a pattern.
+    expect(DOWNLOAD_EXEMPTIONS).toHaveLength(2);
+    expect(LABEL_EXEMPTIONS).toHaveLength(2);
+  });
+
+  it('labels no control record / capture / save / download / share, outside the two exemptions', () => {
     // An API-and-label check by design, **not** a UI crawler. The API scan above cannot
     // catch an affordance wired to a permitted path, and a crawler would be
     // disproportionate to the risk.
@@ -177,5 +204,48 @@ describe('no recording, capture, download or share affordance exists for the CAM
     const html = readFileSync(join(APP_ROOT, 'index.html'), 'utf-8');
     expect(/\bdownload\b/i.test(html)).toBe(false);
     expect(/<a\s[^>]*href\s*=\s*"(blob|data):/i.test(html)).toBe(false);
+  });
+});
+
+/**
+ * The exemptions above are narrow, and narrowness is asserted rather than assumed
+ * (contracts/privacy-capture.md, "Compensating assertions").
+ */
+describe('the capture tree is narrow where it is exempt', () => {
+  const captureSources = readSources(SRC_ROOT).filter(
+    (file) => file.path.includes('/capture/') || file.path === 'src/capture-main.ts',
+  );
+
+  it('has capture source to scan', () => {
+    expect(captureSources.length).toBeGreaterThan(5);
+  });
+
+  it('calls no readback or upload API of its own', () => {
+    // Already covered by the global scan; stated locally so a future exemption cannot
+    // quietly come to cover the capture tree as well.
+    const offenders: string[] = [];
+    for (const file of captureSources) {
+      for (const name of [...READBACK_APIS, ...UPLOAD_APIS]) {
+        offenders.push(...findMatches(file, new RegExp(`\\b${name}\\b`)));
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('names no camera or segmentation type in what it stores and exports', () => {
+    // The capture *controller* legitimately receives a MirroredSurface and a LandmarkFrame,
+    // and the panels draw them; the modules that build the stored and exported bytes must
+    // not know those types exist.
+    const offenders: string[] = [];
+    for (const file of captureSources) {
+      if (
+        file.path === 'src/application/capture-controller.ts' ||
+        file.path.startsWith('src/presentation/capture/')
+      ) {
+        continue;
+      }
+      offenders.push(...findMatches(file, /MirroredSurface|SegmentationFrame|ImageBitmap/));
+    }
+    expect(offenders, 'stored and exported data is landmarks, never imagery').toEqual([]);
   });
 });

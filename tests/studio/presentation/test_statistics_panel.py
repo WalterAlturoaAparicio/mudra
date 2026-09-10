@@ -7,7 +7,7 @@ from pathlib import Path
 
 from studio.domain.statistics import PoseStatistics
 from studio.presentation.dataset.page import DatasetPage
-from studio.presentation.dataset.statistics_panel import FR015_FIELDS, StatisticsPanel
+from studio.presentation.dataset.statistics_panel import StatisticsPanel
 
 
 def test_panel_renders_every_fr015_field(qtbot) -> None:

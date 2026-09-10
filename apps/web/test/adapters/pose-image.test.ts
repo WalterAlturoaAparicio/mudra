@@ -15,10 +15,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import {
-  POSE_IMAGE_BASE,
-  poseImageUrl,
-} from '../../src/infrastructure/assets/pose-images';
+import { POSE_IMAGE_BASE, poseImageUrl } from '../../src/infrastructure/assets/pose-images';
 import { PoseImage } from '../../src/presentation/shared/pose-image';
 
 describe('the published URL', () => {

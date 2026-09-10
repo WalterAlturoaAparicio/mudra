@@ -132,7 +132,14 @@ export function parseCaptureConfig(raw: unknown): CaptureConfig {
 
   const config: CaptureConfig = {
     // 0 disables the countdown; the upper bound keeps a typo from arming a five-minute wait.
-    countdownMs: num(root, 'countdownMs', DEFAULT_CAPTURE_CONFIG.countdownMs, 'capture config', 0, 30_000),
+    countdownMs: num(
+      root,
+      'countdownMs',
+      DEFAULT_CAPTURE_CONFIG.countdownMs,
+      'capture config',
+      0,
+      30_000,
+    ),
     burstSize: num(root, 'burstSize', DEFAULT_CAPTURE_CONFIG.burstSize, 'capture config', 1, 100),
     burstIntervalMs: num(
       root,

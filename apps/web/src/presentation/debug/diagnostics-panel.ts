@@ -139,7 +139,8 @@ export class DiagnosticsPanel {
     for (const reference of this.options.unresolvedAssets()) {
       const item = document.createElement('li');
       item.className = 'is-warning';
-      item.title = 'An effect references this asset, but it did not resolve — check the asset library.';
+      item.title =
+        'An effect references this asset, but it did not resolve — check the asset library.';
       item.textContent = 'unresolved asset: ' + reference;
       notes.append(item);
     }

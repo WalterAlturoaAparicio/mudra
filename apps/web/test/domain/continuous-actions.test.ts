@@ -11,11 +11,12 @@ import { describe, expect, it } from 'vitest';
 
 import { landmarkFrame } from '../../src/domain/landmarks/types';
 import type { DrawPolylineCommand } from '../../src/domain/runtime/frame-output';
+import type { Action } from '../../src/domain/effects/types';
 import { landmarkTrailAction } from '../../src/domain/runtime/actions/landmark-trail';
 import { catalog, effect, entry, poseEvent, runtimeFor } from '../support/effects';
 import { frameOf, spiralHand, translated } from '../support/hands';
 
-const trail = {
+const trail: Action = {
   type: 'landmark_trail',
   params: {
     anchor: { kind: 'landmark', hand: 'first', index: 8 },
@@ -48,9 +49,7 @@ function runTrail(steps: number, length = 20) {
       i === 0
         ? runtime.advance([poseEvent('confirmed', 'p', 0)], frame, 0)
         : runtime.advance([], frame, t);
-    const line = output.commands.find(
-      (c): c is DrawPolylineCommand => c.kind === 'drawPolyline',
-    );
+    const line = output.commands.find((c): c is DrawPolylineCommand => c.kind === 'drawPolyline');
     if (line !== undefined) {
       polylines.push(line);
     }

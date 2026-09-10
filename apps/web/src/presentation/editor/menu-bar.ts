@@ -260,9 +260,7 @@ export class MenuBar {
 
     const disabledReason = item.kind === 'checkbox' ? undefined : item.disabledReason;
     button.title =
-      item.description === undefined
-        ? item.label
-        : item.label + ' — ' + item.description;
+      item.description === undefined ? item.label : item.label + ' — ' + item.description;
     button.addEventListener('click', (event) => {
       event.stopPropagation();
       if ((item.isEnabled?.() ?? true) === false) {

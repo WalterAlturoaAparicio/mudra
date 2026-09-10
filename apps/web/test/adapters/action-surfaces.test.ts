@@ -148,7 +148,9 @@ describe('every shipped action', () => {
         try {
           render(inspector, descriptor);
           const buttons = [
-            ...inspector.root.querySelectorAll<HTMLButtonElement>('.mudra-editor__preset-row button'),
+            ...inspector.root.querySelectorAll<HTMLButtonElement>(
+              '.mudra-editor__preset-row button',
+            ),
           ];
           expect(buttons).toHaveLength((descriptor.presets ?? []).length);
           for (const button of buttons) {

@@ -10,17 +10,12 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import {
-  DEFAULT_CAPTURE_CONFIG,
-  parseCaptureConfig,
-} from '../../src/domain/config/capture-config';
+import { DEFAULT_CAPTURE_CONFIG, parseCaptureConfig } from '../../src/domain/config/capture-config';
 import { ConfigError } from '../../src/domain/config/session-config';
 import { loadCaptureConfig } from '../../src/infrastructure/config/capture-config-loader';
 import { APP_ROOT } from '../support/source-scan';
 
-const shipped = JSON.parse(
-  readFileSync(join(APP_ROOT, 'config/capture.json'), 'utf-8'),
-) as unknown;
+const shipped = JSON.parse(readFileSync(join(APP_ROOT, 'config/capture.json'), 'utf-8')) as unknown;
 
 describe('parseCaptureConfig', () => {
   it('accepts the configuration the application actually ships', () => {

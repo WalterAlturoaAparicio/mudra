@@ -78,7 +78,13 @@ export class CameraPanel {
     this.render(initial);
   }
 
-  private range(label: string, min: number, max: number, step: number, title: string): HTMLInputElement {
+  private range(
+    label: string,
+    min: number,
+    max: number,
+    step: number,
+    title: string,
+  ): HTMLInputElement {
     const wrapper = this.document.createElement('label');
     wrapper.className = 'mudra-editor__field';
     const caption = this.document.createElement('span');

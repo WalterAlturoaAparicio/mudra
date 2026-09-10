@@ -1,0 +1,8 @@
+{
+  "countdownMs": 3000,
+  "burstSize": 5,
+  "burstIntervalMs": 200,
+  "contributorLabelPattern": "^[a-z0-9][a-z0-9_-]{0,23}$",
+  "poseIdPattern": "^[a-z0-9_]+$",
+  "undoDepth": 50
+}

@@ -17,14 +17,7 @@ import {
 } from '../../src/domain/runtime/capabilities';
 import { personVisibilityAction } from '../../src/domain/runtime/actions/person-visibility';
 import { SHIPPED_ACTIONS } from '../../src/domain/runtime/actions';
-import {
-  allCapabilities,
-  catalog,
-  effect,
-  entry,
-  poseEvent,
-  runtimeFor,
-} from '../support/effects';
+import { allCapabilities, catalog, effect, entry, poseEvent, runtimeFor } from '../support/effects';
 
 const emptyFrame = landmarkFrame([], 0, 1280, 720);
 
@@ -55,7 +48,12 @@ describe('person_visibility', () => {
   it('produces no commands and one diagnostic (FR-077)', () => {
     const runtime = runtimeFor(
       catalog(
-        effect({ id: 'e.reserved', poseId: 'p', durationMs: 500, entries: [entry(0, visibility, 500)] }),
+        effect({
+          id: 'e.reserved',
+          poseId: 'p',
+          durationMs: 500,
+          entries: [entry(0, visibility, 500)],
+        }),
       ),
     );
     const output = runtime.advance([poseEvent('confirmed', 'p', 0)], emptyFrame, 0);
@@ -108,7 +106,9 @@ describe('person_visibility', () => {
     // the capability present without that work having been done, this action must still
     // not pretend — it would be worse to half-do it than to leave it reserved.
     const runtime = runtimeFor(
-      catalog(effect({ id: 'e', poseId: 'p', durationMs: 400, entries: [entry(0, visibility, 400)] })),
+      catalog(
+        effect({ id: 'e', poseId: 'p', durationMs: 400, entries: [entry(0, visibility, 400)] }),
+      ),
       { capabilities: allCapabilities() },
     );
     const output = runtime.advance([poseEvent('confirmed', 'p', 0)], emptyFrame, 0);

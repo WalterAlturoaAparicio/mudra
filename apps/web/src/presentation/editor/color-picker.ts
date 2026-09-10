@@ -82,7 +82,13 @@ export function hexToHsl(hex: string): Hsl {
     }
   }
   const s = delta === 0 ? 0 : delta / (1 - Math.abs(2 * l - 1));
-  return { h: Math.round(h), s: Math.round(s * 100), l: Math.round(l * 100) };
+  // One decimal, not whole numbers. Integer HSL cannot represent 8-bit RGB without loss, so
+  // rounding here made `hslToHex(hexToHsl(hex))` return a *different* colour — visible as a
+  // swatch that shifted the moment the picker was opened on it, and as a hue that drifted
+  // every time an unrelated slider moved. The sliders still work in whole numbers; only the
+  // conversion keeps the precision needed to be lossless.
+  const round = (value: number): number => Math.round(value * 10) / 10;
+  return { h: round(h), s: round(s * 100), l: round(l * 100) };
 }
 
 /** Convert HSL back to `#rrggbb`. */
@@ -190,9 +196,7 @@ export class ColorPicker {
     this.trigger.setAttribute('aria-haspopup', 'dialog');
     this.trigger.setAttribute('aria-expanded', 'false');
     this.trigger.title =
-      options.label === undefined
-        ? 'Pick a colour.'
-        : 'Pick a colour for ' + options.label + '.';
+      options.label === undefined ? 'Pick a colour.' : 'Pick a colour for ' + options.label + '.';
     const swatchDot = this.document.createElement('span');
     swatchDot.className = 'mudra-color-picker__dot';
     const hexLabel = this.document.createElement('span');
@@ -222,15 +226,23 @@ export class ColorPicker {
     this.preview.className = 'mudra-color-picker__preview';
     this.popover.append(this.preview);
 
-    this.hue = this.slider('Hue', 0, 360, 1, 'mudra-color-picker__slider--hue');
+    this.hue = this.slider('Hue', 0, 360, 1, 'mudra-color-picker__slider--hue', 'h');
     this.saturation = this.slider(
       'Saturation',
       0,
       100,
       1,
       'mudra-color-picker__slider--saturation',
+      's',
     );
-    this.lightness = this.slider('Lightness', 0, 100, 1, 'mudra-color-picker__slider--lightness');
+    this.lightness = this.slider(
+      'Lightness',
+      0,
+      100,
+      1,
+      'mudra-color-picker__slider--lightness',
+      'l',
+    );
 
     const hexRow = this.document.createElement('label');
     hexRow.className = 'mudra-color-picker__hex-row';
@@ -340,6 +352,7 @@ export class ColorPicker {
     max: number,
     step: number,
     className: string,
+    channel: keyof Hsl,
   ): HTMLInputElement {
     const wrapper = this.document.createElement('label');
     wrapper.className = 'mudra-color-picker__slider-row';
@@ -353,21 +366,23 @@ export class ColorPicker {
     input.step = String(step);
     input.className = 'mudra-color-picker__slider ' + className;
     input.setAttribute('aria-label', label);
-    input.addEventListener('input', () => this.applyFromSliders());
+    input.addEventListener('input', () => this.applyFromSlider(channel, Number(input.value)));
     wrapper.append(caption, input);
     this.popover.append(wrapper);
     return input;
   }
 
-  private applyFromSliders(): void {
-    this.apply(
-      hslToHex({
-        h: Number(this.hue.value),
-        s: Number(this.saturation.value),
-        l: Number(this.lightness.value),
-      }),
-      { syncSliders: false },
-    );
+  /**
+   * Move one channel, and leave the other two exactly as they were.
+   *
+   * Reading all three sliders back would quietly quantize the untouched ones to whole
+   * numbers — so nudging Lightness shifted the hue, which is the drift an author sees as a
+   * colour that will not hold still. Only the channel that moved comes from a slider.
+   */
+  private applyFromSlider(channel: keyof Hsl, value: number): void {
+    this.apply(hslToHex({ ...hexToHsl(this.current), [channel]: value }), {
+      syncSliders: false,
+    });
   }
 
   /** Adopt `hex`, refresh whichever controls did not originate the change, and report it. */
@@ -387,9 +402,11 @@ export class ColorPicker {
   private reflect(options: { syncSliders?: boolean; syncHexField?: boolean } = {}): void {
     const hsl = hexToHsl(this.current);
     if (options.syncSliders !== false) {
-      this.hue.value = String(hsl.h);
-      this.saturation.value = String(hsl.s);
-      this.lightness.value = String(hsl.l);
+      // Whole numbers here, because the sliders step in whole numbers; the fractional part
+      // lives in the colour itself, which is what the sliders are being synced *from*.
+      this.hue.value = String(Math.round(hsl.h));
+      this.saturation.value = String(Math.round(hsl.s));
+      this.lightness.value = String(Math.round(hsl.l));
     }
     if (options.syncHexField !== false) {
       this.hexInput.value = this.current;

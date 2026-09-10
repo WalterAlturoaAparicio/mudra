@@ -139,8 +139,8 @@ describe('the overlay itself', () => {
       frame.width,
       frame.height,
     );
-    const circles = commands.find((c) => c.kind === 'drawCircles');
-    const first = circles!.kind === 'drawCircles' ? circles.points[0]! : { x: -1, y: -1 };
+    const circles = commands.find((c) => c.kind === 'drawCircles')!;
+    const first = circles.kind === 'drawCircles' ? circles.points[0]! : { x: -1, y: -1 };
     const landmark = frame.hands[0]!.landmarks.points[0]!;
     expect(first.x).toBeCloseTo(landmark.x * frame.width, 6);
     expect(first.y).toBeCloseTo(landmark.y * frame.height, 6);

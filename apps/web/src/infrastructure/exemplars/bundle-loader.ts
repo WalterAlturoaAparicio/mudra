@@ -103,7 +103,13 @@ function text(raw: Json, key: string, path: string): string {
   const value = raw[key];
   if (typeof value !== 'string' || value.length === 0) {
     throw new BundleError(
-      'manifest ' + path + '.' + key + ' must be a non-empty string, got ' + JSON.stringify(value) + '.',
+      'manifest ' +
+        path +
+        '.' +
+        key +
+        ' must be a non-empty string, got ' +
+        JSON.stringify(value) +
+        '.',
     );
   }
   return value;
@@ -121,7 +127,9 @@ function handedness(value: string, where: string): Handedness {
   if (value === 'left' || value === 'right' || value === 'unknown') {
     return value;
   }
-  throw new BundleError('manifest ' + where + ': unknown handedness ' + JSON.stringify(value) + '.');
+  throw new BundleError(
+    'manifest ' + where + ': unknown handedness ' + JSON.stringify(value) + '.',
+  );
 }
 
 function parsePose(raw: unknown, index: number, floatsPerHand: number): PoseEntry {
@@ -258,7 +266,11 @@ export function parseBundle(
     datasetFingerprint,
     generatedAt: text(manifest, 'generated_at', 'root'),
     normalization: {
-      strategy: text(object(manifest['normalization'], 'normalization'), 'strategy', 'normalization'),
+      strategy: text(
+        object(manifest['normalization'], 'normalization'),
+        'strategy',
+        'normalization',
+      ),
       version: text(object(manifest['normalization'], 'normalization'), 'version', 'normalization'),
     },
     minSamples: integer(manifest, 'min_samples', 'root'),

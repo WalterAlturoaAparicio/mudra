@@ -63,11 +63,7 @@ class RecordingContext implements Renderer2DContext {
   }
 }
 
-function render(
-  commands: readonly RenderCommand[],
-  withCamera = true,
-  withPersonMask = false,
-) {
+function render(commands: readonly RenderCommand[], withCamera = true, withPersonMask = false) {
   const context = new RecordingContext();
   const renderer = new Canvas2DRenderer(context);
   if (withCamera) {
@@ -148,11 +144,7 @@ describe('the six commands', () => {
   });
 
   it('maskedErase issues save / destination-out / drawImage / restore against the mask', () => {
-    const context = render(
-      [{ kind: 'maskedErase', region: 'person', alpha: 0.6 }],
-      true,
-      true,
-    );
+    const context = render([{ kind: 'maskedErase', region: 'person', alpha: 0.6 }], true, true);
     expect(context.calls).toEqual([
       'save',
       'drawImage(0,0,800,600) alpha=0.6 blend=destination-out',

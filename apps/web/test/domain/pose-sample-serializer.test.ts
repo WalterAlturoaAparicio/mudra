@@ -167,31 +167,28 @@ describe('the fixture file itself', () => {
   });
 });
 
-describe.each(fixtures.cases.map((c) => [c.name, c] as const))(
-  'case %s',
-  (_name, testCase) => {
-    const actual = serializeCase(testCase);
+describe.each(fixtures.cases.map((c) => [c.name, c] as const))('case %s', (_name, testCase) => {
+  const actual = serializeCase(testCase);
 
-    it('matches Engine’s document structurally, key order included (FR-066)', () => {
-      const mismatch = structuralMismatch(testCase.expected_document, actual);
-      expect(mismatch, mismatch ?? undefined).toBeNull();
-    });
+  it('matches Engine’s document structurally, key order included (FR-066)', () => {
+    const mismatch = structuralMismatch(testCase.expected_document, actual);
+    expect(mismatch, mismatch ?? undefined).toBeNull();
+  });
 
-    it('is additive and nothing else — stripping the four keys gives Engine’s own document', () => {
-      const mismatch = structuralMismatch(testCase.engine_document, stripAdditive(actual));
-      expect(mismatch, mismatch ?? undefined).toBeNull();
-    });
+  it('is additive and nothing else — stripping the four keys gives Engine’s own document', () => {
+    const mismatch = structuralMismatch(testCase.engine_document, stripAdditive(actual));
+    expect(mismatch, mismatch ?? undefined).toBeNull();
+  });
 
-    it('writes schema_version 1 and never a Web-specific variant (FR-029)', () => {
-      expect((actual as { schema_version: number }).schema_version).toBe(1);
-    });
+  it('writes schema_version 1 and never a Web-specific variant (FR-029)', () => {
+    expect((actual as { schema_version: number }).schema_version).toBe(1);
+  });
 
-    it('omits position and lens_facing, which a browser cannot determine (FR-032)', () => {
-      const camera = (actual as { metadata: { camera: Record<string, unknown> } }).metadata.camera;
-      expect(Object.keys(camera)).toEqual(['index', 'width', 'height', 'mirrored_preview']);
-    });
-  },
-);
+  it('omits position and lens_facing, which a browser cannot determine (FR-032)', () => {
+    const camera = (actual as { metadata: { camera: Record<string, unknown> } }).metadata.camera;
+    expect(Object.keys(camera)).toEqual(['index', 'width', 'height', 'mirrored_preview']);
+  });
+});
 
 describe('the comparator itself', () => {
   // A comparison that cannot fail proves nothing, so these assert it does fail — and says where.
@@ -218,7 +215,9 @@ describe('the comparator itself', () => {
       hands: { raw: { x: number }[] }[];
     };
     mutated.hands[0]!.raw[3]!.x += 1e-12;
-    expect(structuralMismatch(base.expected_document, mutated)).toMatch(/\$\.hands\[0\]\.raw\[3\]\.x/);
+    expect(structuralMismatch(base.expected_document, mutated)).toMatch(
+      /\$\.hands\[0\]\.raw\[3\]\.x/,
+    );
   });
 
   it('does not require byte equality, only value equality (research D9)', () => {

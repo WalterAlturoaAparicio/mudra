@@ -42,10 +42,7 @@ const poses: readonly PoseOption[] = [
   { poseId: 'beta', displayName: 'Beta', eligible: true, active: false },
 ];
 
-function projectWith(
-  poseId: string,
-  conditions: readonly Condition[] = [],
-): Project {
+function projectWith(poseId: string, conditions: readonly Condition[] = []): Project {
   const effect: EffectDefinition = {
     id: 'e1',
     name: 'An effect',

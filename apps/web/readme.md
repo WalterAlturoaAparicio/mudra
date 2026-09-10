@@ -126,9 +126,6 @@ two loops cannot contend for the same budget by construction:
   `npm run dev` with a webcam, open `editor.html`, open the diagnostics panel, and confirm its
   frame-budget figures hold steady while dragging a timeline clip.
 
-## Privacy, verified
-
----
 
 ## Build the data
 
@@ -144,6 +141,19 @@ against the real dataset on disk.
 
 The exemplar export prints the poses it **excluded** and why. That line is required output, not a
 warning to suppress: a pose must never disappear silently.
+
+Both outputs are generated data and are **git-ignored**, so a fresh checkout has neither. If the
+application starts with
+
+```
+ConfigError: /config/session.json is invalid - activePoseSet names poses the bundle does not contain: ...
+```
+
+the bundle is missing or stale, not the configuration: `config/session.json` names poses that
+`public/exemplars.manifest.json` does not carry. Re-run `scripts/export_web_exemplars.py` and check
+its excluded list. A pose stays out of the bundle until `datasets/poses/<pose_id>/` holds at least
+`bundle.minSamples` samples, so a pose that is still being recorded must not sit in
+`activePoseSet` yet.
 
 Optionally, from `apps/web/`, fetch the Person Segmentation model the same way — a one-time,
 fetch-if-missing step, not a build requirement:

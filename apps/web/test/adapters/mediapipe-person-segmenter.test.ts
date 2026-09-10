@@ -19,9 +19,8 @@ vi.mock('@mediapipe/tasks-vision', () => ({
   ImageSegmenter: { createFromOptions: (...args: unknown[]) => createFromOptions(...args) },
 }));
 
-const { createMediaPipePersonSegmenter } = await import(
-  '../../src/infrastructure/segmentation/mediapipe-person-segmenter'
-);
+const { createMediaPipePersonSegmenter } =
+  await import('../../src/infrastructure/segmentation/mediapipe-person-segmenter');
 
 function fakeMask(width: number, height: number, value: number) {
   return {
@@ -52,17 +51,17 @@ describe('createMediaPipePersonSegmenter — success', () => {
 describe('createMediaPipePersonSegmenter — failure', () => {
   it('rejects when the WASM fileset cannot load (unsupported browser)', async () => {
     forVisionTasks.mockRejectedValue(new Error('no WASM support'));
-    await expect(
-      createMediaPipePersonSegmenter({ wasmPath: '/mediapipe-wasm' }),
-    ).rejects.toThrow('no WASM support');
+    await expect(createMediaPipePersonSegmenter({ wasmPath: '/mediapipe-wasm' })).rejects.toThrow(
+      'no WASM support',
+    );
   });
 
   it('rejects when the model itself cannot load (fetch failure)', async () => {
     forVisionTasks.mockResolvedValue({});
     createFromOptions.mockRejectedValue(new Error('404'));
-    await expect(
-      createMediaPipePersonSegmenter({ wasmPath: '/mediapipe-wasm' }),
-    ).rejects.toThrow('404');
+    await expect(createMediaPipePersonSegmenter({ wasmPath: '/mediapipe-wasm' })).rejects.toThrow(
+      '404',
+    );
   });
 });
 

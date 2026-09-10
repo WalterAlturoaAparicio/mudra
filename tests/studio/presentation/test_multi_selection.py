@@ -81,9 +81,7 @@ def test_per_landmark_variation_is_readable_from_the_plan_alone(
     page.sample_list.select_all_samples()
 
     plan = page.current_scene_plan()
-    spreads = [
-        statistics.pstdev([hand.points[i].x for hand in plan.hands]) for i in range(21)
-    ]
+    spreads = [statistics.pstdev([hand.points[i].x for hand in plan.hands]) for i in range(21)]
 
     assert len(spreads) == 21
     assert max(spreads) > 0.0, "the overlay must actually show variation"

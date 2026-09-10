@@ -12,7 +12,11 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { createActionRegistry } from '../../src/domain/runtime/actions';
-import { CatalogError, loadEffectCatalog, parseCatalog } from '../../src/infrastructure/effects/catalog-loader';
+import {
+  CatalogError,
+  loadEffectCatalog,
+  parseCatalog,
+} from '../../src/infrastructure/effects/catalog-loader';
 import { APP_ROOT } from '../support/source-scan';
 
 const registry = createActionRegistry();

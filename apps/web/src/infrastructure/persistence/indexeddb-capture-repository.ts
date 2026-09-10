@@ -55,7 +55,7 @@ function promisify<T>(request: IDBRequest): Promise<T> {
   });
 }
 
-function openDatabase(databaseName: string): Promise<IDBDatabase> {
+function openIndexedDb(databaseName: string): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     let request: IDBOpenDBRequest;
     try {
@@ -219,7 +219,10 @@ export class IndexedDbCaptureRepository implements CaptureRepository {
     const db = await this.db();
     const records = await transact(db, [SAMPLES_STORE], 'readonly', (transaction) =>
       promisify<unknown[]>(
-        transaction.objectStore(SAMPLES_STORE).index(BY_SESSION_INDEX).getAll(IDBKeyRange.only(sessionId)),
+        transaction
+          .objectStore(SAMPLES_STORE)
+          .index(BY_SESSION_INDEX)
+          .getAll(IDBKeyRange.only(sessionId)),
       ),
     );
     return records
@@ -240,7 +243,9 @@ export class IndexedDbCaptureRepository implements CaptureRepository {
       const sessions = transaction.objectStore(SESSIONS_STORE);
       const record = await promisify<unknown>(sessions.get(sample.sessionId));
       if (record !== undefined) {
-        await promisify(sessions.put(serializeSession(withDeletedSample(parseStoredSession(record)))));
+        await promisify(
+          sessions.put(serializeSession(withDeletedSample(parseStoredSession(record)))),
+        );
       }
     });
   }
@@ -253,7 +258,7 @@ export class IndexedDbCaptureRepository implements CaptureRepository {
   }
 
   private async db(): Promise<IDBDatabase> {
-    this.database ??= await openDatabase(this.databaseName);
+    this.database ??= await openIndexedDb(this.databaseName);
     return this.database;
   }
 

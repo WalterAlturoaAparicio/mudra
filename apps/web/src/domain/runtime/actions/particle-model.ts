@@ -153,8 +153,7 @@ export function simulateParticles(
       continue;
     }
 
-    const alpha =
-      config.startOpacity + (config.endOpacity - config.startOpacity) * age;
+    const alpha = config.startOpacity + (config.endOpacity - config.startOpacity) * age;
     if (alpha <= 0) {
       continue;
     }
@@ -163,12 +162,12 @@ export function simulateParticles(
     // because an author who asked for a 20° cone wants a cone, not twenty scattered angles.
     const arcOffsetDeg = fullCircle
       ? index * GOLDEN_ANGLE_DEG
-      : -config.arcDeg / 2 + (count <= 1 ? config.arcDeg / 2 : (index / (count - 1)) * config.arcDeg);
+      : -config.arcDeg / 2 +
+        (count <= 1 ? config.arcDeg / 2 : (index / (count - 1)) * config.arcDeg);
     const angleJitterDeg =
       config.randomness * (hashUnit(config.seed, index, 1) - 0.5) * config.arcDeg;
     const eased = 1 - (1 - age) * (1 - age);
-    const angleDeg =
-      config.directionDeg + arcOffsetDeg + angleJitterDeg + config.swirlDeg * eased;
+    const angleDeg = config.directionDeg + arcOffsetDeg + angleJitterDeg + config.swirlDeg * eased;
     const angle = angleDeg * DEG_TO_RAD;
 
     // At `randomness: 0` this is the evenly-walked irrational sequence a burst has always

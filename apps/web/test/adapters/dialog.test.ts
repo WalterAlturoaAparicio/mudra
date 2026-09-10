@@ -184,7 +184,9 @@ describe('prompt', () => {
       button(host, 'confirm').click();
 
       expect(host.isOpen).toBe(true);
-      expect(host.root.querySelector('.mudra-dialog__error')!.textContent).toMatch(/cannot be empty/);
+      expect(host.root.querySelector('.mudra-dialog__error')!.textContent).toMatch(
+        /cannot be empty/,
+      );
 
       // The error clears as soon as the author starts fixing it.
       input(host).value = 'Fixed';

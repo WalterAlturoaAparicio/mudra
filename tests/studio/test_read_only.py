@@ -36,9 +36,7 @@ def hash_tree(root: Path) -> dict[str, str]:
     digests: dict[str, str] = {}
     for path in sorted(root.rglob("*")):
         if path.is_file():
-            digests[str(path.relative_to(root))] = hashlib.sha256(
-                path.read_bytes()
-            ).hexdigest()
+            digests[str(path.relative_to(root))] = hashlib.sha256(path.read_bytes()).hexdigest()
     return digests
 
 
@@ -59,9 +57,7 @@ def explore_everything(dataset_root: Path) -> int:
     for entry in catalog_source.list_poses():
         loaded = load_pose(entry.pose_id)
         visited += 1
-        keys = frozenset(
-            SampleKey(s.pose.pose_id, s.sample_number) for s in loaded.samples
-        )
+        keys = frozenset(SampleKey(s.pose.pose_id, s.sample_number) for s in loaded.samples)
         for space in (CoordinateSpace.RAW, CoordinateSpace.NORMALIZED):
             for indices in (False, True):
                 state = DatasetViewState(

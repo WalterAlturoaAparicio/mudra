@@ -115,9 +115,7 @@ describe('mode: replace_person (item 2)', () => {
       contextFor({ mode: 'replace_person', asset: '@image/missing' }),
     );
     expect(output.commands).toEqual([]);
-    expect(output.diagnostics).toEqual([
-      { reason: 'asset_unresolved', detail: '@image/missing' },
-    ]);
+    expect(output.diagnostics).toEqual([{ reason: 'asset_unresolved', detail: '@image/missing' }]);
   });
 
   it('at zero intensity, produces nothing at all', () => {
@@ -177,9 +175,7 @@ describe('the parameter schema', () => {
   });
 
   it('gates the replacement fields on the mode, so the inspector shows only what applies', () => {
-    const gated = personVisibilityAction.params.filter(
-      (spec) => spec.visibleWhen !== undefined,
-    );
+    const gated = personVisibilityAction.params.filter((spec) => spec.visibleWhen !== undefined);
     expect(gated.map((spec) => spec.name).sort()).toEqual([
       'asset',
       'color',

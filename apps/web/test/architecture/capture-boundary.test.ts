@@ -42,10 +42,14 @@ const PROJECT_PATHS = [
 ];
 
 const captureSources = sources.filter((file) =>
-  CAPTURE_PATHS.some((path) => (path.endsWith('/') ? file.path.startsWith(path) : file.path === path)),
+  CAPTURE_PATHS.some((path) =>
+    path.endsWith('/') ? file.path.startsWith(path) : file.path === path,
+  ),
 );
 const projectSources = sources.filter((file) =>
-  PROJECT_PATHS.some((path) => (path.endsWith('/') ? file.path.startsWith(path) : file.path === path)),
+  PROJECT_PATHS.some((path) =>
+    path.endsWith('/') ? file.path.startsWith(path) : file.path === path,
+  ),
 );
 
 describe('the two trees exist', () => {

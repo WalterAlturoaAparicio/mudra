@@ -42,6 +42,7 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
+from engine.config.models import NormalizationConfig
 from engine.dataset.serializer import PoseSchemaError, PoseSerializer
 from engine.models.landmarks import Handedness, HandLandmarks, Landmark
 from engine.models.pose import (
@@ -111,7 +112,7 @@ def _numeric_stress() -> list[tuple[float, float, float]]:
 def _hand_sample(
     handedness: Handedness, raw_values: list[tuple[float, float, float]], confidence: float
 ) -> HandSample:
-    normalizer = TranslationScaleNormalizer()
+    normalizer = TranslationScaleNormalizer(NormalizationConfig())
     raw = _landmarks(raw_values)
     return HandSample(
         handedness=handedness,
@@ -153,9 +154,7 @@ def _build_sample(
             mediapipe_version=WEB_MEDIAPIPE_VERSION,
             application_version=WEB_APPLICATION_VERSION,
             num_hands=len(hands),
-            hands=tuple(
-                HandMeta(handedness=h.handedness, confidence=h.confidence) for h in hands
-            ),
+            hands=tuple(HandMeta(handedness=h.handedness, confidence=h.confidence) for h in hands),
             capture=CaptureTiming(
                 capture_time=capture_time,
                 countdown_start_time=countdown_start_time,
@@ -200,9 +199,7 @@ def _web_inputs(
                     "handedness": hand.handedness.value,
                     "confidence": hand.confidence,
                     "raw": [{"x": p.x, "y": p.y, "z": p.z} for p in hand.raw.points],
-                    "normalized": [
-                        {"x": p.x, "y": p.y, "z": p.z} for p in hand.normalized.points
-                    ],
+                    "normalized": [{"x": p.x, "y": p.y, "z": p.z} for p in hand.normalized.points],
                 }
                 for hand in sample.hands
             ],
@@ -226,7 +223,8 @@ def _with_additive_fields(
     Insertion order is the contract: ``countdown_enabled``, ``session_uuid`` and
     ``contributor_label`` follow ``countdown_seconds`` inside ``metadata.capture``, and
     ``mirrored_preview`` follows ``height`` inside ``metadata.camera``. Python dicts preserve
-    insertion order, and so does ``JSON.stringify``, which is what makes key order comparable at all.
+    insertion order, and so does ``JSON.stringify``, which is what makes key order
+    comparable at all.
     """
     document = json.loads(json.dumps(engine_document))  # deep copy, order preserved
     metadata = document["metadata"]
@@ -244,7 +242,10 @@ def _with_additive_fields(
 
 
 def _strip_additive_fields(document: dict[str, Any]) -> dict[str, Any]:
-    """The inverse of :func:`_with_additive_fields`, used to prove the additive-only rule here too."""
+    """The inverse of :func:`_with_additive_fields`.
+
+    Used to prove the additive-only rule from this side as well.
+    """
     stripped = json.loads(json.dumps(document))
     for key in CAMERA_ADDITIVE_KEYS:
         stripped["metadata"]["camera"].pop(key, None)
@@ -277,7 +278,9 @@ def _case(
         try:
             serializer.from_dict(json.loads(json.dumps(document)))
         except PoseSchemaError as error:  # pragma: no cover - a failure here stops the build
-            raise SystemExit(f"Case {name}: Engine cannot read the {label} document: {error}")
+            raise SystemExit(
+                f"Case {name}: Engine cannot read the {label} document: {error}"
+            ) from error
 
     # And stripping the additive keys must give Engine's own document back, byte-order included.
     if list(_flatten_keys(_strip_additive_fields(expected_document))) != list(
@@ -321,7 +324,10 @@ def build_cases() -> list[dict[str, Any]]:
     one_handed = _build_sample(
         pose_id="hi",
         display_name="hola",
-        description="saludo",
+        # Always None, for every case: contracts/pose-sample-export.md fixes `description` at
+        # null (FR-014b) because the browser loads no description and inventing one would be
+        # untruthful. A non-null value here would assert a capability Web does not have.
+        description=None,
         sample_uuid="0f0b5f2a-1c9e-4a1b-9a1e-8f2d3c4b5a60",
         sample_number="sample_000001",
         timestamp="2026-09-07T14:02:11.482000+00:00",
@@ -417,7 +423,7 @@ def build_cases() -> list[dict[str, Any]]:
     return [
         _case(
             "one_hand",
-            "A single right hand, all optional fields present.",
+            "A single right hand, every field Web can populate present.",
             one_handed,
             session_uuid="3b1f0d6e-2c47-4d8b-9a10-77e4c1b2f905",
             contributor_label="walter",
@@ -511,6 +517,7 @@ def verify_archive(path: Path) -> None:
 
 
 def main() -> int:
+    """Write the fixture file, or verify an archive when given one on the command line."""
     FIXTURES.mkdir(parents=True, exist_ok=True)
     cases = build_cases()
 

@@ -68,7 +68,5 @@ export function landmarkOverlayCommands(
 
 /** The handedness labels for the DOM panel, which is where text belongs. */
 export function handednessLabels(frame: LandmarkFrame): readonly string[] {
-  return frame.hands.map(
-    (hand) => hand.handedness + ' (' + hand.confidence.toFixed(2) + ')',
-  );
+  return frame.hands.map((hand) => hand.handedness + ' (' + hand.confidence.toFixed(2) + ')');
 }

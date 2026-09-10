@@ -60,9 +60,9 @@ export class SessionPanel {
     this.root = this.document.createElement('section');
     this.root.className = 'capture-session-setup';
 
-    this.labelInput = this.field('Contributor label', 'capture-contributor', 'a short handle');
-    this.poseInput = this.field('Pose', 'capture-pose', 'dragon');
-    this.displayNameInput = this.field('Display name', 'capture-display-name', 'optional');
+    this.labelInput = this.field('capture-contributor', 'a short handle');
+    this.poseInput = this.field('capture-pose', 'dragon');
+    this.displayNameInput = this.field('capture-display-name', 'optional');
     this.handsSelect = this.document.createElement('select');
     this.handsSelect.id = 'capture-hands';
     for (const value of [1, 2]) {
@@ -93,7 +93,7 @@ export class SessionPanel {
     return this.root;
   }
 
-  private field(labelText: string, id: string, placeholder: string): HTMLInputElement {
+  private field(id: string, placeholder: string): HTMLInputElement {
     const input = this.document.createElement('input');
     input.type = 'text';
     input.id = id;

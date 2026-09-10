@@ -35,6 +35,8 @@ export interface ProjectTreeOptions {
   readonly onSelectAction: (effectId: string, entryIndex: number) => void;
   /** Select this asset in the Assets panel. */
   readonly onSelectAsset?: (reference: string) => void;
+  /** Select the project itself — the tree's root row, which the Project panel answers. */
+  readonly onSelectProject?: (projectId: string) => void;
 }
 
 /** Everything one `render()` draws from. */
@@ -83,6 +85,7 @@ export class ProjectTree {
   /** Redraw from the current project. Cheap enough to call after every edit. */
   render(state: ProjectTreeState): void {
     this.body.replaceChildren();
+    this.body.append(this.projectRow(state));
 
     const effectsGroup = this.groupRow('Effects', state.project.catalog.effects.length);
     this.body.append(effectsGroup);
@@ -114,6 +117,40 @@ export class ProjectTree {
     for (const entry of state.project.assetLibrary.entries) {
       this.body.append(this.assetRow(entry, state));
     }
+  }
+
+  /**
+   * The tree's root: the open project itself.
+   *
+   * Without it the explorer listed a project's contents but offered no way to select the
+   * project, so "rename it", "export it" or "is this the live one?" had no row to click and
+   * no panel to answer them. It carries the same `standing` badge an effect row does, for
+   * the same question one level up: is this the experience a visitor actually gets?
+   */
+  private projectRow(state: ProjectTreeState): HTMLElement {
+    const row = this.document.createElement('div');
+    row.className = 'mudra-editor__tree-row mudra-editor__tree-row--project';
+    row.dataset['depth'] = '0';
+    row.dataset['projectId'] = state.project.id;
+    row.setAttribute('role', 'treeitem');
+    row.append(icon(this.document, 'folder', 14));
+
+    const name = this.document.createElement('span');
+    name.className = 'mudra-editor__tree-label';
+    name.textContent = state.project.name;
+    row.append(name);
+
+    const standing = this.document.createElement('span');
+    standing.className = 'mudra-editor__tree-standing';
+    standing.dataset['standing'] = state.projectIsActive ? 'active' : 'inactive';
+    standing.textContent = state.projectIsActive ? 'live' : 'draft';
+    standing.title = state.projectIsActive
+      ? 'This project is the active experience — it is what the public page runs.'
+      : 'This project is not the active experience. Everything in it previews here, but no visitor sees it yet.';
+    row.append(standing);
+
+    row.addEventListener('click', () => this.options.onSelectProject?.(state.project.id));
+    return row;
   }
 
   private groupRow(label: string, count: number): HTMLElement {
@@ -185,7 +222,11 @@ export class ProjectTree {
     const isActive = state.projectIsActive && pose?.active === true;
     const standing = this.document.createElement('span');
     standing.className = 'mudra-editor__tree-standing';
-    standing.dataset['standing'] = isActive ? 'active' : pose?.eligible === true ? 'eligible' : 'inactive';
+    standing.dataset['standing'] = isActive
+      ? 'active'
+      : pose?.eligible === true
+        ? 'eligible'
+        : 'inactive';
     standing.textContent = isActive ? 'live' : 'available';
     standing.title = isActive
       ? 'This effect’s pose is in the active pose set, and this project is the active experience — a visitor can trigger it.'

@@ -30,6 +30,7 @@
 
 import type { TimelineEntry } from '../../domain/effects/types';
 import type { ActionRegistry } from '../../domain/runtime/action-registry';
+import type { CapabilityRegistry } from '../../domain/runtime/capabilities';
 
 /** Device pixels per millisecond of timeline, at the default (unzoomed) scale. */
 export const DEFAULT_PX_PER_MS = 0.15;
@@ -120,6 +121,23 @@ export function formatTickLabel(ms: number): string {
   return (Number.isInteger(seconds) ? seconds.toFixed(0) : seconds.toFixed(1)) + 's';
 }
 
+/**
+ * What a single `render()` pass is told about the environment it is drawing into.
+ *
+ * Separate from `TimelineOptions` because it changes *between* renders while the timeline
+ * itself does not: capability probing resolves after the shell is built, and the asset
+ * resolver is replaced whenever the open project's library is edited. Passing it per render
+ * is what keeps a clip's "unavailable here" marking honest instead of frozen at construction.
+ */
+export interface TimelineRenderContext {
+  /** Overrides the constructor's registry when the shell has a more current one. */
+  readonly registry?: ActionRegistry;
+  /** What this environment can actually do — clips needing more are marked, never hidden. */
+  readonly capabilities?: CapabilityRegistry;
+  /** Resolves an asset reference to a URL, for clips that name one. */
+  readonly resolveAsset?: (reference: string) => string | null;
+}
+
 /** What the timeline needs to exist. */
 export interface TimelineOptions {
   readonly document: Document;
@@ -193,6 +211,8 @@ export class Timeline {
   private lastEntries: readonly TimelineEntry[] = [];
   private lastSelectedIndex: number | null = null;
   private lastDurationMs = 0;
+  /** The most recent render context, replayed by `setZoom()` along with the entries. */
+  private context: TimelineRenderContext = {};
 
   constructor(options: TimelineOptions) {
     this.document = options.document;
@@ -266,7 +286,10 @@ export class Timeline {
     this.updateZoomLabel();
     this.render(this.lastEntries, this.lastSelectedIndex, this.lastDurationMs);
 
-    this.scrollArea.scrollLeft = Math.max(0, msToPx(centerMs, this.pxPerMs) - this.scrollArea.clientWidth / 2);
+    this.scrollArea.scrollLeft = Math.max(
+      0,
+      msToPx(centerMs, this.pxPerMs) - this.scrollArea.clientWidth / 2,
+    );
   }
 
   private updateZoomLabel(): void {
@@ -281,10 +304,18 @@ export class Timeline {
    *   (`EffectDefinition.timeline.durationMs`) — the ruler's span and end-of-effect marker.
    *   Defaults to `0` (no marker, minimum ruler span) for callers with no effect selected.
    */
-  render(entries: readonly TimelineEntry[], selectedIndex: number | null, durationMs = 0): void {
+  render(
+    entries: readonly TimelineEntry[],
+    selectedIndex: number | null,
+    durationMs = 0,
+    context?: TimelineRenderContext,
+  ): void {
     this.lastEntries = entries;
     this.lastSelectedIndex = selectedIndex;
     this.lastDurationMs = durationMs;
+    if (context !== undefined) {
+      this.context = context;
+    }
 
     this.tracks.replaceChildren();
     this.ruler.replaceChildren();
@@ -332,8 +363,15 @@ export class Timeline {
     lane: number,
     selected: boolean,
   ): HTMLElement {
-    const descriptor = this.registry.get(entry.action.type);
+    const descriptor = (this.context.registry ?? this.registry).get(entry.action.type);
     const behaviour = descriptor?.behaviour ?? 'instantaneous';
+    // Marked, never hidden: an author must still be able to see and edit a clip this browser
+    // cannot play, the same judgement the palette makes about the action that created it.
+    const capabilities = this.context.capabilities;
+    const unavailable =
+      descriptor?.requiresCapability !== undefined &&
+      capabilities !== undefined &&
+      !capabilities.has(descriptor.requiresCapability);
     const startMs = entry.atMs;
     const durationMs = entry.durationMs ?? 0;
 
@@ -341,6 +379,10 @@ export class Timeline {
     clip.className = 'mudra-editor__clip mudra-editor__clip--' + behaviour;
     clip.classList.toggle('is-selected', selected);
     clip.dataset['behaviour'] = behaviour;
+    clip.classList.toggle('is-unavailable', unavailable);
+    if (unavailable) {
+      clip.dataset['unavailable'] = descriptor?.requiresCapability ?? 'true';
+    }
     clip.style.left = msToPx(startMs, this.pxPerMs) + 'px';
     clip.style.width = Math.max(MIN_CLIP_WIDTH_PX, msToPx(durationMs, this.pxPerMs)) + 'px';
     clip.style.top = lane * 40 + 'px';

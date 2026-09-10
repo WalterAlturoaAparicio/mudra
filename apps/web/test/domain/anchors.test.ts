@@ -53,7 +53,9 @@ describe('hand-centroid anchors', () => {
 
   it('select by handedness when asked for a specific hand', () => {
     const resolver = new AnchorResolver();
-    expect(resolver.resolve('a', { kind: 'handCentroid', hand: 'left' }, withLeft).point).not.toBeNull();
+    expect(
+      resolver.resolve('a', { kind: 'handCentroid', hand: 'left' }, withLeft).point,
+    ).not.toBeNull();
     expect(
       resolver.resolve('b', { kind: 'handCentroid', hand: 'left' }, withRight).unresolvedDetail,
     ).toMatch(/hand "left" is not in frame/);
@@ -131,7 +133,10 @@ describe('through the runtime', () => {
           entries: [
             entry(
               0,
-              { type: 'particle_burst', params: { count: 5, anchor: { kind: 'handCentroid', hand: 'left' } } },
+              {
+                type: 'particle_burst',
+                params: { count: 5, anchor: { kind: 'handCentroid', hand: 'left' } },
+              },
               400,
             ),
           ],
@@ -161,7 +166,10 @@ describe('through the runtime', () => {
           entries: [
             entry(
               0,
-              { type: 'particle_burst', params: { count: 5, anchor: { kind: 'handCentroid', hand: 'right' } } },
+              {
+                type: 'particle_burst',
+                params: { count: 5, anchor: { kind: 'handCentroid', hand: 'right' } },
+              },
               400,
             ),
           ],

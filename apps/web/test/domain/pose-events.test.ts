@@ -163,7 +163,13 @@ describe('a broken hold', () => {
   });
 
   it('emits nothing at all while nothing is held', () => {
-    expect(run([[noHand(0), 0], [noHand(100), 100], [ambiguous(200), 200]])).toEqual([]);
+    expect(
+      run([
+        [noHand(0), 0],
+        [noHand(100), 100],
+        [ambiguous(200), 200],
+      ]),
+    ).toEqual([]);
   });
 });
 

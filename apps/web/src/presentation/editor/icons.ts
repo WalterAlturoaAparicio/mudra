@@ -52,7 +52,10 @@ const PATHS: Readonly<Record<string, readonly string[]>> = {
   /** A dot — the active marker. */
   dot: ['M12 12m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0'],
   /** An eye — panel visibility. */
-  eye: ['M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6z', 'M12 12m-2.5 0a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0 -5 0'],
+  eye: [
+    'M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6z',
+    'M12 12m-2.5 0a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0 -5 0',
+  ],
   /** A wrench — debug/diagnostics. */
   tool: ['M14.7 6.3a4 4 0 0 0 5 5L15 16l-4 4-3-3 4-4z'],
 };
@@ -106,7 +109,8 @@ export interface IconButtonOptions {
 export function iconButton(options: IconButtonOptions): HTMLButtonElement {
   const button = options.document.createElement('button');
   button.type = 'button';
-  button.className = 'mudra-editor__icon-button' + (options.className ? ' ' + options.className : '');
+  button.className =
+    'mudra-editor__icon-button' + (options.className ? ' ' + options.className : '');
   button.setAttribute('aria-label', options.label);
   button.title = options.label + ' — ' + options.description;
   button.dataset['tooltip'] = options.label;

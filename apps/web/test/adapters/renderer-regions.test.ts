@@ -92,7 +92,11 @@ class RecordingBuffer implements RegionBuffer {
 }
 
 const MASK = { name: 'mask' } as unknown as CanvasImageSource;
-const IMAGE = { name: 'image', naturalWidth: 400, naturalHeight: 300 } as unknown as CanvasImageSource;
+const IMAGE = {
+  name: 'image',
+  naturalWidth: 400,
+  naturalHeight: 300,
+} as unknown as CanvasImageSource;
 
 function build(options: { mask?: CanvasImageSource | null; withBuffer?: boolean } = {}) {
   const context = new RecordingContext();
@@ -155,7 +159,13 @@ describe('drawMaskedImage', () => {
   it('paints the image into the buffer and clips it to the region', () => {
     const { renderer, buffer, context } = build();
     render(renderer, [
-      { kind: 'drawMaskedImage', region: 'background', source: 'blob:image', alpha: 1, fit: 'stretch' },
+      {
+        kind: 'drawMaskedImage',
+        region: 'background',
+        source: 'blob:image',
+        alpha: 1,
+        fit: 'stretch',
+      },
     ]);
 
     expect(buffer.calls).toEqual([
@@ -213,9 +223,7 @@ describe('maskedErase', () => {
       'fillRect(0,0,800,600) style=#ffffff',
       'drawImage(mask,0,0,800,600) blend=destination-out',
     ]);
-    expect(context.calls).toContain(
-      'drawImage(buffer,0,0,800,600) alpha=1 blend=destination-out',
-    );
+    expect(context.calls).toContain('drawImage(buffer,0,0,800,600) alpha=1 blend=destination-out');
   });
 });
 

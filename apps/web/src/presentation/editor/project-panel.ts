@@ -24,6 +24,20 @@
 import type { Project, ProjectSummary } from '../../domain/editor/types';
 import type { ProjectRepository } from '../../domain/ports/project-repository';
 import type { MenuItem } from './menu-bar';
+import type { ConfirmDialogOptions, PromptDialogOptions } from './dialog';
+
+/**
+ * The two questions this panel ever asks, as a port.
+ *
+ * `DialogHost` satisfies it structurally, so the editor passes its own modal host and a test
+ * passes plain functions. The point is that Save As and Close Project stop deciding for the
+ * author: Save As used to invent a name silently, and Close used `window.confirm`, which is
+ * browser chrome the application neither owns nor can drive from a test.
+ */
+export interface ProjectPrompts {
+  confirm(options: ConfirmDialogOptions): Promise<boolean>;
+  prompt(options: PromptDialogOptions): Promise<string | null>;
+}
 
 /** What the panel needs to exist. */
 export interface ProjectPanelOptions {
@@ -44,6 +58,9 @@ export interface ProjectPanelOptions {
   readonly onRename: (name: string) => void;
   /** Close the open project and return to the start screen. Absent means the command is inert. */
   readonly onCloseProject?: () => void;
+  /** Asks the author before inventing a name or discarding work. Absent falls back to
+   *  `confirm` below, and then to `window.confirm`. */
+  readonly prompts?: ProjectPrompts;
   /** Confirms a discarding action. Injected for testability; defaults to `window.confirm`. */
   readonly confirm?: (message: string) => boolean;
 }
@@ -218,7 +235,9 @@ export class ProjectPanel {
         description: 'Close the open project and return to the start screen.',
         isEnabled: () => this.options.onCloseProject !== undefined && hasOpen(),
         disabledReason: 'No project is open.',
-        onSelect: () => this.closeProject(),
+        onSelect: () => {
+          void this.closeProject();
+        },
       },
     ];
   }
@@ -322,10 +341,14 @@ export class ProjectPanel {
    */
   private async saveAs(): Promise<void> {
     const current = this.options.getCurrentProject();
+    const name = await this.askForCopyName(current);
+    if (name === null) {
+      return;
+    }
     const copy: Project = {
       ...current,
       id: 'project-' + Date.now().toString(36),
-      name: current.name + ' copy',
+      name,
     };
     await this.repository.create(copy);
     this.storedIds.add(copy.id);
@@ -333,6 +356,36 @@ export class ProjectPanel {
     this.options.onProjectOpened(copy);
     this.setStatus('Written as "' + copy.name + '".');
     await this.refresh();
+  }
+
+  /**
+   * The name Save As should write under, or `null` to write nothing.
+   *
+   * The suggestion is pre-filled rather than applied: an author who wanted `"<name> copy"`
+   * presses one key, and an author who did not is not left discovering it three copies later.
+   * With no prompts port the old silent behaviour remains, so nothing that has not been wired
+   * up yet starts refusing to save.
+   */
+  private async askForCopyName(current: Project): Promise<string | null> {
+    const suggestion = current.name + ' copy';
+    const prompts = this.options.prompts;
+    if (prompts === undefined) {
+      return suggestion;
+    }
+    const summaries = await this.repository.list();
+    const answer = await prompts.prompt({
+      title: 'Save project as',
+      message: 'Writes a copy under a new name. The stored original is left as it is.',
+      fieldLabel: 'Name',
+      value: suggestion,
+      confirmLabel: 'Save As',
+      suggestions: summaries.map((summary) => summary.name),
+    });
+    if (answer === null) {
+      return null;
+    }
+    const trimmed = answer.trim();
+    return trimmed.length === 0 ? null : trimmed;
   }
 
   private async load(): Promise<void> {
@@ -397,17 +450,32 @@ export class ProjectPanel {
     }
   }
 
-  private closeProject(): void {
+  private async closeProject(): Promise<void> {
     const close = this.options.onCloseProject;
     if (close === undefined) {
       return;
     }
-    const confirmFn = this.options.confirm ?? ((message: string) => globalThis.confirm(message));
-    if (!confirmFn('Close this project? Any change not yet written is lost.')) {
+    if (!(await this.confirmClose())) {
       return;
     }
     this.currentOpenId = null;
     close();
+  }
+
+  /** Ask before discarding, through the application's own dialog where there is one. */
+  private async confirmClose(): Promise<boolean> {
+    const prompts = this.options.prompts;
+    if (prompts !== undefined) {
+      return prompts.confirm({
+        title: 'Close project',
+        message: 'Any change not yet written is lost.',
+        confirmLabel: 'Close Project',
+        cancelLabel: 'Keep Working',
+        tone: 'danger',
+      });
+    }
+    const confirmFn = this.options.confirm ?? ((message: string) => globalThis.confirm(message));
+    return confirmFn('Close this project? Any change not yet written is lost.');
   }
 
   private async toggleActive(): Promise<void> {

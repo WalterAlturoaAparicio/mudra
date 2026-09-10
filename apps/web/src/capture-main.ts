@@ -6,7 +6,7 @@
  *
  * **This file is only reachable from `capture.html`, which `vite.config.ts` emits only when
  * `VITE_MUDRA_CAPTURE=1`.** Nothing in the default experience or the editor imports anything under
- * `src/**​/capture/**`, so a public build contains none of this — the gate is the bundler's input
+ * `src/…/capture/…`, so a public build contains none of this — the gate is the bundler's input
  * list rather than a runtime conditional (contracts/capture-gating.md, research D1).
  *
  * Note what is **not** constructed here: no matcher, no `EffectRuntime`, no `PoseEventEmitter`, no
@@ -139,7 +139,12 @@ async function main(): Promise<void> {
     config: captureConfig,
     knownPoses: await knownPoses(),
     onStart: (request) => {
-      void startSession(request.contributorLabel, request.poseId, request.displayName, request.requiredHands);
+      void startSession(
+        request.contributorLabel,
+        request.poseId,
+        request.displayName,
+        request.requiredHands,
+      );
     },
   });
   sessionPanel.element.hidden = true;

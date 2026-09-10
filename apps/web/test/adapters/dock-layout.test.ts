@@ -110,7 +110,9 @@ describe('DockLayout — resizing', () => {
     expect(changes).toHaveLength(0);
 
     handle.dispatchEvent(pointer('pointerup', 60, 0));
-    expect(changes).toEqual([{ ...DEFAULT_PANEL_SIZES, leftWidth: DEFAULT_PANEL_SIZES.leftWidth + 60 }]);
+    expect(changes).toEqual([
+      { ...DEFAULT_PANEL_SIZES, leftWidth: DEFAULT_PANEL_SIZES.leftWidth + 60 },
+    ]);
   });
 });
 

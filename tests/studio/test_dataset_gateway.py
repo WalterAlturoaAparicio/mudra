@@ -35,9 +35,7 @@ def test_loads_every_valid_sample_in_order(
 
     assert result.pose_id == "ordered"
     assert not result.skipped
-    assert [s.sample_number for s in result.samples] == [
-        f"sample_{i:06d}" for i in range(1, 6)
-    ]
+    assert [s.sample_number for s in result.samples] == [f"sample_{i:06d}" for i in range(1, 6)]
 
 
 @pytest.mark.parametrize("kind", ["truncated", "bad_version", "no_normalized", "short_hand"])
@@ -117,9 +115,7 @@ def test_unknown_pose_returns_empty_without_raising(dataset_root: Path) -> None:
     assert result.file_count == 0
 
 
-def test_gateway_never_writes(
-    dataset_root: Path, synthetic_pose: Callable[..., Path]
-) -> None:
+def test_gateway_never_writes(dataset_root: Path, synthetic_pose: Callable[..., Path]) -> None:
     """FR-017 at the adapter level, before the tree-hash test at T056."""
     pose_dir = synthetic_pose(3, pose_id="readonly")
     before = {p: p.read_bytes() for p in sorted(pose_dir.iterdir())}

@@ -26,8 +26,7 @@ export type RejectionReason =
 
 /** Accepted, or rejected with a reason. */
 export type CaptureValidationOutcome =
-  | { readonly accepted: true }
-  | { readonly accepted: false; readonly reason: RejectionReason };
+  { readonly accepted: true } | { readonly accepted: false; readonly reason: RejectionReason };
 
 const ACCEPTED: CaptureValidationOutcome = { accepted: true };
 

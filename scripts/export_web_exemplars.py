@@ -42,7 +42,7 @@ import hashlib
 import json
 import struct
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from engine.config.models import DatasetConfig
@@ -203,9 +203,7 @@ def build_bundle(dataset_root: Path) -> tuple[dict[str, object], bytes]:
                     )
                 for point in points:
                     payload += struct.pack("<3f", point.x, point.y, point.z)
-                hands_meta.append(
-                    {"sample_id": sample_id, "handedness": str(hand.handedness)}
-                )
+                hands_meta.append({"sample_id": sample_id, "handedness": str(hand.handedness)})
 
         included.append(
             {
@@ -222,7 +220,7 @@ def build_bundle(dataset_root: Path) -> tuple[dict[str, object], bytes]:
 
     manifest: dict[str, object] = {
         "format_version": FORMAT_VERSION,
-        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "generated_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "dataset_fingerprint": _fingerprint(fingerprint_entries),
         "normalization": {"strategy": "translation_scale", "version": "1.0"},
         "min_samples": MIN_SAMPLES,
@@ -294,11 +292,8 @@ def main() -> None:
             )
     else:
         print("Excluded   0 poses")
-    print(f"Wrote    {manifest_path.relative_to(REPO_ROOT)}")
-    print(
-        f"         {payload_path.relative_to(REPO_ROOT)}   "
-        f"({payload_path.stat().st_size / 1024:.1f} KB)"
-    )
+    print(f"Wrote    {_display_path(manifest_path)}")
+    print(f"         {_display_path(payload_path)}   ({payload_path.stat().st_size / 1024:.1f} KB)")
 
 
 if __name__ == "__main__":

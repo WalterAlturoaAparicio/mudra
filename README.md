@@ -194,9 +194,12 @@ v1.2.0, "Monorepo & Cross-Application Boundaries"):
 |---|---|---|
 | **Mudra Engine** | [`apps/engine/`](apps/engine/) | Python: live camera, detection, normalization, pose recording, and the dataset format itself |
 | **Mudra Capture** | [`apps/capture/`](apps/capture/) | Flutter/Android: collects hand-pose datasets in volume on a phone and exports them for the engine |
+| **Mudra Studio** | [`apps/studio/`](apps/studio/) | Python/Qt desktop: reads `datasets/poses/` read-only and draws each sample in raw or normalized space (constitution v1.5.0) |
+| **Mudra Web** | [`apps/web/`](apps/web/) | TypeScript in the browser: pose-driven effect runtime, the visual effect editor, and a gated capture mode (constitution v1.7.0, v1.8.0) |
 
-The **only** contract between them is the pose-sample JSON schema (`schema_version` 1). Neither
-imports the other's code. A dataset exported by Capture unzips straight into `datasets/poses/`
+The **only** contract between them is the pose-sample JSON schema (`schema_version` 1). No
+application imports another's code — Web re-implements normalization and matching in
+TypeScript and proves the port against fixtures Engine generates, rather than sharing them. A dataset exported by Capture unzips straight into `datasets/poses/`
 and the engine reads it with zero manual processing.
 
 ## Folder Structure
@@ -217,13 +220,21 @@ mudra/
 │   │   ├── utils/          # Logging
 │   │   ├── visualization/  # Renderer interfaces + OpenCV landmark and countdown overlays
 │   │   └── main.py         # `python -m engine.main` entry point
-│   └── capture/        # Mudra Capture — Flutter/Android dataset collector
+│   ├── capture/        # Mudra Capture — Flutter/Android dataset collector
+│   ├── studio/         # Mudra Studio — Python/Qt dataset explorer (extra: `pip install -e .[studio]`)
+│   └── web/            # Mudra Web — TypeScript effect runtime, editor, and gated capture mode
+│       ├── src/domain/         # Landmarks, normalization, recognition, effects, runtime — no browser type
+│       ├── src/application/    # Session and editor controllers
+│       ├── src/infrastructure/ # Camera, detection, persistence, catalog and bundle loading
+│       ├── src/presentation/   # Renderer, editor shell and panels, capture surface
+│       └── test/               # Vitest: domain, adapters, and architecture assertions
 ├── assets/             # ML model assets (auto-downloaded; git-ignored)
 ├── datasets/
 │   ├── poses/          # append-only per-pose sample collections (Phase 2)
 │   └── sequences/      # (Phase 3+) append-only per-sequence sample collections
 ├── recordings/         # (future) raw recordings
-├── tests/              # pytest unit tests
+├── tests/              # pytest unit tests (engine, studio, and the Web export scripts)
+├── scripts/            # Repository-level Python build scripts: exemplar bundle and Web golden fixtures
 ├── specs/              # Spec-Kit specifications, plans, tasks
 └── pyproject.toml
 ```

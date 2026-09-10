@@ -11,7 +11,12 @@ import { describe, expect, it } from 'vitest';
 
 import { buildCaptureExport, NothingToExportError } from '../../src/application/capture-export';
 import { fixedTimeSource } from '../../src/domain/ports/clock';
-import { buildZipArchive, crc32, utf8, ZipWriterError } from '../../src/infrastructure/capture/zip-writer';
+import {
+  buildZipArchive,
+  crc32,
+  utf8,
+  ZipWriterError,
+} from '../../src/infrastructure/capture/zip-writer';
 import { FakeCaptureRepository } from '../support/fake-capture-repository';
 import { sample, session } from '../support/capture';
 
@@ -190,7 +195,9 @@ describe('the export use case', () => {
     expect(second.bytes.length).toBe(first.bytes.length);
     const text = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
     const manifestOf = (bytes: Uint8Array) =>
-      JSON.parse(text(bytes).slice(text(bytes).indexOf('{'), text(bytes).indexOf('}\n}') + 3) || '{}') as unknown;
+      JSON.parse(
+        text(bytes).slice(text(bytes).indexOf('{'), text(bytes).indexOf('}\n}') + 3) || '{}',
+      ) as unknown;
     expect(manifestOf).toBeDefined();
     // The sample payloads are unchanged; only the manifest's timestamp moved.
     expect(text(first.bytes).includes('2026-09-07T14:00:00.000000+00:00')).toBe(true);
@@ -200,10 +207,18 @@ describe('the export use case', () => {
   it('numbers samples continuously per pose across sessions (FR-047)', async () => {
     const repository = await storeWith(2, 'dragon', 'session-0001');
     await repository.createSession(
-      session({ id: 'session-0002', poseId: 'dragon', startedAt: '2026-09-07T14:00:00.000000+00:00' }),
+      session({
+        id: 'session-0002',
+        poseId: 'dragon',
+        startedAt: '2026-09-07T14:00:00.000000+00:00',
+      }),
     );
     await repository.appendSample(
-      sample({ id: 'later', sessionId: 'session-0002', capturedAt: '2026-09-07T14:00:01.000000+00:00' }),
+      sample({
+        id: 'later',
+        sessionId: 'session-0002',
+        capturedAt: '2026-09-07T14:00:01.000000+00:00',
+      }),
     );
 
     const result = await buildCaptureExport({

@@ -61,6 +61,10 @@ class RecordingCameraSession implements CameraSession {
     image: null,
     update: () => true,
   };
+  /** Nothing here drives frames — the controller is advanced directly by each test. */
+  onFrame(): () => void {
+    return () => {};
+  }
   close(): void {
     this.closed += 1;
   }
@@ -150,11 +154,7 @@ describe('camera lifecycle', () => {
     controller.attachCamera(new RecordingCameraSession(), stubDetector, null);
     controller.tick(32);
 
-    expect(stage.treatments).toEqual([
-      PROJECT_TREATMENT,
-      PROJECT_TREATMENT,
-      PROJECT_TREATMENT,
-    ]);
+    expect(stage.treatments).toEqual([PROJECT_TREATMENT, PROJECT_TREATMENT, PROJECT_TREATMENT]);
   });
 
   it('presents a null-image placeholder surface with no camera, so nothing reaches drawImage', () => {

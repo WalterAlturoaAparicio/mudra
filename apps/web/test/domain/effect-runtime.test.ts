@@ -58,7 +58,9 @@ describe('a scripted effect, start to finish, with no browser present', () => {
       catalog(effect({ id: 'e', poseId: 'p', durationMs: 400, entries: [entry(0, flash(), 400)] })),
     );
     expect(runtime.advance([], emptyFrame, 0).commands).toEqual([]);
-    expect(runtime.advance([poseEvent('confirmed', 'other', 0)], emptyFrame, 16).commands).toEqual([]);
+    expect(runtime.advance([poseEvent('confirmed', 'other', 0)], emptyFrame, 16).commands).toEqual(
+      [],
+    );
     expect(runtime.advance([poseEvent('entered', 'p', 0)], emptyFrame, 32).commands).toEqual([]);
   });
 
@@ -66,7 +68,13 @@ describe('a scripted effect, start to finish, with no browser present', () => {
     for (const kind of ['entered', 'held', 'confirmed', 'exited'] as const) {
       const runtime = runtimeFor(
         catalog(
-          effect({ id: 'e', poseId: 'p', on: kind, durationMs: 100, entries: [entry(0, flash(), 100)] }),
+          effect({
+            id: 'e',
+            poseId: 'p',
+            on: kind,
+            durationMs: 100,
+            entries: [entry(0, flash(), 100)],
+          }),
         ),
       );
       expect(runtime.advance([poseEvent(kind, 'p', 0)], emptyFrame, 0).commands).toHaveLength(1);
@@ -78,8 +86,18 @@ describe('multiple matching effects (FR-044)', () => {
   it('all play, in catalog order', () => {
     const runtime = runtimeFor(
       catalog(
-        effect({ id: 'a', poseId: 'p', durationMs: 200, entries: [entry(0, flash('#AAAAAA'), 200)] }),
-        effect({ id: 'b', poseId: 'p', durationMs: 200, entries: [entry(0, flash('#BBBBBB'), 200)] }),
+        effect({
+          id: 'a',
+          poseId: 'p',
+          durationMs: 200,
+          entries: [entry(0, flash('#AAAAAA'), 200)],
+        }),
+        effect({
+          id: 'b',
+          poseId: 'p',
+          durationMs: 200,
+          entries: [entry(0, flash('#BBBBBB'), 200)],
+        }),
       ),
     );
     const output = runtime.advance([poseEvent('confirmed', 'p', 0)], emptyFrame, 0);
@@ -93,8 +111,18 @@ describe('multiple matching effects (FR-044)', () => {
   it('keeps that order stable across frames', () => {
     const runtime = runtimeFor(
       catalog(
-        effect({ id: 'a', poseId: 'p', durationMs: 400, entries: [entry(0, flash('#AAAAAA'), 400)] }),
-        effect({ id: 'b', poseId: 'p', durationMs: 400, entries: [entry(0, flash('#BBBBBB'), 400)] }),
+        effect({
+          id: 'a',
+          poseId: 'p',
+          durationMs: 400,
+          entries: [entry(0, flash('#AAAAAA'), 400)],
+        }),
+        effect({
+          id: 'b',
+          poseId: 'p',
+          durationMs: 400,
+          entries: [entry(0, flash('#BBBBBB'), 400)],
+        }),
       ),
     );
     runtime.advance([poseEvent('confirmed', 'p', 0)], emptyFrame, 0);
@@ -141,9 +169,15 @@ describe('conditions (FR-043)', () => {
         }),
       ),
     );
-    expect(runtime.advance([poseEvent('confirmed', 'p', 0)], emptyFrame, 0).started).toHaveLength(1);
-    expect(runtime.advance([poseEvent('confirmed', 'p', 500)], emptyFrame, 500).started).toHaveLength(0);
-    expect(runtime.advance([poseEvent('confirmed', 'p', 1000)], emptyFrame, 1000).started).toHaveLength(1);
+    expect(runtime.advance([poseEvent('confirmed', 'p', 0)], emptyFrame, 0).started).toHaveLength(
+      1,
+    );
+    expect(
+      runtime.advance([poseEvent('confirmed', 'p', 500)], emptyFrame, 500).started,
+    ).toHaveLength(0);
+    expect(
+      runtime.advance([poseEvent('confirmed', 'p', 1000)], emptyFrame, 1000).started,
+    ).toHaveLength(1);
   });
 });
 
@@ -155,7 +189,9 @@ describe('audio cues (FR-054a, research D6)', () => {
           id: 'e.sound',
           poseId: 'p',
           durationMs: 500,
-          entries: [entry(0, { type: 'play_audio', params: { asset: '@audio/flash', volume: 0.5 } })],
+          entries: [
+            entry(0, { type: 'play_audio', params: { asset: '@audio/flash', volume: 0.5 } }),
+          ],
         }),
       ),
     );
@@ -243,7 +279,10 @@ describe('particle bursts', () => {
             entries: [
               entry(
                 0,
-                { type: 'particle_burst', params: { count: 12, anchor: { kind: 'screen', x: 0.5, y: 0.5 } } },
+                {
+                  type: 'particle_burst',
+                  params: { count: 12, anchor: { kind: 'screen', x: 0.5, y: 0.5 } },
+                },
                 400,
               ),
             ],
@@ -260,7 +299,9 @@ describe('particle bursts', () => {
 describe('reset', () => {
   it('drops every playback', () => {
     const runtime = runtimeFor(
-      catalog(effect({ id: 'e', poseId: 'p', durationMs: 5000, entries: [entry(0, flash(), 5000)] })),
+      catalog(
+        effect({ id: 'e', poseId: 'p', durationMs: 5000, entries: [entry(0, flash(), 5000)] }),
+      ),
     );
     runtime.advance([poseEvent('confirmed', 'p', 0)], emptyFrame, 0);
     expect(runtime.activePlaybacks).toBe(1);

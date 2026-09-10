@@ -62,7 +62,7 @@ class FilesystemPoseCatalogSource:
         directory = self.poses_dir
         try:
             children = sorted(p for p in directory.iterdir() if p.is_dir())
-        except (OSError, ValueError):
+        except OSError, ValueError:
             return PoseCatalog()
 
         entries = tuple(

@@ -331,7 +331,12 @@ describe('play_audio cues reach an injected AudioSink (P1.2 — the editor used 
       trigger: { on: 'confirmed', poseId: 'x', conditions: [] },
       timeline: {
         durationMs: 100,
-        entries: [{ atMs: 0, action: { type: 'play_audio', params: { asset: '@audio/flash', volume: 0.5 } } }],
+        entries: [
+          {
+            atMs: 0,
+            action: { type: 'play_audio', params: { asset: '@audio/flash', volume: 0.5 } },
+          },
+        ],
       },
     };
   }
@@ -341,7 +346,8 @@ describe('play_audio cues reach an injected AudioSink (P1.2 — the editor used 
       catalog: { version: 1, effects: [playAudioEffect()] },
       registry,
       capabilities: defaultCapabilities(),
-      resolveAsset: (reference) => (reference === '@audio/flash' ? '/assets/audio/flash.wav' : null),
+      resolveAsset: (reference) =>
+        reference === '@audio/flash' ? '/assets/audio/flash.wav' : null,
     });
   }
 

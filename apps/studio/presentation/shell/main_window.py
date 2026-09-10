@@ -10,8 +10,8 @@ upgrade replaced its centre with a stack; nothing outside this file changed.
 
 from __future__ import annotations
 
-from PySide6.QtWidgets import QMainWindow, QSplitter, QStackedWidget, QWidget
 from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QMainWindow, QSplitter, QStackedWidget, QWidget
 
 from studio.config.models import WindowConfig
 from studio.presentation.shell.navigation_rail import NavigationRail

@@ -118,7 +118,10 @@ describe('Inspector — schema-driven, zero-code-change extensibility', () => {
 
   it('shows an empty state when nothing is selected', () => {
     inspector.render(null, defaultCapabilities());
-    expect(inspector.root.textContent).toMatch(/Select a clip/);
+    // The default empty is "no effect selected". Which empty it is now matters — see
+    // `test/adapters/editor-dead-ends.test.ts` for the three states and why one message
+    // for all of them was wrong.
+    expect(inspector.root.textContent).toMatch(/Nothing is selected/);
   });
 });
 

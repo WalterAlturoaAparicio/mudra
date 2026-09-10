@@ -18,7 +18,14 @@
  */
 
 import type { LandmarkWeights } from '../config/session-config';
-import type { ExemplarBundle, ExemplarHand, LiveHand, PoseEntry, PoseMatcher, RawScore } from './types';
+import type {
+  ExemplarBundle,
+  ExemplarHand,
+  LiveHand,
+  PoseEntry,
+  PoseMatcher,
+  RawScore,
+} from './types';
 
 /** Distance between a live hand and one exemplar hand in the bundle's flat payload. */
 export function weightedDistance(

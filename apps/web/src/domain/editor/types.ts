@@ -125,12 +125,18 @@ export class InvalidProjectNameError extends Error {
  *
  * @throws InvalidProjectNameError when the trimmed name is empty.
  */
-export function renameProject(project: Project, name: string): Project {
+export function renameProject(project: Project, name: string, nowMs?: number): Project {
   const trimmed = name.trim();
   if (trimmed.length === 0) {
     throw new InvalidProjectNameError();
   }
-  return { ...project, name: trimmed };
+  // `updatedAtMs` is the repository's to bump on save (data-model.md), so a caller with no
+  // clock gets the untouched value. A caller that *has* one — the editor, which keeps a
+  // rename in undo history long before anything is saved — passes it, so the history's own
+  // ordering does not depend on when a save happens to occur.
+  return nowMs === undefined
+    ? { ...project, name: trimmed }
+    : { ...project, name: trimmed, updatedAtMs: nowMs };
 }
 
 /** Enough of a project to list it, without loading its full catalog/assets. */

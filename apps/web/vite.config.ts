@@ -266,6 +266,19 @@ function datasetFingerprint(): string | null {
   }
 }
 
+
+/**
+ * Whether Capture Mode is part of this build (FR-001, FR-059, contracts/capture-gating.md).
+ *
+ * The gate is the bundler's **input list**, not a runtime conditional: when this is false,
+ * `capture.html` is never an entry, so nothing under `src/**\/capture/**` is reachable and none
+ * of it is emitted. A runtime flag would still ship the code.
+ *
+ * It fails closed on purpose — only the literal `'1'` enables it, so a half-set variable
+ * (`true`, `yes`, an empty string) leaves Capture Mode out rather than quietly shipping it.
+ */
+const CAPTURE_ENABLED = process.env['VITE_MUDRA_CAPTURE'] === '1';
+
 export default defineConfig({
   root: APP_ROOT,
   plugins: [sharedModelPlugin(), mediapipeWasmPlugin(), runtimeDataPlugin()],
@@ -287,11 +300,13 @@ export default defineConfig({
     // source tree: Mudra-owned experience assets.
     assetsDir: 'static',
     rollupOptions: {
-      // Two pages, built explicitly (Vite only auto-detects a lone root index.html):
-      // the default zero-chrome experience and the editor (constitution v1.7.0).
+      // Pages built explicitly (Vite only auto-detects a lone root index.html): the default
+      // zero-chrome experience and the editor (constitution v1.7.0), plus Capture Mode when
+      // and only when it is enabled.
       input: {
         main: resolve(APP_ROOT, 'index.html'),
         editor: resolve(APP_ROOT, 'editor.html'),
+        ...(CAPTURE_ENABLED ? { capture: resolve(APP_ROOT, 'capture.html') } : {}),
       },
     },
   },

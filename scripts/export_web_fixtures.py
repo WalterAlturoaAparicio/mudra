@@ -185,9 +185,7 @@ def _quantize(hand: HandLandmarks) -> tuple[tuple[float, float, float], ...]:
     The browser never sees float64 exemplars, so a reference computed over float64 would
     be comparing the port against something that does not exist (research D4/D5).
     """
-    return tuple(
-        struct.unpack("<3f", struct.pack("<3f", p.x, p.y, p.z)) for p in hand.points
-    )
+    return tuple(struct.unpack("<3f", struct.pack("<3f", p.x, p.y, p.z)) for p in hand.points)
 
 
 def _weighted_distance(

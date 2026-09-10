@@ -27,6 +27,7 @@ import type { HandDetector } from '../domain/ports/detector';
 import type { PersonSegmenter } from '../domain/ports/segmenter';
 import type { SegmentationFrame } from '../domain/editor/segmentation-frame';
 import { previewFrame } from '../domain/editor/preview-frame';
+import { selectedClipEffect } from '../domain/editor/playback-selection';
 import type { CameraTreatmentSettings } from '../domain/editor/types';
 import { DEFAULT_CAMERA_TREATMENT } from '../domain/editor/types';
 import { classify } from '../domain/recognition/classify';
@@ -60,6 +61,10 @@ export interface StagePresenter {
 
 /** What the controller reports back after each tick, for the editor's own UI to render. */
 export interface EditorFrameSnapshot {
+  /** The tick this snapshot describes, in the controller's own clock. Panels that show
+   *  elapsed time read it from here rather than calling a clock of their own, so everything
+   *  drawn from one frame agrees on when that frame was. */
+  readonly nowMs: number;
   readonly outcome: RecognitionOutcome | null;
   readonly events: readonly PoseEvent[];
   readonly holdProgress: number;
@@ -108,6 +113,15 @@ export interface EditorRuntimeControllerOptions {
    * `RecognitionOutcome` and fires no trigger by itself.
    */
   readonly syntheticInputWhenCameraless?: boolean;
+  /**
+   * The camera treatment to start from — normally the open project's own (item 18).
+   *
+   * Supplied at construction rather than only through `setCameraTreatment()` so the very
+   * first frame already carries it. Without this, opening a project with a treatment showed
+   * an untreated stage until something happened to touch the setting, which reads as the
+   * treatment having been lost.
+   */
+  readonly cameraTreatment?: CameraTreatmentSettings;
 }
 
 /**
@@ -151,7 +165,7 @@ export class EditorRuntimeController {
   private overlay: ((frame: LandmarkFrame) => readonly RenderCommand[]) | null = null;
 
   private camera: AttachedCamera | null = null;
-  private cameraTreatment: CameraTreatmentSettings = DEFAULT_CAMERA_TREATMENT;
+  private cameraTreatment: CameraTreatmentSettings;
   private lastFrame: LandmarkFrame;
   private lastSegmentation: SegmentationFrame | null = null;
   private running = false;
@@ -168,6 +182,7 @@ export class EditorRuntimeController {
     this.logger = options.logger ?? new Logger();
     this.audio = options.audio;
     this.syntheticInputWhenCameraless = options.syntheticInputWhenCameraless ?? true;
+    this.cameraTreatment = options.cameraTreatment ?? DEFAULT_CAMERA_TREATMENT;
     this.events = new PoseEventEmitter(options.config.events.holdDurationMs);
     this.lastFrame = landmarkFrame([], this.now(), NO_CAMERA_WIDTH, NO_CAMERA_HEIGHT);
   }
@@ -308,6 +323,7 @@ export class EditorRuntimeController {
     this.present(runtimeFrame.commands, frame);
 
     const snapshot: EditorFrameSnapshot = {
+      nowMs,
       outcome,
       events,
       holdProgress: this.events.progressAt(nowMs),

@@ -19,7 +19,10 @@ import { createProject } from '../../src/domain/editor/types';
 import type { Project } from '../../src/domain/editor/types';
 import type { EffectDefinition } from '../../src/domain/effects/types';
 import { createActionRegistry } from '../../src/domain/runtime/actions';
-import { parseProject, serializeProject } from '../../src/infrastructure/persistence/project-schema';
+import {
+  parseProject,
+  serializeProject,
+} from '../../src/infrastructure/persistence/project-schema';
 
 const registry = createActionRegistry();
 
@@ -52,9 +55,9 @@ describe('renameEffect (item 11)', () => {
   });
 
   it('trims surrounding whitespace', () => {
-    expect(renameEffect(projectWith([twoClipEffect]), 'e1', '  Spaced  ').catalog.effects[0]!.name).toBe(
-      'Spaced',
-    );
+    expect(
+      renameEffect(projectWith([twoClipEffect]), 'e1', '  Spaced  ').catalog.effects[0]!.name,
+    ).toBe('Spaced');
   });
 
   it('rejects an empty or whitespace-only name', () => {

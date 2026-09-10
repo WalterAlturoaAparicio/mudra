@@ -52,7 +52,11 @@ function fakeDetector(frames: () => LandmarkFrame): HandDetector {
 function recordingStage(): { stage: Stage; calls: { commands: number; overlay: number }[] } {
   const calls: { commands: number; overlay: number }[] = [];
   const stage = {
-    present: (_surface: unknown, commands: readonly unknown[], overlay: readonly unknown[] = []) => {
+    present: (
+      _surface: unknown,
+      commands: readonly unknown[],
+      overlay: readonly unknown[] = [],
+    ) => {
       calls.push({ commands: commands.length, overlay: overlay.length });
     },
   } as unknown as Stage;

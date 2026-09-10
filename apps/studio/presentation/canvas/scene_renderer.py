@@ -50,8 +50,8 @@ external preview window (FR-020).
 from __future__ import annotations
 
 from PySide6.QtCore import QPointF, QRectF, Qt
-from PySide6.QtGui import QBrush, QColor, QFont, QPen, QPolygonF, QTransform
-from PySide6.QtWidgets import QGraphicsItem, QGraphicsScene
+from PySide6.QtGui import QBrush, QColor, QFont, QPen, QPolygonF
+from PySide6.QtWidgets import QGraphicsItem, QGraphicsScene, QGraphicsSimpleTextItem
 
 from studio.config.models import VisualizationConfig
 from studio.domain.scene import HandStyle, MarkerShape, ScenePlan, ScenePoint

@@ -112,7 +112,9 @@ function buildRuntime() {
 
 describe('a brand-new action type', () => {
   it('is accepted by the production catalog loader', () => {
-    expect(() => parseCatalog(catalogDocument(), createActionRegistry([horizonAction]))).not.toThrow();
+    expect(() =>
+      parseCatalog(catalogDocument(), createActionRegistry([horizonAction])),
+    ).not.toThrow();
   });
 
   it('is rejected when it is *not* registered — proving the loader really checks', () => {
@@ -142,9 +144,7 @@ describe('a brand-new action type', () => {
 
     // After its offset: the new action produces output, with no scheduler change.
     const active = runtime.advance([], frame, 500);
-    const line = active.commands.find(
-      (c): c is DrawPolylineCommand => c.kind === 'drawPolyline',
-    );
+    const line = active.commands.find((c): c is DrawPolylineCommand => c.kind === 'drawPolyline');
     expect(line).toBeDefined();
     expect(line!.color).toBe('#FF00FF');
   });
@@ -166,9 +166,9 @@ describe('a brand-new action type', () => {
   it('deactivates at its own end, leaving the rest of the timeline alone', () => {
     const runtime = buildRuntime();
     runtime.advance([poseEvent('confirmed', 'some_pose', 0)], frame, 0);
-    expect(
-      runtime.advance([], frame, 850).commands.some((c) => c.kind === 'drawPolyline'),
-    ).toBe(false);
+    expect(runtime.advance([], frame, 850).commands.some((c) => c.kind === 'drawPolyline')).toBe(
+      false,
+    );
     expect(runtime.activePlaybacks).toBe(1);
   });
 

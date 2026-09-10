@@ -83,8 +83,30 @@ export interface InspectorOptions {
 }
 
 /** Everything one `render()` needs beyond the selection itself. */
+/**
+ * Which empty the Inspector is in.
+ *
+ * "Nothing to edit" had one message, and it was wrong in two of the three states it covered:
+ * it told an author to select a clip on a timeline that had none, and it said nothing at all
+ * about where an effect comes from. Each empty now names itself, so the panel explains the
+ * state the editor is actually in rather than the most common one.
+ */
+export type InspectorEmptyReason = 'no-effect' | 'effect-has-no-actions' | 'effect-selected';
+
+/** The copy for each empty. Each one points at the surface that ends the state it describes. */
+const EMPTY_COPY: Readonly<Record<InspectorEmptyReason, string>> = {
+  'no-effect':
+    'Nothing is selected. Create an effect with New Effect, or pick one in the project explorer.',
+  'effect-has-no-actions':
+    'This effect has no actions yet. Add one from the Actions palette, then select it here to edit its properties.',
+  'effect-selected':
+    'This effect’s own properties live in the Effect and Pose & Trigger panels. Select a clip on the timeline to edit that action instead.',
+};
+
 export interface InspectorContext {
   readonly capabilities: CapabilityRegistry;
+  /** Which empty to show when `selection` is `null`. Defaults to `no-effect`. */
+  readonly emptyReason?: InspectorEmptyReason;
   readonly assetLibrary?: readonly AssetLibraryEntry[];
   /** Whether a live camera is attached — an anchor-following action cannot preview without one. */
   readonly cameraAttached?: boolean;
@@ -232,7 +254,7 @@ export class Inspector {
 
     this.errorText.textContent = '';
     if (selection === null) {
-      this.showEmpty();
+      this.showEmpty(context.emptyReason ?? 'no-effect');
       return;
     }
 
@@ -284,7 +306,7 @@ export class Inspector {
       selection.effectId ?? '',
       String(selection.entryIndex ?? ''),
       selection.actionType,
-    ].join(' ');
+    ].join('\u0000');
     if (this.builtKey === key) {
       this.reconcile(descriptor, resolved, selection.durationMs, context);
     } else {
@@ -474,7 +496,7 @@ export class Inspector {
     }
   }
 
-  private showEmpty(): void {
+  private showEmpty(reason: InspectorEmptyReason = 'no-effect'): void {
     this.teardown();
     this.header.hidden = true;
     this.statusDetail.hidden = true;
@@ -489,7 +511,8 @@ export class Inspector {
     this.fields.replaceChildren();
     const empty = this.document.createElement('p');
     empty.className = 'mudra-editor__inspector-empty';
-    empty.textContent = 'Select a clip on the timeline to edit its properties.';
+    empty.dataset['reason'] = reason;
+    empty.textContent = EMPTY_COPY[reason];
     this.fields.append(empty);
   }
 }

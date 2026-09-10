@@ -81,7 +81,10 @@ export function structuralDifferences(
     const actualKeys = Object.keys(actual as Record<string, unknown>);
 
     // Order, not just membership — the contract says key order is part of the match.
-    if (expectedKeys.length !== actualKeys.length || expectedKeys.some((k, i) => k !== actualKeys[i])) {
+    if (
+      expectedKeys.length !== actualKeys.length ||
+      expectedKeys.some((k, i) => k !== actualKeys[i])
+    ) {
       const missing = expectedKeys.filter((k) => !actualKeys.includes(k));
       const extra = actualKeys.filter((k) => !expectedKeys.includes(k));
       const detail =

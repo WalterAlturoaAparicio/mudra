@@ -46,9 +46,9 @@ const EFFECT_ID = 'dragon-effect';
 describe('SC-008: build an entirely new effect for a previously unused pose, editor-only', () => {
   it('dragon is active but has no shipped effect — the precondition this scenario needs', () => {
     expect(DEFAULT_SESSION_CONFIG.activePoseSet).toContain(POSE_ID);
-    const shipped = JSON.parse(
-      readFileSync(join(APP_ROOT, 'config/effects.json'), 'utf-8'),
-    ) as { effects: { trigger: { pose_id: string } }[] };
+    const shipped = JSON.parse(readFileSync(join(APP_ROOT, 'config/effects.json'), 'utf-8')) as {
+      effects: { trigger: { pose_id: string } }[];
+    };
     const posesWithEffects = shipped.effects.map((effect) => effect.trigger.pose_id);
     expect(posesWithEffects).not.toContain(POSE_ID);
   });

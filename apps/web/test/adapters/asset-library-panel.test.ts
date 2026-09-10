@@ -31,7 +31,10 @@ const oneEntryLibrary: AssetLibrary = {
 
 function buildPanel(
   library: AssetLibrary,
-  overrides: Partial<{ referencedBy: (reference: string) => readonly string[]; confirm: (message: string) => boolean }> = {},
+  overrides: Partial<{
+    referencedBy: (reference: string) => readonly string[];
+    confirm: (message: string) => boolean;
+  }> = {},
 ) {
   let current = library;
   const changes: AssetLibrary[] = [];

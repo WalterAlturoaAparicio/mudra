@@ -284,16 +284,12 @@ describe('time ruler (item 1)', () => {
   it('shows an end-of-effect marker at durationMs when a duration is given, not at all when it is 0', () => {
     const { timeline } = buildTimeline();
     timeline.render([], null, 800);
-    const marker = timeline.root.querySelector<HTMLElement>(
-      '.mudra-editor__ruler-duration-marker',
-    );
+    const marker = timeline.root.querySelector<HTMLElement>('.mudra-editor__ruler-duration-marker');
     expect(marker).not.toBeNull();
     expect(marker!.style.left).toBe(msToPx(800) + 'px');
 
     timeline.render([], null, 0);
-    expect(
-      timeline.root.querySelector('.mudra-editor__ruler-duration-marker'),
-    ).toBeNull();
+    expect(timeline.root.querySelector('.mudra-editor__ruler-duration-marker')).toBeNull();
   });
 
   it('the ruler and the tracks always span the same content width, so they scroll together', () => {

@@ -75,6 +75,4 @@ class ViewControls(QWidget):
 
     def _on_space_toggled(self, raw_checked: bool) -> None:
         """Emit once per change — ``QRadioButton`` toggles fire in pairs."""
-        self.space_changed.emit(
-            CoordinateSpace.RAW if raw_checked else CoordinateSpace.NORMALIZED
-        )
+        self.space_changed.emit(CoordinateSpace.RAW if raw_checked else CoordinateSpace.NORMALIZED)

@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 
 import { landmarkFrame } from '../../src/domain/landmarks/types';
 import type { DrawPolylineCommand, FillScreenCommand } from '../../src/domain/runtime/frame-output';
+import type { Action } from '../../src/domain/effects/types';
 import { catalog, effect, entry, poseEvent, runtimeFor } from '../support/effects';
 import { frameOf, spiralHand, translated } from '../support/hands';
 
@@ -95,7 +96,7 @@ describe('the same effect triggered twice', () => {
   it('gives each playback its own action state', () => {
     // Two trails, started at different times, must not share a point history — a shared
     // one would make the second trail begin with the first's tail already drawn.
-    const trail = {
+    const trail: Action = {
       type: 'landmark_trail',
       params: { anchor: { kind: 'landmark', hand: 'first', index: 8 }, length: 10 },
     };
@@ -105,7 +106,11 @@ describe('the same effect triggered twice', () => {
 
     const hand = spiralHand();
     let t = 0;
-    runtime.advance([poseEvent('confirmed', 'p', 0)], frameOf([{ handedness: 'right', landmarks: hand }], 0), 0);
+    runtime.advance(
+      [poseEvent('confirmed', 'p', 0)],
+      frameOf([{ handedness: 'right', landmarks: hand }], 0),
+      0,
+    );
     for (let i = 1; i <= 5; i += 1) {
       t = i * 40;
       runtime.advance(

@@ -193,9 +193,12 @@ a resulting diff treated as a cross-application event to be handled deliberately
 - **Drag-and-drop panel docking and tabs.** The panel system now registers panels by id into
   named regions (`presentation/editor/dock-layout.ts`), which is the structure a docking system
   would build on. A fragile drag-target implementation was explicitly not worth this pass.
-- **Undo/redo.** Every authoring edit is already a pure `Project → Project` function
+- **Undo/redo.** ~~Every authoring edit is already a pure `Project → Project` function
   (`domain/editor/project-edits.ts`), so an undo stack is a list of snapshots and a pair of
-  commands rather than a redesign. It was not in scope; the shape is ready for it.
+  commands rather than a redesign. It was not in scope; the shape is ready for it.~~ Built in
+  Milestone 3 (spec 009, P3, FR-074–FR-077) exactly as predicted: a bounded snapshot stack,
+  `domain/editor/edit-history.ts`, wired into the Edit menu and `Ctrl+Z`/`Ctrl+Y` in
+  `editor-main.ts`. See `apps/web/README.md`'s "Undo/redo" entry.
 - **Multi-select on the timeline.** The selection model is deliberately one clip, and every
   surface agrees on that one clip. Widening it touches the tree, the timeline, the inspector, and
   Play Selected together.

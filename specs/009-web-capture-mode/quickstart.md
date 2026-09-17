@@ -213,9 +213,9 @@ VITE_MUDRA_CAPTURE=1 npm run dev   # or plain `npm run dev` — undo/redo is not
 
 ## Definition of done for this feature
 
-- [ ] Scenarios 1–9 pass (Capture Mode).
-- [ ] Scenario 10 passes (undo/redo, P3 — droppable without affecting 1–9).
-- [ ] `npm run test`, `npm run typecheck`, `npm run lint` all clean.
-- [ ] `python scripts/export_web_capture_fixtures.py` runs clean and its output is committed.
-- [ ] `apps/web/README.md` documents the capture build and states plainly that build-time gating is
+- [x] Scenarios 1–9 pass (Capture Mode).
+- [x] Scenario 10 passes (undo/redo, P3 — droppable without affecting 1–9).
+- [x] `npm run test`, `npm run typecheck`, `npm run lint` all clean.
+- [x] `python scripts/export_web_capture_fixtures.py` runs clean and its output is committed.
+- [x] `apps/web/README.md` documents the capture build and states plainly that build-time gating is
       feature gating, not deployment security (FR-004).

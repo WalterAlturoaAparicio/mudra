@@ -189,7 +189,7 @@ export class DockLayout {
    */
   registerPanel(panel: DockPanel): HTMLElement {
     const host = this.document.createElement('section');
-    host.className = 'mudra-layout__panel';
+    host.className = 'mudra-editor__panel-section';
     host.dataset['panelId'] = panel.id;
     host.append(panel.element);
     host.hidden = this.hidden.has(panel.id);

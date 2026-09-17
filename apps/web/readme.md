@@ -89,6 +89,13 @@ saturation/mirror/zoom/crop as a render-time Canvas2D filter/transform on a **se
 copy of the camera frame. The imagery `HandDetector` analyses is the untouched `MirroredSurface`;
 camera treatment never reaches the physical device and never reaches detection (FR-048–FR-051).
 
+**Undo/redo** (Milestone 3, P3, FR-074–FR-077) — a bounded snapshot stack
+(`domain/editor/edit-history.ts`) over the editor's existing pure `Project → Project` edit
+functions; there is nothing to invert, since the previous value *is* the undo. Reachable from the
+**Edit** menu (between File and View) or `Ctrl+Z`/`Ctrl+Y`, both wired in `editor-main.ts`. Editor
+state only: never persisted, adds no field to a saved project document, and is discarded (a new
+`EditHistory`) whenever a different project is opened.
+
 ### Editor performance (SC-010, FR-058, FR-059)
 
 FR-058 requires Milestone 1's numeric frame/latency budgets (the "Measured performance" table
@@ -126,6 +133,37 @@ two loops cannot contend for the same budget by construction:
   `npm run dev` with a webcam, open `editor.html`, open the diagnostics panel, and confirm its
   frame-budget figures hold steady while dragging a timeline clip.
 
+
+## Capture Mode (Milestone 3)
+
+A gated data-collection surface at `apps/web/capture.html` for gathering hand-landmark samples in
+volume from a browser — a separate concern from the editor and the default experience, sharing no
+code, no project model, and no storage with either (`test/architecture/capture-boundary.test.ts`).
+See [`specs/009-web-capture-mode/`](../../specs/009-web-capture-mode/) for the full specification
+and `contracts/capture-gating.md` for the gating contract this section restates.
+
+**How to enable it**: `VITE_MUDRA_CAPTURE=1 npm run dev` (or `npm run build`) adds `capture.html` as
+a third Vite entry point. Without the variable — including a plain `npm run build` — the dev server
+has no capture route and the built `dist/` contains no capture code at all: the gate is the
+bundler's **input list**, not a runtime conditional, so there is no dead code to tree-shake and
+nothing that a future refactor can invert by accident.
+
+**It must not be deployed to the public origin.** Build-time gating is feature gating, **not
+deployment security**. A build produced with the flag contains the capture code, and anyone who can
+reach that deployment can use it — there is no in-browser secret, token, invite code, or passphrase
+used or intended as access control (FR-003, FR-004): everything the browser receives is public, so
+shipping a secret in the bundle would only be obfuscation, and this project does not present
+obfuscation as a security boundary. If access to a deployed capture build must be restricted, that
+is a hosting-layer concern (HTTP auth, an access list, a private URL) — or, the recommended posture,
+simply do not deploy the capture build to the public origin at all.
+
+**What it collects**: hand-landmark coordinates, the selected pose, a contributor label (dataset
+provenance, not identity — never checked against anything), and per-sample timing. **What it never
+records**: camera images, video, screenshots, or anything derived from them — no picture of the
+contributor is written anywhere, at any point (FR-005, FR-031). Samples persist locally
+(IndexedDB, database `mudra-capture` — a separate database from the editor's `mudra-editor`, per
+`contracts/capture-storage.md`) until exported or explicitly deleted; nothing is transmitted, and
+`fetch` remains inbound-GET-only.
 
 ## Build the data
 

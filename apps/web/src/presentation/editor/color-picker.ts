@@ -177,12 +177,24 @@ export class ColorPicker {
   private readonly outsidePress: (event: Event) => void;
 
   private current: string;
+  /**
+   * The canonical HSL behind `current`, tracked separately from it.
+   *
+   * `current` is a `#rrggbb` hex — 8 bits per channel — and converting hue/saturation/
+   * lightness through it and back is lossy. Deriving each slider edit from `hexToHsl(this
+   * .current)` therefore drifted the two untouched channels a fraction of a degree/point per
+   * edit, compounding over a session into a hue that visibly crept. This field is the value a
+   * slider edit actually reads and writes; `current`/`hexToHsl` is recomputed only when the
+   * colour arrives from outside the sliders (hex field, a swatch, `setValue`).
+   */
+  private currentHsl: Hsl;
   private open = false;
 
   constructor(options: ColorPickerOptions) {
     this.document = options.document;
     this.onChange = options.onChange;
     this.current = normalizeHex(options.value) ?? '#ffffff';
+    this.currentHsl = hexToHsl(this.current);
 
     this.root = this.document.createElement('div');
     this.root.className = 'mudra-color-picker';
@@ -328,6 +340,7 @@ export class ColorPicker {
       return;
     }
     this.current = parsed;
+    this.currentHsl = hexToHsl(parsed);
     this.reflect();
   }
 
@@ -375,32 +388,36 @@ export class ColorPicker {
   /**
    * Move one channel, and leave the other two exactly as they were.
    *
-   * Reading all three sliders back would quietly quantize the untouched ones to whole
-   * numbers — so nudging Lightness shifted the hue, which is the drift an author sees as a
-   * colour that will not hold still. Only the channel that moved comes from a slider.
+   * Reads and writes `currentHsl` directly rather than round-tripping through `current`'s
+   * hex — hex is 8 bits per channel, so deriving from it quietly quantized the untouched
+   * channels, which is the drift an author sees as a colour that will not hold still. Only
+   * the channel that moved changes; the other two are copied bit-for-bit.
    */
   private applyFromSlider(channel: keyof Hsl, value: number): void {
-    this.apply(hslToHex({ ...hexToHsl(this.current), [channel]: value }), {
-      syncSliders: false,
-    });
+    const hsl = { ...this.currentHsl, [channel]: value };
+    this.apply(hslToHex(hsl), { syncSliders: false, hsl });
   }
 
   /** Adopt `hex`, refresh whichever controls did not originate the change, and report it. */
   private apply(
     hex: string,
-    options: { syncSliders?: boolean; syncHexField?: boolean } = {},
+    options: { syncSliders?: boolean; syncHexField?: boolean; hsl?: Hsl } = {},
   ): void {
     const parsed = normalizeHex(hex);
     if (parsed === null) {
       return;
     }
     this.current = parsed;
+    // A slider edit passes its own `hsl` — the exact value computed from `currentHsl`, not a
+    // re-derivation through the hex this line also just set. Every other source (hex field,
+    // swatch, `setValue`) has no better authority than the hex itself.
+    this.currentHsl = options.hsl ?? hexToHsl(parsed);
     this.reflect(options);
     this.onChange(parsed);
   }
 
   private reflect(options: { syncSliders?: boolean; syncHexField?: boolean } = {}): void {
-    const hsl = hexToHsl(this.current);
+    const hsl = this.currentHsl;
     if (options.syncSliders !== false) {
       // Whole numbers here, because the sliders step in whole numbers; the fractional part
       // lives in the colour itself, which is what the sliders are being synced *from*.

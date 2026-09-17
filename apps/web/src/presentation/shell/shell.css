@@ -129,8 +129,35 @@ body {
   list-style: none;
   display: flex;
   flex-wrap: wrap;
-  gap: 0.25rem 1rem;
+  gap: 0.75rem 1rem;
   justify-content: center;
+}
+
+.mudra-hints__item {
+  display: flex;
+}
+
+.mudra-hints__pose {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  max-width: 8rem;
+}
+
+.mudra-hints__pose__img {
+  width: 4.5rem;
+  height: 4.5rem;
+  object-fit: contain;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 0.25rem;
+}
+
+.mudra-hints__pose__caption {
+  text-align: center;
+  line-height: 1.25;
 }
 
 /* The hold build-up: a ring that fills. No number, by design (FR-088). */

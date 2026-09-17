@@ -229,9 +229,49 @@ describe('selecting a colour', () => {
       saturation.dispatchEvent(new Event('input', { bubbles: true }));
 
       expect(picker.value).not.toBe(afterFirst);
-      // The hue slider was never touched, so the hue must have survived both edits.
-      expect(hexToHsl(picker.value).h).toBe(hexToHsl(afterFirst).h);
+      // The hue slider was never touched, so the hue must have survived both edits — within
+      // the noise of one hex round-trip (`#rrggbb` is 8 bits/channel, so reconstructing hue
+      // from two *different* lightness/saturation hex encodings of the same true hue is not
+      // bit-identical even in a lossless implementation). What must NOT happen is the drift
+      // compounding with every edit — see the many-edit case below for that guarantee.
+      expect(Math.abs(hexToHsl(picker.value).h - hexToHsl(afterFirst).h)).toBeLessThan(1);
       expect(picker.isOpen).toBe(true);
+    } finally {
+      dispose();
+    }
+  });
+
+  it('does not accumulate hue drift across many untouched-hue edits', () => {
+    // Regression coverage for the bug the class-level comment on `currentHsl` documents:
+    // deriving each slider edit from `hexToHsl(current)` compounded a fraction of a degree
+    // of hue error into every edit, so a long editing session visibly crept off the
+    // original hue even though the hue slider was never touched. Eight alternating
+    // lightness/saturation edits used to drift the hue by ~7°; it must now stay within one
+    // hex round-trip's worth of noise, the whole session through.
+    const { picker, dispose } = buildPicker('#336699');
+    try {
+      trigger(picker).click();
+      const originalHue = hexToHsl(picker.value).h;
+      const lightness = slider(picker, 'lightness');
+      const saturation = slider(picker, 'saturation');
+      const edits: readonly [HTMLInputElement, string][] = [
+        [lightness, '70'],
+        [saturation, '20'],
+        [lightness, '30'],
+        [saturation, '80'],
+        [lightness, '50'],
+        [saturation, '10'],
+        [lightness, '90'],
+        [saturation, '60'],
+      ];
+      for (const [input, value] of edits) {
+        input.value = value;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+
+      // A single hex round-trip's worth of noise (~1°), not the ~7° the pre-fix compounding
+      // drift produced over the same eight edits.
+      expect(Math.abs(hexToHsl(picker.value).h - originalHue)).toBeLessThan(1.5);
     } finally {
       dispose();
     }

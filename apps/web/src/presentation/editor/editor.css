@@ -640,3 +640,733 @@ body button:disabled {
   cursor: ew-resize;
   background: rgba(255, 255, 255, 0.15);
 }
+
+/* ---------- Menu bar (presentation/editor/menu-bar.ts) ---------- */
+
+.mudra-menubar {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+}
+
+.mudra-menubar__title {
+  margin-left: auto;
+  align-self: center;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mudra-editor-dim);
+}
+
+.mudra-menubar__menu {
+  position: relative;
+}
+
+.mudra-menubar__trigger {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 4px 10px;
+}
+
+.mudra-menubar__trigger:hover:not(:disabled),
+.mudra-menubar__trigger[aria-expanded='true'] {
+  background: var(--mudra-editor-bg);
+  border-color: var(--mudra-editor-border);
+}
+
+.mudra-menubar__panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 5px;
+  min-width: 260px;
+  background: var(--mudra-editor-panel);
+  border: 1px solid var(--mudra-editor-border);
+  border-radius: 6px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+
+.mudra-menubar__panel[hidden] {
+  display: none;
+}
+
+.mudra-menubar__item {
+  display: grid;
+  grid-template-columns: 16px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  padding: 5px 8px;
+}
+
+.mudra-menubar__item:hover:not(:disabled) {
+  background: rgba(110, 231, 249, 0.14);
+  border-color: transparent;
+}
+
+.mudra-menubar__item[data-disabled] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.mudra-menubar__check {
+  visibility: hidden;
+  color: var(--mudra-editor-accent);
+  font-size: 12px;
+}
+
+.mudra-menubar__item[data-checked='true'] .mudra-menubar__check {
+  visibility: visible;
+}
+
+.mudra-menubar__shortcut {
+  color: var(--mudra-editor-dim);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.mudra-menubar__separator {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--mudra-editor-border);
+}
+
+.mudra-editor__icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+}
+
+.mudra-editor__icon-button--primary {
+  border-color: var(--mudra-editor-accent);
+  color: var(--mudra-editor-accent);
+}
+
+.mudra-editor__icon-button[data-disabled-reason] {
+  border-style: dashed;
+}
+
+.mudra-editor__icon-button[data-state='on'] {
+  border-color: var(--mudra-editor-accent);
+  color: var(--mudra-editor-accent);
+}
+
+.mudra-icon {
+  display: block;
+}
+
+.mudra-editor__toolbar-separator {
+  width: 1px;
+  align-self: stretch;
+  margin: 2px 4px;
+  background: var(--mudra-editor-border);
+}
+
+.mudra-editor__effect-select {
+  min-width: 12rem;
+}
+
+.mudra-editor__toolbar-status {
+  margin-left: auto;
+  align-self: center;
+  font-size: 12px;
+  color: var(--mudra-editor-dim);
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mudra-editor__toolbar-status[data-tone='warning'] {
+  color: var(--mudra-editor-warning);
+}
+
+.mudra-editor__toolbar-status[data-tone='ok'] {
+  color: var(--mudra-editor-accent);
+}
+
+/* ---------- Status badges & dots (presentation/editor/inspector.ts) ---------- */
+
+.mudra-editor__status-badge,
+.mudra-editor__status-dot {
+  --mudra-status-color: var(--mudra-editor-dim);
+}
+
+.mudra-editor__status-badge[data-status='ready'],
+.mudra-editor__status-dot[data-status='ready'] {
+  --mudra-status-color: #7bd88f;
+}
+
+.mudra-editor__status-badge[data-status='needs_configuration'],
+.mudra-editor__status-dot[data-status='needs_configuration'],
+.mudra-editor__status-badge[data-status='missing_asset'],
+.mudra-editor__status-dot[data-status='missing_asset'] {
+  --mudra-status-color: var(--mudra-editor-warning);
+}
+
+.mudra-editor__status-badge[data-status='invalid_configuration'],
+.mudra-editor__status-dot[data-status='invalid_configuration'],
+.mudra-editor__status-badge[data-status='runtime_error'],
+.mudra-editor__status-dot[data-status='runtime_error'] {
+  --mudra-status-color: var(--mudra-editor-danger);
+}
+
+.mudra-editor__status-badge {
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--mudra-status-color);
+  color: var(--mudra-status-color);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.mudra-editor__status-dot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--mudra-status-color);
+}
+
+/* ---------- Inspector — header, field groups, presets ---------- */
+
+.mudra-editor__inspector-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.mudra-editor__inspector-type {
+  font-family: ui-monospace, 'Cascadia Code', 'Consolas', monospace;
+  font-size: 12px;
+}
+
+.mudra-editor__inspector-status-detail {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--mudra-editor-dim);
+}
+
+.mudra-editor__field-group {
+  margin: 10px 0;
+  padding-top: 6px;
+  border-top: 1px solid var(--mudra-editor-border);
+}
+
+.mudra-editor__field-group-title {
+  margin: 0 0 6px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--mudra-editor-dim);
+}
+
+.mudra-editor__field[hidden] {
+  display: none;
+}
+
+.mudra-editor__preset-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.mudra-editor__preset-row button {
+  font-size: 11px;
+  padding: 3px 8px;
+}
+
+.mudra-editor__asset-picker-note {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: var(--mudra-editor-warning);
+}
+
+/* ---------- Color picker (presentation/editor/color-picker.ts) ---------- */
+
+.mudra-color-picker {
+  position: relative;
+}
+
+.mudra-color-picker__trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  padding: 3px 8px;
+}
+
+.mudra-color-picker__dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1px solid var(--mudra-editor-border);
+}
+
+.mudra-color-picker__hex-label {
+  font-family: ui-monospace, 'Cascadia Code', 'Consolas', monospace;
+  font-size: 11px;
+  color: var(--mudra-editor-dim);
+}
+
+.mudra-color-picker__popover {
+  position: absolute;
+  z-index: 25;
+  top: calc(100% + 6px);
+  left: 0;
+  width: 232px;
+  padding: 10px;
+  background: var(--mudra-editor-panel);
+  border: 1px solid var(--mudra-editor-border);
+  border-radius: 6px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+
+.mudra-color-picker__popover[hidden] {
+  display: none;
+}
+
+.mudra-color-picker__preview {
+  height: 34px;
+  border-radius: 4px;
+  border: 1px solid var(--mudra-editor-border);
+  margin-bottom: 8px;
+}
+
+.mudra-color-picker__slider-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 6px;
+}
+
+.mudra-color-picker__slider {
+  appearance: none;
+  width: 100%;
+  height: 12px;
+  border-radius: 6px;
+  border: 1px solid var(--mudra-editor-border);
+  background: var(--mudra-track, var(--mudra-editor-bg));
+}
+
+.mudra-color-picker__slider--hue {
+  background: linear-gradient(to right, red, #ff0, #0f0, #0ff, #00f, #f0f, red);
+}
+
+.mudra-color-picker__slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 12px;
+  height: 16px;
+  border-radius: 3px;
+  background: var(--mudra-editor-fg);
+  border: 1px solid rgba(0, 0, 0, 0.6);
+  cursor: ew-resize;
+}
+
+.mudra-color-picker__hex-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0;
+}
+
+.mudra-color-picker__hex {
+  flex: 1;
+  font-family: ui-monospace, 'Cascadia Code', 'Consolas', monospace;
+}
+
+.mudra-color-picker__swatches {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+}
+
+.mudra-color-picker__swatch {
+  height: 20px;
+  padding: 0;
+  border-radius: 4px;
+  border: 1px solid var(--mudra-editor-border);
+}
+
+/* ---------- Particle preview (presentation/editor/particle-preview.ts) ---------- */
+
+.mudra-editor__inspector-preview[hidden] {
+  display: none;
+}
+
+.mudra-editor__particle-preview-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.mudra-editor__particle-preview-header .mudra-editor__field-group-title {
+  margin: 0;
+  flex: 1;
+}
+
+.mudra-editor__particle-preview-header button {
+  font-size: 11px;
+  padding: 2px 8px;
+}
+
+.mudra-editor__particle-preview-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 6px;
+  border: 1px solid var(--mudra-editor-border);
+  background: #0a0c10;
+}
+
+.mudra-editor__particle-preview-caption {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--mudra-editor-dim);
+}
+
+/* ---------- Project tree (presentation/editor/project-tree.ts) ---------- */
+
+.mudra-editor__tree-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.mudra-editor__tree-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.mudra-editor__tree-row[data-depth='1'] {
+  padding-left: 12px;
+}
+
+.mudra-editor__tree-row[data-depth='2'] {
+  padding-left: 30px;
+}
+
+.mudra-editor__tree-row--project {
+  font-weight: 600;
+  margin-bottom: 2px;
+  border-bottom: 1px solid var(--mudra-editor-border);
+  border-radius: 4px 4px 0 0;
+}
+
+.mudra-editor__tree-row--group {
+  cursor: default;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 10px;
+  color: var(--mudra-editor-dim);
+  margin-top: 6px;
+}
+
+.mudra-editor__tree-row:not(.mudra-editor__tree-row--group):hover {
+  background: rgba(110, 231, 249, 0.1);
+}
+
+.mudra-editor__tree-row.is-selected {
+  background: rgba(110, 231, 249, 0.18);
+  outline: 1px solid var(--mudra-editor-accent);
+}
+
+.mudra-editor__tree-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mudra-editor__tree-trigger,
+.mudra-editor__tree-count {
+  flex: 0 0 auto;
+  color: var(--mudra-editor-dim);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.mudra-editor__tree-standing {
+  flex: 0 0 auto;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--mudra-editor-dim);
+}
+
+.mudra-editor__tree-standing[data-standing='active'] {
+  color: var(--mudra-editor-accent);
+}
+
+.mudra-editor__tree-twisty {
+  padding: 0;
+  width: 16px;
+  height: 16px;
+  border: none;
+  background: transparent;
+  color: var(--mudra-editor-dim);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mudra-editor__tree-empty {
+  margin: 2px 0 2px 12px;
+  font-size: 11px;
+  font-style: italic;
+  color: var(--mudra-editor-dim);
+}
+
+.mudra-editor__tree-action {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--mudra-editor-dim);
+  opacity: 0;
+}
+
+.mudra-editor__tree-row:hover .mudra-editor__tree-action,
+.mudra-editor__tree-row.is-selected .mudra-editor__tree-action,
+.mudra-editor__tree-action:focus-visible {
+  opacity: 1;
+}
+
+.mudra-editor__tree-action:hover:not(:disabled) {
+  color: var(--mudra-editor-accent);
+}
+
+.mudra-editor__tree-danger:hover:not(:disabled) {
+  color: var(--mudra-editor-danger);
+}
+
+.mudra-editor__tree-row--group .mudra-editor__tree-action {
+  opacity: 1;
+}
+
+.mudra-editor__effect-identity {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-family: ui-monospace, 'Cascadia Code', 'Consolas', monospace;
+  color: var(--mudra-editor-dim);
+}
+
+.mudra-editor__project-active {
+  margin: 0 0 4px;
+  font-size: 11px;
+  color: var(--mudra-editor-dim);
+}
+
+.mudra-editor__project-active[data-active='true'] {
+  color: var(--mudra-editor-accent);
+}
+
+/* ---------- Asset library detail (presentation/editor/asset-library-panel.ts) ---------- */
+
+.mudra-editor__asset-thumb {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  background: var(--mudra-editor-bg);
+  border: 1px solid var(--mudra-editor-border);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  color: var(--mudra-editor-dim);
+}
+
+.mudra-editor__asset-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.mudra-editor__asset-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.mudra-editor__asset-reference {
+  font-size: 10px;
+  color: var(--mudra-editor-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mudra-editor__asset-usage {
+  flex: 0 0 auto;
+  font-size: 10px;
+  color: var(--mudra-editor-dim);
+}
+
+.mudra-editor__asset-usage[data-used='true'] {
+  color: var(--mudra-editor-accent);
+}
+
+.mudra-editor__asset-remove {
+  flex: 0 0 auto;
+  font-size: 11px;
+  padding: 2px 6px;
+}
+
+.mudra-editor__asset-detail[hidden] {
+  display: none;
+}
+
+.mudra-editor__asset-detail-line {
+  margin: 0 0 3px;
+  overflow-wrap: anywhere;
+}
+
+.mudra-editor__asset-audio {
+  width: 100%;
+  margin-top: 6px;
+}
+
+/* ---------- Pose reference image (shared by inspector & tree entries) ---------- */
+
+.mudra-pose-image {
+  margin: 0 0 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mudra-pose-image__img {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  border-radius: 6px;
+  border: 1px solid var(--mudra-editor-border);
+  background: var(--mudra-editor-bg);
+}
+
+.mudra-pose-image__caption {
+  font-size: 12px;
+  color: var(--mudra-editor-dim);
+}
+
+.mudra-editor__panel-section[hidden] {
+  display: none;
+}
+
+/* ---------- Dock layout — collapsed panel states ---------- */
+
+.mudra-layout[data-left-collapsed='true'] {
+  grid-template-columns: 0 0 1fr 6px var(--mudra-layout-right-w, 340px);
+}
+
+.mudra-layout[data-right-collapsed='true'] {
+  grid-template-columns: var(--mudra-layout-left-w, 260px) 6px 1fr 0 0;
+}
+
+.mudra-layout[data-left-collapsed='true'][data-right-collapsed='true'] {
+  grid-template-columns: 0 0 1fr 0 0;
+}
+
+.mudra-layout[data-timeline-collapsed='true'] {
+  grid-template-rows: auto 1fr 0 0;
+}
+
+/* ---------- Dialog (presentation/editor/dialog.ts) ---------- */
+
+.mudra-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(6, 8, 12, 0.62);
+}
+
+.mudra-dialog[hidden] {
+  display: none;
+}
+
+.mudra-dialog__card {
+  width: min(420px, 100%);
+  padding: 18px 20px 16px;
+  background: var(--mudra-editor-panel);
+  border: 1px solid var(--mudra-editor-border);
+  border-radius: 10px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55);
+}
+
+.mudra-dialog__title {
+  margin: 0 0 10px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.mudra-dialog__message {
+  margin: 0 0 12px;
+  color: var(--mudra-editor-dim);
+  line-height: 1.45;
+}
+
+.mudra-dialog__error {
+  min-height: 1.2em;
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--mudra-editor-danger);
+}
+
+.mudra-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.mudra-dialog__confirm {
+  font-weight: 600;
+  border-color: var(--mudra-editor-accent);
+  color: var(--mudra-editor-accent);
+}
+
+.mudra-dialog__confirm[data-tone='danger'] {
+  border-color: var(--mudra-editor-danger);
+  color: var(--mudra-editor-danger);
+}
+
+.mudra-dialog__confirm[data-tone='danger']:hover:not(:disabled) {
+  border-color: var(--mudra-editor-danger);
+  background: rgba(255, 107, 107, 0.12);
+}

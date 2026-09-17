@@ -266,6 +266,26 @@ function datasetFingerprint(): string | null {
   }
 }
 
+/**
+ * Versions reach the browser the same way the dataset fingerprint above does (research D5,
+ * spec 009): read from `package.json` at build time, since there is no runtime API for
+ * "what version of myself is running" or "what version of a dependency is bundled."
+ */
+function appVersion(): string {
+  const pkg = JSON.parse(readFileSync(resolve(APP_ROOT, 'package.json'), 'utf-8')) as {
+    version?: unknown;
+  };
+  return typeof pkg.version === 'string' ? pkg.version : '0.0.0';
+}
+
+/** The installed `@mediapipe/tasks-vision` version — Capture Mode records it per sample. */
+function mediapipeVersion(): string {
+  const pkg = JSON.parse(
+    readFileSync(resolve(APP_ROOT, 'node_modules/@mediapipe/tasks-vision/package.json'), 'utf-8'),
+  ) as { version?: unknown };
+  return typeof pkg.version === 'string' ? pkg.version : '0.0.0';
+}
+
 
 /**
  * Whether Capture Mode is part of this build (FR-001, FR-059, contracts/capture-gating.md).
@@ -284,6 +304,8 @@ export default defineConfig({
   plugins: [sharedModelPlugin(), mediapipeWasmPlugin(), runtimeDataPlugin()],
   define: {
     __DATASET_FINGERPRINT__: JSON.stringify(datasetFingerprint()),
+    __APP_VERSION__: JSON.stringify(appVersion()),
+    __MEDIAPIPE_VERSION__: JSON.stringify(mediapipeVersion()),
   },
   server: {
     fs: {

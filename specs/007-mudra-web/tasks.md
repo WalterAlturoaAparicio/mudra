@@ -74,7 +74,7 @@ A port merged without them is not authorized.
 
 - [x] T010 [P] Implement `Handedness`, `Landmark`, `HandLandmarks` (enforcing exactly 21 points at construction), `HandObservation`, and `LandmarkFrame` in `apps/web/src/domain/landmarks/types.ts` per data-model.md §1
 - [x] T011 [P] Implement topology constants `HAND_LANDMARK_COUNT`, `WRIST`, `MIDDLE_FINGER_MCP`, `FINGERTIPS`, `HAND_CONNECTIONS` in `apps/web/src/domain/landmarks/topology.ts`
-- [ ] T012 [P] Write unit tests for the 21-landmark invariant and topology edge validity in `apps/web/test/domain/landmarks.test.ts`
+- [x] T012 [P] Write unit tests for the 21-landmark invariant and topology edge validity in `apps/web/test/domain/landmarks.test.ts`
 
 ### Configuration
 
@@ -140,7 +140,7 @@ effect plays. No configuration, no documentation, no technical knowledge require
 - [x] T040 [US1] Implement the **single mirrored surface** in `apps/web/src/infrastructure/camera/mirrored-surface.ts` — one horizontally-flipped canvas that is simultaneously the detector's input and the displayed image (research D1, FR-009, FR-013)
 - [x] T041 [US1] Define the `HandDetector` interface in `apps/web/src/domain/ports/detector.ts` exposing only `detect(surface, timestampMs) → LandmarkFrame` (FR-016)
 - [x] T042 [US1] Implement the MediaPipe adapter in `apps/web/src/infrastructure/detection/mediapipe-detector.ts` using `HandLandmarker` in VIDEO mode with `numHands: 2`, loading the shared model, and reporting initialization failure in plain language (FR-014, FR-017, research D2)
-- [ ] T043 [US1] Emit a `LandmarkFrame` for **every** processed frame including zero-hand frames in the adapter (FR-015)
+- [x] T043 [US1] Emit a `LandmarkFrame` for **every** processed frame including zero-hand frames in the adapter (FR-015)
 - [x] T044 [P] [US1] Write the mirroring test in `apps/web/test/domain/mirroring.test.ts` feeding a known-convention input and asserting known handedness and known normalized coordinates (FR-012, SC-008)
 - [x] T045 [P] [US1] Write camera adapter tests with a fake `getUserMedia` covering all four failure conditions in `apps/web/test/adapters/camera.test.ts`
 
@@ -203,7 +203,7 @@ continuous actions that track a live hand.
 begins and ends when configured, and the continuous one follows the hand across frames.
 
 - [x] T072 [US3] Implement the timeline scheduler in `apps/web/src/domain/runtime/timeline-scheduler.ts` activating entries at their **absolute** `atMs` and deactivating at `atMs + durationMs`, with no entry's position depending on another's (FR-046, FR-047)
-- [ ] T073 [US3] Implement the three action behaviours (`instantaneous`, `duration`, `continuous`) in the scheduler, advancing by elapsed time so effects are frame-rate independent (FR-048, FR-049)
+- [x] T073 [US3] Implement the three action behaviours (`instantaneous`, `duration`, `continuous`) in the scheduler, advancing by elapsed time so effects are frame-rate independent (FR-048, FR-049)
 - [x] T074 [US3] Implement concurrent playbacks in `apps/web/src/domain/runtime/effect-runtime.ts` so overlapping effects neither cancel nor corrupt one another, and playbacks release on completion (FR-050, FR-051)
 - [x] T075 [P] [US3] Implement the `background_wash` action descriptor in `apps/web/src/domain/runtime/actions/background-wash.ts` compositing a full-screen colour/gradient/image **over** the camera view with `opacity`, `blend`, and in/out transition (FR-053 — overlay, never behind the user)
 - [x] T076 [P] [US3] Implement the `landmark_trail` continuous action descriptor in `apps/web/src/domain/runtime/actions/landmark-trail.ts` following a configured landmark and emitting `drawPolyline` (FR-055)
@@ -212,7 +212,7 @@ begins and ends when configured, and the continuous one follows the hand across 
 - [x] T079 [US3] Implement the audio sink in `apps/web/src/infrastructure/audio/audio-sink.ts` consuming `AudioCue`s, unlocked by the camera-grant gesture, reporting blocked playback to diagnostics (FR-054a)
 - [x] T080 [US3] Implement the capability registry in `apps/web/src/domain/runtime/capabilities.ts` and declare `person_segmentation` **unavailable** (FR-075, research D12)
 - [x] T081 [US3] Implement the reserved `person_visibility` action descriptor in `apps/web/src/domain/runtime/actions/person-visibility.ts` — requires `person_segmentation`, produces no commands, and records `capability_unavailable` in `FrameOutput.diagnostics` (FR-076, FR-077)
-- [ ] T082 [US3] Add Mudra-owned experience assets under `apps/web/assets/audio/` and `apps/web/assets/images/`, and register them in the asset manifest — Mudra-owned or project-licensed only, no third-party protected material (FR-065)
+- [x] T082 [US3] Add Mudra-owned experience assets under `apps/web/assets/audio/` and `apps/web/assets/images/`, and register them in the asset manifest — Mudra-owned or project-licensed only, no third-party protected material (FR-065)
 - [x] T083 [US3] Extend `apps/web/config/effects.json` with a composed effect **triggered by the `tp` pose** demonstrating all three behaviours at distinct offsets (flash at 0 ms, particles at 60 ms, wash 100–900 ms, trail continuous, audio at 0 ms) (FR-056). `tp` is chosen because it is the active pose with no effect yet assigned, and because it is the pose the conceptual teleport effect would later extend — reaching that extension in configuration alone is the milestone's stated architectural claim
 - [x] T084 [P] [US3] Write timeline tests in `apps/web/test/domain/timeline.test.ts` asserting each action begins within 50 ms of its configured offset, durations are honoured, and moving one entry repositions no other (SC-014, FR-047)
 - [x] T085 [P] [US3] Write continuous-action tests in `apps/web/test/domain/continuous-actions.test.ts` asserting a trail's output tracks a moving landmark across successive frames
@@ -234,7 +234,7 @@ visitor-facing experience is unchanged when off.
 - [x] T089 [US4] Implement the debug-mode toggle in `apps/web/src/presentation/debug/debug-mode.ts`, off by default and not discoverable by accident (FR-090, Assumptions)
 - [x] T090 [US4] Implement the landmark overlay in `apps/web/src/presentation/debug/landmark-overlay.ts` drawing all 21 points per hand, `HAND_CONNECTIONS`, and the handedness label (FR-090, US4 acceptance 2)
 - [x] T091 [US4] Implement the recognition panel in `apps/web/src/presentation/debug/recognition-panel.ts` showing ranked candidates with confidences, the event state, and hold progress (FR-030, FR-090)
-- [ ] T092 [US4] Display the **active pose set alongside every confidence** in the recognition panel, so a confidence is never read without the context that gives it meaning (FR-024c, research D11)
+- [x] T092 [US4] Display the **active pose set alongside every confidence** in the recognition panel, so a confidence is never read without the context that gives it meaning (FR-024c, research D11)
 - [x] T093 [US4] Implement the pose-population panel in `apps/web/src/presentation/debug/pose-panel.ts` listing catalog / eligible / active poses, with each exclusion's **reason and sample count** — including `domain_expansion` (1 sample, minimum 20) (FR-023a, FR-023b, SC-013)
 - [x] T094 [US4] Implement performance instrumentation in `apps/web/src/application/metrics.ts` measuring frame rate and end-to-end capture-to-outcome latency (FR-093, FR-094)
 - [x] T094a [US4] Extend `apps/web/src/application/metrics.ts` with the **trigger-to-first-paint** metric (FR-095, SC-005), retaining the frame-rate and recognition-latency measurements unchanged. Record three timestamps and expose both intervals: **(a)** `t_trigger` — when the pose event that satisfies a trigger is emitted; **(b)** `t_command` — when the runtime first emits a non-empty `RenderCommand` list for that playback; **(c)** `t_paint` — the first `requestAnimationFrame` callback that runs *after* the renderer has issued that playback's first draw call, taken as the practical proxy for first paint. Report `t_paint − t_trigger` against the 200 ms budget and `t_command − t_trigger` as the runtime-only portion. **Document these boundaries in `apps/web/README.md`**, including that (c) is a proxy: the browser exposes no per-element paint timestamp, and `requestAnimationFrame`-after-draw is the smallest practical measurement available without a paint-timing API
@@ -254,10 +254,10 @@ visitor-facing experience is unchanged when off.
 - [x] T100 [P] Measure sustained frame rate, recognition latency, **and trigger-to-first-paint** against the ~30 fps, ≤200 ms, and ≤200 ms targets on a reference desktop browser and record all three in `apps/web/README.md` (FR-092, FR-093, FR-095, SC-004, SC-005)
 - [x] T100a **SC-002 reliability trial.** After the implementation exists, run the intended user flow — open the app, grant camera, form the pose, hold — for **10 deliberate attempts per active pose** (`hi`, `peace`, `tp`, `dragon`; 40 attempts total). An attempt **succeeds** when a deliberate, correctly-formed pose produces its intended effect; it **fails** on no trigger, a wrong-pose trigger, or a trigger the user did not intend. Record the observed rate per pose and overall in `apps/web/README.md`, against SC-002's threshold of **at least 8 of 10**. Record the **actual measured** rate — do not pre-populate a figure, and do not adjust the recognition thresholds to reach it (FR-028); a shortfall is a finding about the active pose set or the dataset, reported as such
 - [x] T101 [P] Verify the exemplar bundle is ≤ 2 MB and record the actual size (expected ≈ 574 KB) (SC-009) — **574.1 KB** measured 2026-09-10 over 17 poses / 2333 hands
-- [ ] T102 Run every quickstart validation scenario end to end and correct any divergence between [quickstart.md](./quickstart.md) and actual behaviour
-- [ ] T103 [P] Manually verify non-persistence per contracts/privacy.md — empty Local/Session Storage, IndexedDB and Cache Storage, and only inbound GETs in the Network tab (SC-010). Also confirm by inspection that **no user-facing recording, capture, download, or share affordance is reachable** anywhere in the running application, in either default or debug mode, and record the confirmation (FR-007)
+- [x] T102 Run every quickstart validation scenario end to end and correct any divergence between [quickstart.md](./quickstart.md) and actual behaviour
+- [x] T103 [P] Manually verify non-persistence per contracts/privacy.md — empty Local/Session Storage, IndexedDB and Cache Storage, and only inbound GETs in the Network tab (SC-010). Also confirm by inspection that **no user-facing recording, capture, download, or share affordance is reachable** anywhere in the running application, in either default or debug mode, and record the confirmation (FR-007)
 - [x] T104 [P] Verify `npm run typecheck` and `npm run lint` are clean and wire them into the definition of done (constitution, web standards subsection)
-- [ ] T105 Re-run the Constitution Check in [plan.md](./plan.md) against the delivered code and record the result
+- [x] T105 Re-run the Constitution Check in [plan.md](./plan.md) against the delivered code and record the result
 - [x] T106 [P] Confirm no file under `apps/engine/` or `apps/capture/` was modified by this feature (`git status`), and that `assets/hand_landmarker.task` exists in exactly one place (FR-098, FR-101)
 
 ---

@@ -315,12 +315,21 @@ describe('Play, Play Selected and Test Trigger are three different operations (i
   });
 
   it('Play Selected rebases the clip to zero, so a late clip previews immediately', () => {
-    const { layout, controller, runtime } = buildShell();
-    // The second clip starts at 500 ms. Selected-playback must show it on the first frame.
+    const { layout, controller, runtime, advance } = buildShell();
+    // The second clip starts at 500 ms. Selected-playback must show it within a frame or two,
+    // not after 500 ms of nothing. Asserted one tick in, not at elapsed 0 sharp: the selected
+    // clip (`background_wash`) fades in from transparent by design (FR-053), so its own very
+    // first instant is legitimately a no-op frame — the rebase is what makes "one tick in"
+    // mean ~16 ms rather than ~500 ms.
     treeRows(layout, '.mudra-editor__tree-row--action')[1]!.click();
     toolbarButton(layout, 'Play Selected').click();
 
-    const frame = runtime.advance([], { hands: [], timestampMs: 0, width: 640, height: 480 }, 1000);
+    const nowMs = advance(16);
+    const frame = runtime.advance(
+      [],
+      { hands: [], timestampMs: nowMs, width: 640, height: 480 },
+      nowMs,
+    );
     expect(frame.commands.length).toBeGreaterThan(0);
     expect(controller.isRunning).toBe(false); // no loop was started; this was a direct command
   });

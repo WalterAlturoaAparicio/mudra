@@ -85,8 +85,8 @@ confirm the suite fails naming the differing path.
 ### Implementation for User Story 3
 
 - [x] T014 [US3] Write the fixture generator at `scripts/export_web_capture_fixtures.py` emitting `apps/web/test/fixtures/pose_sample_cases.json`, each case carrying `inputs`, `engine_document` (`PoseSerializer.to_dict`), and `expected_document` (the same with the four additive fields at their contracted positions), per contracts/pose-sample-export.md
-- [ ] T015 [US3] Cover the six required fixture cases in that script — one hand, two hands, countdown enabled, countdown disabled, absent optional fields, and a numeric-stress case with very small magnitudes, negatives, and full-precision doubles (FR-065)
-- [ ] T016 [US3] Assert on the Python side, inside the same script, that `PoseSerializer.from_dict` loads both `engine_document` and `expected_document` without error, proving the additive fields do not break Engine's reader
+- [x] T015 [US3] Cover the six required fixture cases in that script — one hand, two hands, countdown enabled, countdown disabled, absent optional fields, and a numeric-stress case with very small magnitudes, negatives, and full-precision doubles (FR-065)
+- [x] T016 [US3] Assert on the Python side, inside the same script, that `PoseSerializer.from_dict` loads both `engine_document` and `expected_document` without error, proving the additive fields do not break Engine's reader
 - [x] T017 [US3] Implement the canonical serializer in `apps/web/src/infrastructure/capture/pose-sample-serializer.ts` — Engine's exact key order, Engine's timestamp format (research D3), `camera.index: 0`, no `position`, no `lens_facing`, `versions.application` as `mudra-web/<version>` (depends on T006, T005)
 - [x] T018 [US3] Implement the structural comparator in `apps/web/test/support/structural-match.ts` — same key set and key **order** at every level, same array lengths and order, exact numeric equality as doubles, identical strings/booleans/nulls (FR-066)
 - [x] T019 [US3] Add the fixture-driven suite in `apps/web/test/domain/pose-sample-serializer.test.ts` asserting per case (a) a full structural match against `expected_document`, and (b) that stripping the four contracted keys reproduces `engine_document` exactly, key order included — the machine-checked "additive and nothing else" rule
@@ -109,7 +109,7 @@ load every produced file through Engine's `PoseSerializer.from_json` without mod
 
 - [x] T020 [P] [US1] Define the persisted record shape and its parse/serialize functions in `apps/web/src/infrastructure/persistence/capture-schema.ts` — a type graph of numbers, strings, booleans and arrays only, with no `unknown`, `any`, `Blob`, or index signature (FR-040)
 - [x] T021 [US1] Implement `apps/web/src/infrastructure/persistence/indexeddb-capture-repository.ts` against the `mudra-capture` database with `sessions` and `samples` stores and the `by_session` index per contracts/capture-storage.md (depends on T010, T020)
-- [ ] T022 [US1] Implement `deleteSession` as a single transaction removing every sample then the session, so a failure leaves neither orphans nor a session missing its samples
+- [x] T022 [US1] Implement `deleteSession` as a single transaction removing every sample then the session, so a failure leaves neither orphans nor a session missing its samples
 - [x] T023 [US1] Add adapter tests in `apps/web/test/adapters/indexeddb-capture-repository.test.ts` using `fake-indexeddb`, asserting deletion by **reading the store back** rather than trusting return values, and that `mudra-editor` is never opened
 
 ### Archive
@@ -123,7 +123,7 @@ load every produced file through Engine's `PoseSerializer.from_json` without mod
 ### Capture pipeline
 
 - [x] T029 [US1] Implement `apps/web/src/application/capture-controller.ts` running camera → detector → `normalize()` → validate → sample, with countdown and burst. It MUST NOT call `classify`, emit a `PoseEvent`, or touch `EffectRuntime` (FR-022, depends on T008, T009, T010)
-- [ ] T030 [US1] Persist each accepted sample as it is accepted, off the frame loop, so closing the page loses at most the take in progress (FR-021, FR-070)
+- [x] T030 [US1] Persist each accepted sample as it is accepted, off the frame loop, so closing the page loses at most the take in progress (FR-021, FR-070)
 
 ### Presentation
 
@@ -131,7 +131,7 @@ load every produced file through Engine's `PoseSerializer.from_json` without mod
 - [x] T032 [P] [US1] Implement session setup in `apps/web/src/presentation/capture/session-panel.ts` — contributor label, pose selection allowing a new `pose_id`, required-hand count derived from exemplar data when known (FR-012 – FR-014b)
 - [x] T033 [P] [US1] Implement take controls and the countdown display in `apps/web/src/presentation/capture/take-controls.ts`, with rejection reasons shown in plain language (FR-016, FR-019, FR-071)
 - [x] T034 [US1] Implement the capture shell in `apps/web/src/presentation/capture/capture-shell.ts` — persistent active-mode indicator, visually distinct in-take state, live accepted-sample count, explicit exit that stops the camera (FR-008 – FR-010, FR-020)
-- [ ] T035 [US1] Wire the live preview through the existing `Stage` with `landmarkOverlayCommands`, introducing no second drawing path (research D8)
+- [x] T035 [US1] Wire the live preview through the existing `Stage` with `landmarkOverlayCommands`, introducing no second drawing path (research D8)
 - [x] T036 [P] [US1] Implement the export panel in `apps/web/src/presentation/capture/capture-export-panel.ts` — the single download affordance, unavailable with a stated reason when the store is empty, and stating after export that samples are still held locally (FR-051, FR-052a)
 - [x] T037 [P] [US1] Add `apps/web/src/presentation/capture/capture.css`
 - [x] T038 [US1] Add shell tests in `apps/web/test/adapters/capture-shell.test.ts` covering consent gating, active-state visibility, count updates, and invalid-take reporting
@@ -161,8 +161,8 @@ confirm seven files, clear the session and confirm the store holds nothing (quic
 
 - [x] T043 [P] [US2] Implement landmark thumbnails in `apps/web/src/presentation/capture/landmark-thumbnail.ts` as inline SVG built from stored coordinates — no canvas API, so no imagery can appear in review (research D8, FR-052)
 - [x] T044 [US2] Implement the sample list in `apps/web/src/presentation/capture/sample-list.ts` showing index, capture time, hand count and thumbnail per sample (FR-041, depends on T043)
-- [ ] T045 [US2] Wire per-sample deletion through `CaptureRepository.deleteSample`, updating the visible count (FR-042)
-- [ ] T046 [US2] Wire session clearing behind a confirmation through `CaptureRepository.deleteSession` (FR-043)
+- [x] T045 [US2] Wire per-sample deletion through `CaptureRepository.deleteSample`, updating the visible count (FR-042)
+- [x] T046 [US2] Wire session clearing behind a confirmation through `CaptureRepository.deleteSession` (FR-043)
 - [x] T047 [P] [US2] Add tests in `apps/web/test/adapters/capture-sample-list.test.ts` covering rendering, per-sample deletion, count updates, and that no `<img>`, canvas, or blob URL appears in the rendered output
 - [x] T048 [US2] Extend `apps/web/test/adapters/indexeddb-capture-repository.test.ts` to assert deleted records are **absent** rather than flagged, with no tombstone and no residual sample after a session delete (FR-044, FR-045, SC-006)
 
@@ -193,9 +193,9 @@ is identical to the pre-undo one (quickstart scenario 10).
 ## Phase 7: Polish & Cross-Cutting Concerns
 
 - [x] T053 [P] Document the capture build in `apps/web/README.md`: how to enable it, that it must not be deployed to the public origin, that build-time gating is feature gating and **not** deployment security, and that no in-browser secret is used as access control (FR-004, required by contracts/capture-gating.md)
-- [ ] T054 [P] Add Mudra Web's capture entry point to the Monorepo table and Folder Structure section of the root `README.md` (the ⚠ follow-up recorded in the constitution's v1.8.0 sync report)
+- [x] T054 [P] Add Mudra Web's capture entry point to the Monorepo table and Folder Structure section of the root `README.md` (the ⚠ follow-up recorded in the constitution's v1.8.0 sync report)
 - [x] T055 Run the full `apps/web` suite plus `npm run typecheck` and `npm run lint`, confirming the existing recognition and effect suites pass with no threshold, weight, or hold value changed (SC-013)
-- [ ] T056 Execute every scenario in [quickstart.md](./quickstart.md) end to end, including the public-build check (scenario 1) and the DevTools privacy pass (scenario 9)
+- [x] T056 Execute every scenario in [quickstart.md](./quickstart.md) end to end, including the public-build check (scenario 1) and the DevTools privacy pass (scenario 9)
 - [x] T057 Commit the regenerated `apps/web/test/fixtures/pose_sample_cases.json` and confirm `python scripts/export_web_capture_fixtures.py` runs clean from a fresh checkout
 
 ---

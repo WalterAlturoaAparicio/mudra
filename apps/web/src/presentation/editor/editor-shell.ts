@@ -416,6 +416,30 @@ export class EditorShell {
     this.onProjectChange?.(this.project);
   }
 
+  /**
+   * Replace the project with one produced outside an ordinary edit — undo/redo (item 15's
+   * sibling feature). Unlike {@link loadProject}, which is "open something else" and resets
+   * selection unconditionally, this keeps the current selection when the stepped-to project
+   * still has it: undoing a colour tweak should not also lose which clip was selected.
+   */
+  applyExternalProject(project: Project): void {
+    this.project = project;
+    const effect =
+      this.selectedEffectId === null ? undefined : findEffect(this.project, this.selectedEffectId);
+    if (effect === undefined) {
+      this.selectedEffectId = project.catalog.effects[0]?.id ?? null;
+      this.selectedEntryIndex = null;
+    } else if (
+      this.selectedEntryIndex !== null &&
+      effect.timeline.entries[this.selectedEntryIndex] === undefined
+    ) {
+      this.selectedEntryIndex = null;
+    }
+    this.pushCatalog();
+    this.renderAll();
+    this.onProjectChange?.(this.project);
+  }
+
   /** Replace the project's asset library (the asset-library panel's "add"/"remove"). */
   updateAssetLibrary(library: Project['assetLibrary']): void {
     this.project = { ...this.project, assetLibrary: library };

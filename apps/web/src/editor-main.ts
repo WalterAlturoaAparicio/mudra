@@ -19,6 +19,7 @@
  */
 
 import { EditorRuntimeController } from './application/editor-runtime-controller';
+import { EditHistory } from './domain/editor/edit-history';
 import { createProject } from './domain/editor/types';
 import type { Project } from './domain/editor/types';
 import type { EditorLayout } from './domain/ports/layout-store';
@@ -73,6 +74,17 @@ const WASM_PATH = '/mediapipe-wasm';
  * repository this application uses.
  */
 const PARTICLE_ACTION_TYPE = 'particle_burst';
+
+/**
+ * Editor history bound (FR-075a) — data-model.md documents this value alongside
+ * `config/capture.json`'s `undoDepth` (both default to 50), but the editor cannot read that
+ * file directly: `test/architecture/capture-boundary.test.ts` forbids any project-tree module
+ * from importing anything under `infrastructure/config/capture-config-loader` or the wider
+ * `capture-`/`/capture/` namespace, on purpose — Capture Mode and the editor share nothing,
+ * gated build or not. A literal here, kept equal to capture.json's default by convention
+ * rather than by a shared import, is the boundary working as designed, not a shortcut around it.
+ */
+const UNDO_DEPTH = 50;
 
 /** Stable ids for the panels View can show and hide (item 9). Persisted, so they must not drift. */
 const PANEL_IDS = {
@@ -164,6 +176,10 @@ async function bootstrap(): Promise<void> {
   async function mountEditor(initialProject: Project): Promise<void> {
     const layoutStore = new IndexedDbLayoutStore();
     const savedLayout = await layoutStore.load();
+
+    // Undo/redo (P3, FR-074 – FR-077): a bounded snapshot stack over this project, reset
+    // whenever a *different* project is opened below.
+    const history = new EditHistory(initialProject, UNDO_DEPTH);
 
     /** Persist the whole chrome state — sizes, hidden panels, preset — as one record. */
     const persistLayout = (layout: EditorLayout): void => {
@@ -299,6 +315,14 @@ async function bootstrap(): Promise<void> {
       },
       onSelectAsset: (reference) => panels.assetLibrary?.select(reference),
       onProjectChange: (changed) => {
+        // Recording is a no-op when `changed` is exactly the snapshot undo/redo just stepped
+        // to (`EditHistory.record` compares by reference) — so this one hook is correct for
+        // both an ordinary edit and `applyExternalProject` re-emitting the same project,
+        // with no special-casing of which caused it. The Edit menu's Undo/Redo state is not
+        // refreshed here: `MenuBar` already refreshes itself after every click and every
+        // accelerator it handles (including these two), and refreshing an already-hidden
+        // panel here would do nothing visible — the next `open()` is what makes it correct.
+        history.record(changed);
         // Every edit — not only an asset-library one — re-derives the resolver, so a rename
         // or removal is reflected immediately too. Cheap enough at this project's scale
         // (FR-036 keeps the library deliberately small).
@@ -341,6 +365,10 @@ async function bootstrap(): Promise<void> {
       onCreateProject,
       getCurrentProject: () => shell.currentProject,
       onProjectOpened: (opened) => {
+        // A different project's past is not this one's undo history — reset before
+        // `loadProject` so the very first `onProjectChange` it fires records into a clean
+        // stack, not one still holding the project just left.
+        history.reset(opened);
         shell.loadProject(opened);
         projectPanel.setCurrentOpen(opened.id, opened.name);
         // Item 7, the other half: a project opened *after* mount must apply its own camera
@@ -518,14 +546,54 @@ async function bootstrap(): Promise<void> {
       },
     ];
 
+    // Undo/redo (P3): `EditHistory` already holds the snapshots (FR-074/FR-075); these two
+    // functions are the only place a step is applied back to the shell, through
+    // `applyExternalProject` rather than `loadProject` so the current selection survives
+    // when the project stepped to still has it.
+    const performUndo = (): void => {
+      const previous = history.undo();
+      if (previous !== null) {
+        shell.applyExternalProject(previous);
+      }
+    };
+    const performRedo = (): void => {
+      const next = history.redo();
+      if (next !== null) {
+        shell.applyExternalProject(next);
+      }
+    };
+    const editMenuItems: readonly MenuItem[] = [
+      {
+        label: 'Undo',
+        description: 'Undo the last edit.',
+        shortcut: 'Ctrl+Z',
+        onSelect: performUndo,
+        isEnabled: () => history.state.canUndo,
+        disabledReason: 'Nothing to undo yet.',
+      },
+      {
+        label: 'Redo',
+        description: 'Redo the last undone edit.',
+        shortcut: 'Ctrl+Y',
+        onSelect: performRedo,
+        isEnabled: () => history.state.canRedo,
+        disabledReason: 'Nothing to redo.',
+      },
+    ];
+
     const menuBar = new MenuBar({
       document,
       menus: [
         { label: 'File', items: projectPanel.fileMenuItems() },
+        { label: 'Edit', items: editMenuItems },
         { label: 'View', items: viewMenuItems },
       ],
     });
     dockLayout.slots.menu.append(menuBar.root);
+    // Otherwise every item's disabled/checked state is whatever the DOM defaulted to until
+    // the first menu open — visible as, e.g., Undo/Redo both reading enabled for a project
+    // with no edit yet, the instant the editor first paints.
+    menuBar.refresh();
 
     const title = document.createElement('span');
     title.className = 'mudra-menubar__title';

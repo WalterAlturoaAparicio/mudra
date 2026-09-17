@@ -195,7 +195,7 @@ v1.2.0, "Monorepo & Cross-Application Boundaries"):
 | **Mudra Engine** | [`apps/engine/`](apps/engine/) | Python: live camera, detection, normalization, pose recording, and the dataset format itself |
 | **Mudra Capture** | [`apps/capture/`](apps/capture/) | Flutter/Android: collects hand-pose datasets in volume on a phone and exports them for the engine |
 | **Mudra Studio** | [`apps/studio/`](apps/studio/) | Python/Qt desktop: reads `datasets/poses/` read-only and draws each sample in raw or normalized space (constitution v1.5.0) |
-| **Mudra Web** | [`apps/web/`](apps/web/) | TypeScript in the browser: pose-driven effect runtime, the visual effect editor, and a gated capture mode (constitution v1.7.0, v1.8.0) |
+| **Mudra Web** | [`apps/web/`](apps/web/) | TypeScript in the browser: pose-driven effect runtime (`index.html`), the visual effect editor (`editor.html`), and a gated capture mode (`capture.html`, `VITE_MUDRA_CAPTURE`-gated, not deployed to the public origin — constitution v1.7.0, v1.8.0) |
 
 The **only** contract between them is the pose-sample JSON schema (`schema_version` 1). No
 application imports another's code — Web re-implements normalization and matching in
@@ -223,6 +223,9 @@ mudra/
 │   ├── capture/        # Mudra Capture — Flutter/Android dataset collector
 │   ├── studio/         # Mudra Studio — Python/Qt dataset explorer (extra: `pip install -e .[studio]`)
 │   └── web/            # Mudra Web — TypeScript effect runtime, editor, and gated capture mode
+│       ├── index.html          # visitor-facing runtime entry point
+│       ├── editor.html         # visual effect editor entry point
+│       ├── capture.html        # gated capture-mode entry point (VITE_MUDRA_CAPTURE build only)
 │       ├── src/domain/         # Landmarks, normalization, recognition, effects, runtime — no browser type
 │       ├── src/application/    # Session and editor controllers
 │       ├── src/infrastructure/ # Camera, detection, persistence, catalog and bundle loading

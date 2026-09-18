@@ -89,12 +89,85 @@ saturation/mirror/zoom/crop as a render-time Canvas2D filter/transform on a **se
 copy of the camera frame. The imagery `HandDetector` analyses is the untouched `MirroredSurface`;
 camera treatment never reaches the physical device and never reaches detection (FR-048–FR-051).
 
-**Undo/redo** (Milestone 3, P3, FR-074–FR-077) — a bounded snapshot stack
-(`domain/editor/edit-history.ts`) over the editor's existing pure `Project → Project` edit
-functions; there is nothing to invert, since the previous value *is* the undo. Reachable from the
-**Edit** menu (between File and View) or `Ctrl+Z`/`Ctrl+Y`, both wired in `editor-main.ts`. Editor
-state only: never persisted, adds no field to a saved project document, and is discarded (a new
-`EditHistory`) whenever a different project is opened.
+**Undo/redo** (Milestone 3, P3, FR-074–FR-077; scoping corrected by spec 010's 2026-09-17
+correction pass, FR-034–FR-040) — a bounded snapshot stack (`domain/editor/edit-history.ts`) over
+the editor's existing pure `Project → Project` edit functions; there is nothing to invert, since
+the previous value *is* the undo. Reachable from the **Edit** menu (between File and View) or
+`Ctrl+Z`/`Ctrl+Y`, both wired in `editor-main.ts`. `EditorShell` (not `editor-main.ts`) owns a
+**fresh `EditHistory` per editing context** — the single effect currently selected — so undo/redo
+can never reach an edit made to a *different* effect: switching which effect is selected starts a
+brand-new history seeded at the project as it stands, and, if the effect being left has an edit
+made to it since that context began, requires an explicit Save/Discard/Cancel choice
+(`presentation/editor/dialog.ts`'s `DialogHost.chooseAction`) before the switch completes.
+Untouched effects switch immediately, with no prompt. Editor state only: never persisted, adds no
+field to a saved project document, and is discarded (a fresh context) whenever a different project
+is opened.
+
+**Panel docking, tabs, closing, Inspector lock, and collapsing** (spec 010, US1–US7; docking/tabs/
+closing/collapsing corrected 2026-09-17, then a further workspace-UX corrections pass the same day
+— see spec.md's Clarifications for what each pass fixed) — see
+[`specs/010-editor-workspace-refinements/`](../../specs/010-editor-workspace-refinements/) for the
+full specification.
+
+- **Docking** (`presentation/editor/dock-layout.ts`, `dock-tree.ts`, `drop-region.ts`,
+  `split-resize.ts`, `layout-catalog.ts`) — a zone (of a small, predefined set of layouts,
+  currently one, `standard`) holds a **dock tree**: an ordered leaf (one panel, or several tabbed)
+  or a split dividing space between children, stacked (`column`) or side-by-side (`row`),
+  optionally carrying an author-set `sizes` weight per child. A panel newly registered with no
+  saved position becomes its **own** stacked leaf — panels sharing a zone are never automatically
+  tabbed together. Relocation is a real pointer drag (a grip-styled header is the drag handle);
+  dragging onto another panel's top/bottom/left/right edge inserts a new adjacent area there,
+  onto its centre merges as a tab (see Tabs), onto empty zone background appends a new stacked
+  area; every valid target is visually indicated before release, and an invalid one never is.
+  Starting a drag never selects surrounding text (`mudra-layout--dragging`, scoped to the layout
+  root and only for the drag's duration — not a blanket `user-select: none`). A "⋮" panel-menu
+  button hosts only the keyboard-operable "Move to \<zone\>" alternative (FR-010) — Close and
+  Collapse were trimmed out of it in the UX corrections pass since both already have their own
+  dedicated header buttons, so the menu no longer duplicates them. Two directly-adjacent areas
+  sharing a split can be resized by dragging the boundary between them (`split-resize.ts`'s pure
+  clamp math, enforcing a shared `MIN_LEAF_SIZE_PX` floor with the zone's own scroll floor below).
+  An empty zone keeps its own space rather than collapsing or letting a sibling zone expand into
+  it. A layout defines only its zones' geometry — panels are content assigned to a zone, never the
+  other way around — so a new zone or layout needs no rework of the docking mechanism itself.
+  Persisted alongside panel sizes/visibility (`domain/ports/layout-store.ts`'s
+  `EditorLayout.activeLayoutId`/`zoneLayouts`, both optional fields, `DockSplitData.sizes` a
+  further-optional field within that, so an old stored record still loads unchanged).
+- **Tabs** — dragging one panel directly onto another's own tab/content area groups them behind a
+  tab strip; the strip disappears the moment the group is back down to one panel, and the
+  containing area disappears entirely once it reaches zero (FR-014). Never the automatic result of
+  two panels merely sharing a zone. A tab's position within its group is author-reorderable by
+  dragging it within the strip (an insertion-position indicator previews where it will land);
+  dragging it out of the strip onto a docking target undocks it instead — the same drag origin,
+  told apart purely by where the pointer ends up, never in conflict with each other.
+- **Scrolling** — two independent boundaries. Each panel's own content scrolls under its header
+  (`.mudra-editor__panel-content`, `registerPanel`'s one added class) when that panel's allotted
+  space is smaller than its content; separately, a zone holding more stacked/split panels than fit
+  its own space scrolls as a whole (the zone's pre-existing `overflow-y: auto`, which a leaf's real
+  `MIN_LEAF_SIZE_PX` floor — rather than `0` — is what actually lets activate). The two never
+  produce a redundant second scrollbar for the same overflowing content.
+- **Closing and recovery** — every registered panel is individually closable from its own header
+  (or, for one tab among several, from that specific tab), which removes it from its zone's dock
+  tree entirely — it consumes no layout space, unlike the shipped-then-corrected behavior where a
+  "hidden" panel still occupied a tab slot. The View menu is its one recovery mechanism: reopening
+  places it back in its current zone as a new stacked area, never requiring the author to
+  reconstruct its former position.
+- **Inspector lock** — a lock toggle (`presentation/editor/inspector.ts`) holds the Inspector on
+  its current selection while the author's live selection moves elsewhere, for comparing or
+  copying values across clips. It auto-unlocks and falls back to the ordinary contextual/empty
+  state if the locked clip or effect stops existing (an edit, an undo/redo, or a project switch).
+- **Collapsing** — two independent mechanisms. The Inspector's own parameter groups (a
+  `background_wash`, `particle_burst`, etc. with more than one group) collapse independently per
+  group; a selection with only one group renders no collapse control at all (FR-023). Separately,
+  **every** registered panel collapses as a whole to a header-only state from its own docking
+  header (`DockLayout`'s generic mechanism, not a per-panel reimplementation — corrected from the
+  shipped build, where only the Diagnostics panel had this at all). Both are session-scoped only —
+  a reload does not restore them (spec 010 Assumptions).
+- **Effect isolation during editing** (`domain/editor/isolated-catalog.ts`) — while an effect is
+  selected in the editor, `EditorShell` hands `EffectRuntime.setCatalog()` a catalog containing
+  only that one effect (or none, if nothing is selected), so a pose accidentally detected while
+  editing can never start a *different* effect's saved playback. This filters the catalog the
+  editor's own runtime sees; the public page's `Session`/`EffectRuntime` are separate instances
+  and are never touched (`test/architecture/editor-runtime-isolation.test.ts`).
 
 ### Editor performance (SC-010, FR-058, FR-059)
 

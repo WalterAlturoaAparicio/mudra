@@ -73,6 +73,7 @@ describe('Inspector — schema-driven, zero-code-change extensibility', () => {
       onDurationChange: (durationMs) => {
         durationCalls.push(durationMs);
       },
+      onToggleLock: () => {},
     });
   });
 
@@ -140,6 +141,7 @@ describe('Inspector — duration field (P1.1)', () => {
       registry,
       onParamsChange: (params) => paramCalls.push(params),
       onDurationChange: (durationMs) => durationCalls.push(durationMs),
+      onToggleLock: () => {},
     });
   });
 
@@ -207,6 +209,7 @@ describe('Inspector — "needs a live camera" notice (item 7)', () => {
       registry,
       onParamsChange: () => {},
       onDurationChange: () => {},
+      onToggleLock: () => {},
     });
 
     inspector.render(
@@ -224,5 +227,143 @@ describe('Inspector — "needs a live camera" notice (item 7)', () => {
       true,
     );
     expect(inspector.root.textContent).not.toMatch(/needs a live camera/);
+  });
+});
+
+describe('Inspector — lock toggle (T028, spec 010 FR-015, FR-017)', () => {
+  function lockButton(root: HTMLElement): HTMLButtonElement {
+    return root.querySelector<HTMLButtonElement>('.mudra-editor__inspector-lock')!;
+  }
+
+  it('is always present, with an accessible name, and calls back when clicked', () => {
+    const toggled: boolean[] = [];
+    const inspector = new Inspector({
+      document,
+      registry: createActionRegistry(),
+      onParamsChange: () => {},
+      onDurationChange: () => {},
+      onToggleLock: () => toggled.push(true),
+    });
+
+    const button = lockButton(inspector.root);
+    expect(button.getAttribute('aria-label')).toBeTruthy();
+    button.click();
+    expect(toggled).toEqual([true]);
+  });
+
+  it('reflects the locked context flag with a visibly distinct state (FR-015, FR-017)', () => {
+    const inspector = new Inspector({
+      document,
+      registry: createActionRegistry(),
+      onParamsChange: () => {},
+      onDurationChange: () => {},
+      onToggleLock: () => {},
+    });
+
+    inspector.render(null, { capabilities: defaultCapabilities(), locked: false });
+    expect(lockButton(inspector.root).getAttribute('aria-pressed')).toBe('false');
+    expect(lockButton(inspector.root).dataset['locked']).toBe('false');
+    const unlockedLabel = lockButton(inspector.root).getAttribute('aria-label');
+    const unlockedIcon = lockButton(inspector.root).querySelector('svg')?.outerHTML;
+
+    inspector.render(null, { capabilities: defaultCapabilities(), locked: true });
+    expect(lockButton(inspector.root).getAttribute('aria-pressed')).toBe('true');
+    expect(lockButton(inspector.root).dataset['locked']).toBe('true');
+    expect(lockButton(inspector.root).getAttribute('aria-label')).not.toBe(unlockedLabel);
+    expect(lockButton(inspector.root).querySelector('svg')?.outerHTML).not.toBe(unlockedIcon);
+  });
+});
+
+describe('Inspector — section collapsing (T030, spec 010 FR-020, FR-022, FR-023)', () => {
+  function groupFor(root: HTMLElement, name: string): HTMLElement {
+    const group = [...root.querySelectorAll<HTMLElement>('.mudra-editor__field-group')].find(
+      (candidate) => candidate.dataset['group'] === name,
+    );
+    if (group === undefined) {
+      throw new Error('No field-group named "' + name + '" was rendered.');
+    }
+    return group;
+  }
+
+  function groupToggle(group: HTMLElement): HTMLButtonElement | null {
+    return group.querySelector<HTMLButtonElement>('.mudra-editor__field-group-toggle');
+  }
+
+  it('collapsing a multi-group action hides that group’s fields and keeps its heading, clickable to re-expand', () => {
+    const inspector = new Inspector({
+      document,
+      registry: createActionRegistry(), // particle_burst has 3 groups: Emission, Motion, Appearance
+      onParamsChange: () => {},
+      onDurationChange: () => {},
+      onToggleLock: () => {},
+    });
+    inspector.render({ actionType: 'particle_burst', params: {} }, defaultCapabilities());
+
+    const emission = groupFor(inspector.root, 'Emission');
+    const toggle = groupToggle(emission)!;
+    expect(toggle).toBeTruthy();
+    const countField = [...emission.querySelectorAll('.mudra-editor__field')].find(
+      (field) => field.querySelector('.mudra-editor__field-label')?.textContent === 'count',
+    ) as HTMLElement;
+
+    toggle.click();
+
+    expect(emission.dataset['collapsed']).toBe('true');
+    expect(countField.hidden).toBe(true);
+    // the heading (and its toggle) stay present and clickable — only the fields hide
+    expect(groupFor(inspector.root, 'Emission')).toBe(emission);
+    expect(groupToggle(emission)).toBeTruthy();
+
+    toggle.click();
+    expect(emission.dataset['collapsed']).toBe('false');
+    expect(countField.hidden).toBe(false);
+  });
+
+  it('collapse state survives an unrelated committed edit re-render of the same selection', () => {
+    const inspector = new Inspector({
+      document,
+      registry: createActionRegistry(),
+      onParamsChange: () => {},
+      onDurationChange: () => {},
+      onToggleLock: () => {},
+    });
+    inspector.render({ actionType: 'particle_burst', params: {} }, defaultCapabilities());
+    groupToggle(groupFor(inspector.root, 'Emission'))!.click();
+    expect(groupFor(inspector.root, 'Emission').dataset['collapsed']).toBe('true');
+
+    // Same selection identity (same effectId/entryIndex/actionType) — this reconciles rather
+    // than rebuilds, simulating a committed edit elsewhere on the same clip.
+    inspector.render(
+      { actionType: 'particle_burst', params: { count: 99 } },
+      defaultCapabilities(),
+    );
+
+    expect(groupFor(inspector.root, 'Emission').dataset['collapsed']).toBe('true');
+  });
+
+  it('FR-023: a selection with exactly one parameter group renders no collapse control at all', () => {
+    const registry = createActionRegistry();
+    const singleGroupType = 'test_single_group_' + Math.random().toString(36).slice(2);
+    registry.register({
+      type: singleGroupType,
+      behaviour: 'duration',
+      params: [
+        { name: 'a', kind: 'number', defaultValue: 1, group: 'Only', description: 'A.' },
+        { name: 'b', kind: 'number', defaultValue: 2, group: 'Only', description: 'B.' },
+      ],
+      update: () => ({ commands: [] }),
+    });
+    const inspector = new Inspector({
+      document,
+      registry,
+      onParamsChange: () => {},
+      onDurationChange: () => {},
+      onToggleLock: () => {},
+    });
+
+    inspector.render({ actionType: singleGroupType, params: {} }, defaultCapabilities());
+
+    const only = groupFor(inspector.root, 'Only');
+    expect(groupToggle(only)).toBeNull();
   });
 });

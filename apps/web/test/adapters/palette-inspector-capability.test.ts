@@ -55,6 +55,7 @@ describe('Inspector', () => {
       registry,
       onParamsChange: () => {},
       onDurationChange: () => {},
+      onToggleLock: () => {},
     });
     inspector.render({ actionType: 'person_visibility', params: {} }, unavailable);
 
@@ -70,6 +71,7 @@ describe('Inspector', () => {
       registry,
       onParamsChange: () => {},
       onDurationChange: () => {},
+      onToggleLock: () => {},
     });
     inspector.render({ actionType: 'person_visibility', params: {} }, available);
 
@@ -84,6 +86,7 @@ describe('Inspector', () => {
       registry,
       onParamsChange: () => {},
       onDurationChange: () => {},
+      onToggleLock: () => {},
     });
     inspector.render({ actionType: 'screen_flash', params: {} }, unavailable);
 

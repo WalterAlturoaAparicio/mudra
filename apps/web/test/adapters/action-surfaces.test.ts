@@ -38,6 +38,7 @@ function buildInspector() {
     registry,
     onParamsChange: (params) => commits.push(params),
     onDurationChange: () => {},
+    onToggleLock: () => {},
   });
   document.body.append(inspector.root);
   return { inspector, commits, dispose: () => inspector.root.remove() };

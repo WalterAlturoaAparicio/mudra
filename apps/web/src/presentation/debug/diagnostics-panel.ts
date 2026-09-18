@@ -52,17 +52,23 @@ export class DiagnosticsPanel {
   private readonly body: HTMLElement;
   private readonly options: DiagnosticsPanelOptions;
 
-  /** Build the panel. */
+  /** Build the panel. Whole-panel collapse is `DockLayout`'s generic mechanism (spec 010
+   *  correction pass, item 5) — every registered panel gets it for free from its docking
+   *  header, so this panel no longer implements its own. */
   constructor(document: Document, options: DiagnosticsPanelOptions) {
     this.options = options;
     this.element = document.createElement('section');
     this.element.className = 'mudra-panel';
 
+    const headingRow = document.createElement('div');
+    headingRow.className = 'mudra-panel__heading-row';
     const heading = document.createElement('h2');
     heading.textContent = 'Diagnostics';
-    this.element.append(heading);
+    headingRow.append(heading);
+    this.element.append(headingRow);
 
     this.body = document.createElement('div');
+    this.body.className = 'mudra-panel__body';
     this.element.append(this.body);
   }
 

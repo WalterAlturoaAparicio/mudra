@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { StagePresenter } from '../../src/application/editor-runtime-controller';
 import { EditorRuntimeController } from '../../src/application/editor-runtime-controller';
+import { isolatedCatalog } from '../../src/domain/editor/isolated-catalog';
 import { Logger } from '../../src/domain/config/logger';
 import type { LogFields, LogLevel } from '../../src/domain/config/logger';
 import { DEFAULT_SESSION_CONFIG } from '../../src/domain/config/session-config';
@@ -430,5 +431,104 @@ describe('play_audio cues reach an injected AudioSink (P1.2 — the editor used 
       scheduleTick: () => {},
     });
     expect(() => controller.testTrigger(playAudioEffect())).not.toThrow();
+  });
+});
+
+describe('effect isolation during editing (FR-024 – FR-029, spec 010 "Editing scope")', () => {
+  function twoEffects(): [EffectDefinition, EffectDefinition] {
+    return [
+      {
+        id: 'first',
+        name: 'First effect',
+        trigger: { on: 'confirmed', poseId: 'pose-a', conditions: [] },
+        timeline: {
+          durationMs: 500,
+          entries: [{ atMs: 0, durationMs: 400, action: { type: 'screen_flash', params: {} } }],
+        },
+      },
+      {
+        id: 'second',
+        name: 'Second effect',
+        trigger: { on: 'confirmed', poseId: 'pose-b', conditions: [] },
+        timeline: {
+          durationMs: 500,
+          entries: [{ atMs: 0, durationMs: 400, action: { type: 'screen_flash', params: {} } }],
+        },
+      },
+    ];
+  }
+
+  function poseEvent(poseId: string, atMs: number): PoseEvent {
+    return { kind: 'confirmed', poseId, confidence: 1, atMs, progress: 1 };
+  }
+
+  it('a live pose for an unselected effect does not start it, and selecting it does', () => {
+    const [first, second] = twoEffects();
+    const fullCatalog: EffectCatalog = { version: 1, effects: [first, second] };
+    const runtime = new EffectRuntime({
+      catalog: fullCatalog,
+      registry,
+      capabilities: defaultCapabilities(),
+    });
+
+    // "first" is selected for editing: the runtime's own catalog holds only "first".
+    runtime.setCatalog(isolatedCatalog(fullCatalog, 'first'));
+    const frame = landmarkFrame([], 1000, 1280, 720);
+
+    // A live pose for "second" — not selected — must not start it.
+    runtime.advance([poseEvent('pose-b', 1000)], frame, 1000, null);
+    expect(runtime.activePlaybacks).toBe(0);
+
+    // Selecting "second" instead makes its own pose eligible immediately.
+    runtime.setCatalog(isolatedCatalog(fullCatalog, 'second'));
+    runtime.advance([poseEvent('pose-b', 1100)], landmarkFrame([], 1100, 1280, 720), 1100, null);
+    expect(runtime.activePlaybacks).toBe(1);
+  });
+
+  it('the public path is unconditionally unaffected (contract verification #3)', () => {
+    // Built exactly the way `Session` builds its own `EffectRuntime`: the full, unfiltered
+    // catalog, never routed through `isolatedCatalog` or anything under `presentation/editor/`.
+    const [first, second] = twoEffects();
+    const publicRuntime = new EffectRuntime({
+      catalog: { version: 1, effects: [first, second] },
+      registry,
+      capabilities: defaultCapabilities(),
+    });
+
+    publicRuntime.advance(
+      [poseEvent('pose-b', 1000)],
+      landmarkFrame([], 1000, 1280, 720),
+      1000,
+      null,
+    );
+    expect(publicRuntime.activePlaybacks).toBe(1);
+  });
+
+  it('a playback already running survives a selection change (FR-028) — only new starts are isolated', () => {
+    const [first, second] = twoEffects();
+    const fullCatalog: EffectCatalog = { version: 1, effects: [first, second] };
+    const runtime = new EffectRuntime({
+      catalog: fullCatalog,
+      registry,
+      capabilities: defaultCapabilities(),
+    });
+    runtime.setCatalog(isolatedCatalog(fullCatalog, 'first'));
+
+    // "first" starts while it is the selection.
+    runtime.advance([poseEvent('pose-a', 1000)], landmarkFrame([], 1000, 1280, 720), 1000, null);
+    expect(runtime.activePlaybacks).toBe(1);
+
+    // Selection moves to "second" mid-playback — well before "first"'s own 500ms duration ends.
+    runtime.setCatalog(isolatedCatalog(fullCatalog, 'second'));
+    runtime.advance([], landmarkFrame([], 1100, 1280, 720), 1100, null);
+    expect(runtime.activePlaybacks).toBe(1); // still running — the selection change did not cancel it
+
+    // Let it finish naturally.
+    runtime.advance([], landmarkFrame([], 1600, 1280, 720), 1600, null);
+    expect(runtime.activePlaybacks).toBe(0);
+
+    // And now "first"'s own pose no longer triggers anything — only "second" is eligible.
+    runtime.advance([poseEvent('pose-a', 1700)], landmarkFrame([], 1700, 1280, 720), 1700, null);
+    expect(runtime.activePlaybacks).toBe(0);
   });
 });

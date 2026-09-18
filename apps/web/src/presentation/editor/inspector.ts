@@ -34,6 +34,7 @@ import type { ActionDescriptor, ActionRegistry } from '../../domain/runtime/acti
 import type { CapabilityRegistry } from '../../domain/runtime/capabilities';
 import type { Diagnostic } from '../../domain/runtime/frame-output';
 import { ParamError, resolveParams } from '../../domain/runtime/param-schema';
+import { icon } from './icons';
 import { renderControl } from './inspector-controls';
 import type { Control } from './inspector-controls';
 
@@ -78,6 +79,8 @@ export interface InspectorOptions {
   readonly onParamsChange: (params: Readonly<Record<string, ParamValue>>) => void;
   /** Called with a validated, non-negative duration after a committed edit (P1.1). */
   readonly onDurationChange: (durationMs: number) => void;
+  /** Called when the author toggles the lock control (FR-015, FR-017). */
+  readonly onToggleLock: () => void;
   /** Optional auxiliary previews, keyed by action type. */
   readonly createPreview?: ParamPreviewFactory;
 }
@@ -108,6 +111,9 @@ export interface InspectorContext {
   /** Which empty to show when `selection` is `null`. Defaults to `no-effect`. */
   readonly emptyReason?: InspectorEmptyReason;
   readonly assetLibrary?: readonly AssetLibraryEntry[];
+  /** Whether the Inspector is held on a captured selection rather than following it live
+   *  (spec 010 FR-015 – FR-019). Defaults to `false`. */
+  readonly locked?: boolean;
   /** Whether a live camera is attached — an anchor-following action cannot preview without one. */
   readonly cameraAttached?: boolean;
   /** The same resolver the runtime uses, for the "missing asset" status (item 14). */
@@ -154,8 +160,10 @@ export class Inspector {
   private readonly registry: ActionRegistry;
   private readonly onParamsChange: (params: Readonly<Record<string, ParamValue>>) => void;
   private readonly onDurationChange: (durationMs: number) => void;
+  private readonly onToggleLock: () => void;
   private readonly createPreview: ParamPreviewFactory | undefined;
 
+  private readonly lockButton: HTMLButtonElement;
   private readonly header: HTMLElement;
   private readonly typeLabel: HTMLElement;
   private readonly statusBadge: HTMLElement;
@@ -175,6 +183,14 @@ export class Inspector {
   private previewType: string | null = null;
   /** Identity of what is currently built, so an unchanged selection reconciles. */
   private builtKey: string | null = null;
+  /** Group names currently collapsed — session-scoped on this panel instance, not per
+   *  selection, matching `ProjectTree`'s own collapsed-ids pattern (FR-022, research D7). */
+  private readonly collapsedSectionIds = new Set<string>();
+  /** The descriptor behind the currently-built selection, so a collapse toggle can recompute
+   *  which fields it affects without re-deriving it from scratch. */
+  private currentDescriptor: ActionDescriptor | undefined;
+  private groupElements = new Map<string, HTMLElement>();
+  private groupToggles = new Map<string, HTMLButtonElement>();
   /** The last params the inspector committed or was rendered with, for partial edits. */
   private resolved: Readonly<Record<string, ParamValue>> = {};
 
@@ -183,15 +199,26 @@ export class Inspector {
     this.registry = options.registry;
     this.onParamsChange = options.onParamsChange;
     this.onDurationChange = options.onDurationChange;
+    this.onToggleLock = options.onToggleLock;
     this.createPreview = options.createPreview;
 
     this.root = this.document.createElement('div');
     this.root.className = 'mudra-editor__inspector';
 
+    const headingRow = this.document.createElement('div');
+    headingRow.className = 'mudra-editor__inspector-heading-row';
     const heading = this.document.createElement('h2');
     heading.className = 'mudra-editor__panel-title';
     heading.textContent = 'Inspector';
-    this.root.append(heading);
+    headingRow.append(heading);
+
+    this.lockButton = this.document.createElement('button');
+    this.lockButton.type = 'button';
+    this.lockButton.className = 'mudra-editor__inspector-lock';
+    this.lockButton.addEventListener('click', () => this.onToggleLock());
+    this.updateLockButton(false);
+    headingRow.append(this.lockButton);
+    this.root.append(headingRow);
 
     this.header = this.document.createElement('div');
     this.header.className = 'mudra-editor__inspector-header';
@@ -252,6 +279,7 @@ export class Inspector {
           }
         : capabilitiesOrContext;
 
+    this.updateLockButton(context.locked ?? false);
     this.errorText.textContent = '';
     if (selection === null) {
       this.showEmpty(context.emptyReason ?? 'no-effect');
@@ -271,6 +299,7 @@ export class Inspector {
       resolved = selection.params;
     }
     this.resolved = resolved;
+    this.currentDescriptor = descriptor;
 
     const status = evaluateActionStatus({
       actionType: selection.actionType,
@@ -324,6 +353,8 @@ export class Inspector {
     }
     this.controls.clear();
     this.fieldHosts.clear();
+    this.groupElements.clear();
+    this.groupToggles.clear();
     this.durationInput = null;
     this.builtKey = null;
   }
@@ -342,6 +373,15 @@ export class Inspector {
       this.fields.append(presets);
     }
 
+    // FR-023: a selection with only one section gets no collapse control at all — there is
+    // nothing meaningful to collapse. Counted up front since a spec mid-list cannot tell how
+    // many distinct groups the whole action ends up with.
+    const totalGroups = new Set(
+      descriptor.params
+        .map((spec) => spec.group)
+        .filter((name): name is string => name !== undefined),
+    ).size;
+
     let group: HTMLElement = this.fields;
     let groupName: string | null = null;
     for (const spec of descriptor.params) {
@@ -349,10 +389,25 @@ export class Inspector {
         groupName = spec.group;
         group = this.document.createElement('div');
         group.className = 'mudra-editor__field-group';
+        group.dataset['group'] = spec.group;
+        const collapsed = this.collapsedSectionIds.has(spec.group);
+        group.dataset['collapsed'] = String(collapsed);
         const caption = this.document.createElement('h3');
         caption.className = 'mudra-editor__field-group-title';
-        caption.textContent = spec.group;
+        const captionLabel = this.document.createElement('span');
+        captionLabel.textContent = spec.group;
+        caption.append(captionLabel);
+        if (totalGroups > 1) {
+          const toggle = this.document.createElement('button');
+          toggle.type = 'button';
+          toggle.className = 'mudra-editor__field-group-toggle';
+          this.updateGroupToggle(toggle, collapsed, spec.group);
+          toggle.addEventListener('click', () => this.toggleGroupCollapse(spec.group as string));
+          this.groupToggles.set(spec.group, toggle);
+          caption.append(toggle);
+        }
         group.append(caption);
+        this.groupElements.set(spec.group, group);
         this.fields.append(group);
       } else if (spec.group === undefined) {
         groupName = null;
@@ -370,8 +425,61 @@ export class Inspector {
       });
       this.controls.set(spec.name, control);
       this.fieldHosts.set(spec.name, control.root);
-      control.root.hidden = !isVisible(spec, resolved);
+      control.root.hidden = this.isFieldHidden(spec, resolved);
       group.append(control.root);
+    }
+  }
+
+  /** Hidden because `visibleWhen` gates it out, or because its section is collapsed. */
+  private isFieldHidden(
+    spec: ActionDescriptor['params'][number],
+    resolved: Readonly<Record<string, ParamValue>>,
+  ): boolean {
+    return (
+      !isVisible(spec, resolved) ||
+      (spec.group !== undefined && this.collapsedSectionIds.has(spec.group))
+    );
+  }
+
+  /** Icon, `aria-expanded`, and accessible name for one group's collapse toggle (FR-020). */
+  private updateGroupToggle(
+    toggle: HTMLButtonElement,
+    collapsed: boolean,
+    groupName: string,
+  ): void {
+    toggle.replaceChildren(icon(this.document, collapsed ? 'chevronRight' : 'chevronDown', 14));
+    toggle.setAttribute('aria-expanded', String(!collapsed));
+    const label = (collapsed ? 'Expand ' : 'Collapse ') + groupName;
+    toggle.setAttribute('aria-label', label);
+    toggle.title = label;
+  }
+
+  /** Flip one section's collapse state and re-apply it to its own fields immediately — no
+   *  full rebuild, so the controls an author isn't touching stay exactly as they were. */
+  private toggleGroupCollapse(groupName: string): void {
+    if (this.collapsedSectionIds.has(groupName)) {
+      this.collapsedSectionIds.delete(groupName);
+    } else {
+      this.collapsedSectionIds.add(groupName);
+    }
+    const collapsed = this.collapsedSectionIds.has(groupName);
+
+    const group = this.groupElements.get(groupName);
+    if (group !== undefined) {
+      group.dataset['collapsed'] = String(collapsed);
+    }
+    const toggle = this.groupToggles.get(groupName);
+    if (toggle !== undefined) {
+      this.updateGroupToggle(toggle, collapsed, groupName);
+    }
+    for (const spec of this.currentDescriptor?.params ?? []) {
+      if (spec.group !== groupName) {
+        continue;
+      }
+      const host = this.fieldHosts.get(spec.name);
+      if (host !== undefined) {
+        host.hidden = this.isFieldHidden(spec, this.resolved);
+      }
     }
   }
 
@@ -388,9 +496,22 @@ export class Inspector {
       this.controls.get(spec.name)?.setValue(resolved[spec.name] ?? spec.defaultValue);
       const host = this.fieldHosts.get(spec.name);
       if (host !== undefined) {
-        host.hidden = !isVisible(spec, resolved);
+        host.hidden = this.isFieldHidden(spec, resolved);
       }
     }
+  }
+
+  /** Reflects the lock state on the toggle button — icon, accessible name, and a CSS hook
+   *  (`data-locked`) for a treatment that does not rely on a tooltip (FR-015, FR-017). */
+  private updateLockButton(locked: boolean): void {
+    this.lockButton.replaceChildren(icon(this.document, locked ? 'lock' : 'unlock', 14));
+    this.lockButton.dataset['locked'] = String(locked);
+    this.lockButton.setAttribute('aria-pressed', String(locked));
+    const label = locked
+      ? 'Unlock Inspector to follow the current selection'
+      : 'Lock Inspector to the current selection';
+    this.lockButton.setAttribute('aria-label', label);
+    this.lockButton.title = label;
   }
 
   private renderStatus(actionType: string, status: ActionStatus): void {

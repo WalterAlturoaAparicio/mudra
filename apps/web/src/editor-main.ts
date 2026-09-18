@@ -19,7 +19,6 @@
  */
 
 import { EditorRuntimeController } from './application/editor-runtime-controller';
-import { EditHistory } from './domain/editor/edit-history';
 import { createProject } from './domain/editor/types';
 import type { Project } from './domain/editor/types';
 import type { EditorLayout } from './domain/ports/layout-store';
@@ -46,10 +45,12 @@ import {
 } from './infrastructure/assets/project-asset-manifest';
 import { AssetLibraryPanel } from './presentation/editor/asset-library-panel';
 import { CameraPanel } from './presentation/editor/camera-panel';
+import { DialogHost } from './presentation/editor/dialog';
 import { DockLayout } from './presentation/editor/dock-layout';
 import { EditorShell } from './presentation/editor/editor-shell';
 import { MenuBar } from './presentation/editor/menu-bar';
 import type { MenuItem } from './presentation/editor/menu-bar';
+import { LAYOUTS } from './presentation/editor/layout-catalog';
 import { LAYOUT_PRESETS } from './presentation/editor/panel-sizes';
 import { ParticlePreview } from './presentation/editor/particle-preview';
 import type { PoseOption } from './presentation/editor/pose-trigger-panel';
@@ -177,9 +178,13 @@ async function bootstrap(): Promise<void> {
     const layoutStore = new IndexedDbLayoutStore();
     const savedLayout = await layoutStore.load();
 
-    // Undo/redo (P3, FR-074 – FR-077): a bounded snapshot stack over this project, reset
-    // whenever a *different* project is opened below.
-    const history = new EditHistory(initialProject, UNDO_DEPTH);
+    // The editor's one modal host (spec 010 correction pass, item 6) — shared by `ProjectPanel`
+    // (Save As / Close Project's own confirmations, previously wired to nothing, so both
+    // silently fell back to `window.confirm`/no-op) and `EditorShell` (the leave-effect-with-
+    // unsaved-changes prompt). `DialogHost` only ever shows one dialog at a time, so one shared
+    // instance is correct, not merely convenient.
+    const dialogs = new DialogHost({ document });
+    mount.replaceChildren(dialogs.root);
 
     /** Persist the whole chrome state — sizes, hidden panels, preset — as one record. */
     const persistLayout = (layout: EditorLayout): void => {
@@ -193,10 +198,16 @@ async function bootstrap(): Promise<void> {
         ? {}
         : { initialHiddenPanels: savedLayout.hiddenPanels }),
       ...(savedLayout?.preset === undefined ? {} : { initialPreset: savedLayout.preset }),
+      ...(savedLayout?.activeLayoutId === undefined
+        ? {}
+        : { initialActiveLayoutId: savedLayout.activeLayoutId }),
+      ...(savedLayout?.zoneLayouts === undefined
+        ? {}
+        : { initialZoneLayouts: savedLayout.zoneLayouts }),
       onSizesChange: () => persistLayout(dockLayout.getLayout()),
       onLayoutChange: (layout) => persistLayout(layout),
     });
-    mount.replaceChildren(dockLayout.root);
+    mount.append(dockLayout.root);
 
     // Reassigned by `onProjectChange` below to whichever resolver reflects the currently open
     // project's asset library — the diagnostics panel always reads unresolved references from
@@ -293,6 +304,8 @@ async function bootstrap(): Promise<void> {
       stageCanvas,
       initialProject,
       poses,
+      historyDepth: UNDO_DEPTH,
+      dialogs,
       resolveAsset: (reference) => currentAssetResolver.resolve(reference),
       createPreview: (actionType) => {
         if (actionType !== PARTICLE_ACTION_TYPE) {
@@ -315,14 +328,12 @@ async function bootstrap(): Promise<void> {
       },
       onSelectAsset: (reference) => panels.assetLibrary?.select(reference),
       onProjectChange: (changed) => {
-        // Recording is a no-op when `changed` is exactly the snapshot undo/redo just stepped
-        // to (`EditHistory.record` compares by reference) — so this one hook is correct for
-        // both an ordinary edit and `applyExternalProject` re-emitting the same project,
-        // with no special-casing of which caused it. The Edit menu's Undo/Redo state is not
-        // refreshed here: `MenuBar` already refreshes itself after every click and every
-        // accelerator it handles (including these two), and refreshing an already-hidden
-        // panel here would do nothing visible — the next `open()` is what makes it correct.
-        history.record(changed);
+        // Undo/redo history is now `EditorShell`'s own concern, scoped per editing context
+        // (spec 010 correction pass, item 6) — this hook no longer records anything itself.
+        // The Edit menu's Undo/Redo state is not refreshed here: `MenuBar` already refreshes
+        // itself after every click and every accelerator it handles (including these two), and
+        // refreshing an already-hidden panel here would do nothing visible — the next `open()`
+        // is what makes it correct.
         // Every edit — not only an asset-library one — re-derives the resolver, so a rename
         // or removal is reflected immediately too. Cheap enough at this project's scale
         // (FR-036 keeps the library deliberately small).
@@ -362,13 +373,12 @@ async function bootstrap(): Promise<void> {
     const projectPanel = new ProjectPanel({
       document,
       repository,
+      prompts: dialogs,
       onCreateProject,
       getCurrentProject: () => shell.currentProject,
       onProjectOpened: (opened) => {
-        // A different project's past is not this one's undo history — reset before
-        // `loadProject` so the very first `onProjectChange` it fires records into a clean
-        // stack, not one still holding the project just left.
-        history.reset(opened);
+        // A different project's past is not this one's undo history — `EditorShell.loadProject`
+        // starts a fresh editing context itself now (spec 010 correction pass, item 6).
         shell.loadProject(opened);
         projectPanel.setCurrentOpen(opened.id, opened.name);
         // Item 7, the other half: a project opened *after* mount must apply its own camera
@@ -494,10 +504,13 @@ async function bootstrap(): Promise<void> {
     setDebug(false);
 
     const viewMenuItems: readonly MenuItem[] = [
+      // A panel closed from its own header (or this checkbox) reopens here, in its current zone
+      // (spec 010 correction pass, item 4) — this is the recovery mechanism for every panel that
+      // is not currently part of the workspace.
       ...dockLayout.listPanels().map((panel): MenuItem => ({
         kind: 'checkbox',
         label: panel.label,
-        description: 'Show or hide the ' + panel.label + ' panel.',
+        description: 'Open or close the ' + panel.label + ' panel.',
         isChecked: () => dockLayout.isPanelVisible(panel.id),
         onToggle: () => dockLayout.togglePanel(panel.id),
       })),
@@ -508,6 +521,18 @@ async function bootstrap(): Promise<void> {
         description: 'Apply the ' + preset + ' panel arrangement.',
         isChecked: () => dockLayout.currentPreset === preset,
         onToggle: () => dockLayout.applyPreset(preset),
+      })),
+      { kind: 'separator' },
+      // Docking layouts (spec 010 FR-007) — a distinct concept from the size presets just
+      // above: those resize today's fixed three regions, this switches which *predefined
+      // layout* (zone topology) is active. Named "Docking:" rather than reusing "Layout:" so
+      // the two are never read as the same menu.
+      ...Object.values(LAYOUTS).map((dockingLayout): MenuItem => ({
+        kind: 'checkbox',
+        label: 'Docking: ' + dockingLayout.label,
+        description: 'Switch to the ' + dockingLayout.label + ' docking layout.',
+        isChecked: () => dockLayout.currentLayoutId === dockingLayout.id,
+        onToggle: () => dockLayout.applyLayout(dockingLayout.id),
       })),
       { kind: 'separator' },
       {
@@ -546,37 +571,24 @@ async function bootstrap(): Promise<void> {
       },
     ];
 
-    // Undo/redo (P3): `EditHistory` already holds the snapshots (FR-074/FR-075); these two
-    // functions are the only place a step is applied back to the shell, through
-    // `applyExternalProject` rather than `loadProject` so the current selection survives
-    // when the project stepped to still has it.
-    const performUndo = (): void => {
-      const previous = history.undo();
-      if (previous !== null) {
-        shell.applyExternalProject(previous);
-      }
-    };
-    const performRedo = (): void => {
-      const next = history.redo();
-      if (next !== null) {
-        shell.applyExternalProject(next);
-      }
-    };
+    // Undo/redo (spec 009 P3, corrected by spec 010's correction pass, item 6): `EditorShell`
+    // now owns the history, scoped to whichever effect is the active editing context, so these
+    // two menu items are thin pass-throughs rather than owning a global stack themselves.
     const editMenuItems: readonly MenuItem[] = [
       {
         label: 'Undo',
-        description: 'Undo the last edit.',
+        description: 'Undo the last edit, within the effect currently being edited.',
         shortcut: 'Ctrl+Z',
-        onSelect: performUndo,
-        isEnabled: () => history.state.canUndo,
-        disabledReason: 'Nothing to undo yet.',
+        onSelect: () => shell.undo(),
+        isEnabled: () => shell.canUndo,
+        disabledReason: 'Nothing to undo yet in this effect.',
       },
       {
         label: 'Redo',
-        description: 'Redo the last undone edit.',
+        description: 'Redo the last undone edit, within the effect currently being edited.',
         shortcut: 'Ctrl+Y',
-        onSelect: performRedo,
-        isEnabled: () => history.state.canRedo,
+        onSelect: () => shell.redo(),
+        isEnabled: () => shell.canRedo,
         disabledReason: 'Nothing to redo.',
       },
     ];

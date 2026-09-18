@@ -58,6 +58,18 @@ const PATHS: Readonly<Record<string, readonly string[]>> = {
   ],
   /** A wrench — debug/diagnostics. */
   tool: ['M14.7 6.3a4 4 0 0 0 5 5L15 16l-4 4-3-3 4-4z'],
+  /** A padlock, shackle closed — the Inspector held on a captured selection. */
+  lock: ['M5 11h14v10H5z', 'M7 11V7a5 5 0 0 1 10 0v4'],
+  /** A padlock, shackle open — the Inspector following the live selection. */
+  unlock: ['M5 11h14v10H5z', 'M7 11V7a5 5 0 0 1 9.9-1'],
+  /** An X — close this panel/tab. */
+  close: ['M6 6l12 12', 'M18 6l-12 12'],
+  /** Three vertical dots — a panel's own overflow menu (move/close/collapse). */
+  panelMenu: [
+    'M12 6.2m-1.2 0a1.2 1.2 0 1 0 2.4 0a1.2 1.2 0 1 0 -2.4 0',
+    'M12 12.8m-1.2 0a1.2 1.2 0 1 0 2.4 0a1.2 1.2 0 1 0 -2.4 0',
+    'M12 19.4m-1.2 0a1.2 1.2 0 1 0 2.4 0a1.2 1.2 0 1 0 -2.4 0',
+  ],
 };
 
 /** Every icon this editor draws. */

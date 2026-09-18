@@ -115,6 +115,13 @@ body button:disabled {
   min-width: 0;
 }
 
+/* Empty-background drop target — dropping here appends a new stacked panel area at the end of
+   this zone, rather than joining an existing one (spec 010 correction pass, item 2). */
+[data-dock-zone][data-drop-target='true'] {
+  outline: 2px dashed var(--mudra-editor-accent);
+  outline-offset: -2px;
+}
+
 .mudra-layout__splitter {
   position: relative;
   background: transparent;
@@ -152,6 +159,301 @@ body button:disabled {
   grid-row: 3;
   cursor: ns-resize;
   touch-action: none;
+}
+
+/* ---------- Dock tree: splits, leaves, tab groups (spec 010 correction pass, item 1) ---------- */
+
+.mudra-layout__left,
+.mudra-layout__right {
+  display: flex;
+  flex-direction: column;
+}
+
+.mudra-layout__timeline {
+  display: flex;
+}
+
+/* A split divides its space between its children, stacked or side-by-side. Every child gets an
+   equal share by default — this is bounded subdivision (one drag produces one split), not a
+   freely resizable nested layout. */
+.mudra-layout__split {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 0;
+}
+
+.mudra-layout__split--column {
+  flex-direction: column;
+}
+
+.mudra-layout__split--row {
+  flex-direction: row;
+}
+
+.mudra-layout__split > .mudra-layout__split,
+.mudra-layout__split > .mudra-layout__leaf {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Resize handle between two directly-adjacent split children (spec 010 workspace UX corrections
+   pass, item 4, FR-042) — the same visible-affordance treatment the three whole-region splitters
+   above already use, scaled down for an in-zone boundary. */
+.mudra-layout__resize-handle {
+  position: relative;
+  flex: 0 0 auto;
+  background: transparent;
+}
+
+.mudra-layout__resize-handle::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--mudra-editor-border);
+}
+
+.mudra-layout__resize-handle:hover::after,
+.mudra-layout__resize-handle:active::after {
+  background: var(--mudra-editor-accent);
+}
+
+.mudra-layout__resize-handle--row {
+  width: 6px;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.mudra-layout__resize-handle--column {
+  height: 6px;
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+/* A leaf is one tab group: one panel, or several sharing this area as switchable tabs.
+   `min-height`/`min-width` are a real floor (spec 010 workspace UX corrections pass, items 4/6 —
+   FR-042/FR-045), not `0` — this is what lets a zone's combined panels, once their minimums
+   exceed the zone's own space, overflow into the zone's *own* `overflow-y: auto`
+   (`.mudra-layout__left`/`__right`, above) instead of being crushed to nothing. Keep this number
+   in sync with `MIN_LEAF_SIZE_PX` in `dock-layout.ts` — the same floor a resize drag clamps to. */
+.mudra-layout__leaf {
+  display: flex;
+  flex-direction: column;
+  min-width: 120px;
+  min-height: 120px;
+  overflow: hidden;
+}
+
+.mudra-layout__leaf[data-drop-target='true'] {
+  position: relative;
+}
+
+/* The edge/centre indicator a drag paints over the hovered leaf, before the pointer is released
+   — the resulting layout (a new adjacent area, or a merged tab group) must be obvious before the
+   drop, not only after it (spec 010 correction pass, item 2). */
+.mudra-layout__leaf[data-drop-target='true']::after {
+  content: '';
+  position: absolute;
+  z-index: 5;
+  pointer-events: none;
+  background: rgba(110, 231, 249, 0.35);
+  border: 2px solid var(--mudra-editor-accent);
+  box-sizing: border-box;
+}
+
+.mudra-layout__leaf[data-drop-position='center']::after {
+  inset: 4px;
+}
+
+.mudra-layout__leaf[data-drop-position='top']::after {
+  inset: 4px 4px auto 4px;
+  height: 40%;
+}
+
+.mudra-layout__leaf[data-drop-position='bottom']::after {
+  inset: auto 4px 4px 4px;
+  height: 40%;
+}
+
+.mudra-layout__leaf[data-drop-position='left']::after {
+  inset: 4px auto 4px 4px;
+  width: 40%;
+}
+
+.mudra-layout__leaf[data-drop-position='right']::after {
+  inset: 4px 4px 4px auto;
+  width: 40%;
+}
+
+.mudra-layout__zone-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 4px 4px 0;
+  background: var(--mudra-editor-panel);
+  border-bottom: 1px solid var(--mudra-editor-border);
+}
+
+.mudra-layout__zone-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px 4px 10px;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 4px 4px 0 0;
+  background: transparent;
+  color: var(--mudra-editor-dim);
+  /* A tab is also a drag origin now (reorder, or drag-out to undock — FR-041/FR-043); its label
+     never needs to be selectable, the same reasoning as the panel header's own drag handle. */
+  user-select: none;
+  touch-action: none;
+}
+
+.mudra-layout__zone-tab[aria-selected='true'] {
+  background: var(--mudra-editor-bg);
+  border-color: var(--mudra-editor-border);
+  color: var(--mudra-editor-fg);
+}
+
+.mudra-layout__zone-tab-close {
+  display: inline-flex;
+  padding: 2px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  opacity: 0.7;
+}
+
+.mudra-layout__zone-tab-close:hover {
+  opacity: 1;
+  border-color: transparent;
+  color: var(--mudra-editor-danger);
+}
+
+/* Tab reorder (spec 010 workspace UX corrections pass, item 3, FR-043) — the insertion position
+   must be obvious before release, distinct from the drop-target highlight above (a reorder never
+   sets that — the two are mutually exclusive). */
+.mudra-layout__zone-tab {
+  position: relative;
+}
+
+.mudra-layout__zone-tab[data-tab-insert-before='true']::before,
+.mudra-layout__zone-tab[data-tab-insert-after='true']::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  width: 2px;
+  background: var(--mudra-editor-accent);
+}
+
+.mudra-layout__zone-tab[data-tab-insert-before='true']::before {
+  left: -2px;
+}
+
+.mudra-layout__zone-tab[data-tab-insert-after='true']::after {
+  right: -2px;
+}
+
+/* ---------- Panel header: the drag handle + collapse/close/move controls ---------- */
+
+/* A visibly thicker top edge is the "this can be grabbed" affordance (spec 010 correction pass,
+   item 2) — dragging the header is the primary way to relocate a panel now, not a button. */
+.mudra-layout__panel-header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 6px 6px 10px;
+  background: var(--mudra-editor-panel);
+  border-top: 3px solid var(--mudra-editor-border);
+  border-bottom: 1px solid var(--mudra-editor-border);
+  cursor: grab;
+  touch-action: none;
+  /* A drag handle's own label never needs to be selectable (spec 010 workspace UX corrections
+     pass, FR-041) — this is permanent and scoped to the handle itself, not the broad
+     `user-select: none` the task explicitly rules out. */
+  user-select: none;
+}
+
+/* The other half of FR-041: scoped to an *active* drag only (the class is toggled on exactly for
+   its duration — `dock-layout.ts`'s `beginDrag`/`wireRelocationDrag`), and to this layout's own
+   root — never a permanent, application-wide rule. Needed because a relocation/reorder drag
+   deliberately does not use pointer capture, so the pointer can move freely over any panel's own
+   text content while the drag is in progress. */
+.mudra-layout--dragging {
+  user-select: none;
+}
+
+.mudra-layout__panel-header:hover {
+  border-top-color: var(--mudra-editor-accent);
+}
+
+.mudra-layout__panel-header-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--mudra-editor-dim);
+}
+
+.mudra-layout__panel-collapse,
+.mudra-layout__panel-close,
+.mudra-layout__panel-menu-trigger {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--mudra-editor-dim);
+}
+
+.mudra-layout__panel-collapse:hover,
+.mudra-layout__panel-menu-trigger:hover {
+  color: var(--mudra-editor-accent);
+  border-color: transparent;
+}
+
+.mudra-layout__panel-close:hover {
+  color: var(--mudra-editor-danger);
+  border-color: transparent;
+}
+
+/* Trimmed to "Move to <zone>" only (spec 010 workspace UX corrections pass, item 2) — Close and
+   Collapse already have their own header buttons, so this is a small utility dropdown now, not a
+   full options menu; sized and shadowed lighter to read that way. */
+.mudra-layout__panel-menu-popover {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 2px);
+  right: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px;
+  min-width: 130px;
+  background: var(--mudra-editor-panel);
+  border: 1px solid var(--mudra-editor-border);
+  border-radius: 5px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+}
+
+.mudra-layout__panel-menu-popover .mudra-layout__panel-menu-option {
+  text-align: left;
+}
+
+.mudra-layout__panel-header {
+  position: relative;
 }
 
 /* ---------- File menu (item 7) ---------- */
@@ -200,13 +502,43 @@ body button:disabled {
 
 /* ---------- Panel sections (item 13) ---------- */
 
+/* Header/content split (spec 010 workspace UX corrections pass, item 5, FR-044): the header stays
+   put (`.mudra-layout__panel-header { flex: 0 0 auto }`, above) while only `.mudra-editor
+   __panel-content` — the panel's own root, `registerPanel` adds this class to it — scrolls. This
+   is the *only* content-scroll boundary; a panel that already manages its own internal scroll
+   region (e.g. Timeline) simply fills this box (`height: 100%` on its own root) rather than
+   producing a second, redundant scrollbar. */
 .mudra-editor__panel-section {
-  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
   border-bottom: 1px solid var(--mudra-editor-border);
 }
 
 .mudra-editor__panel-section:last-child {
   border-bottom: none;
+}
+
+.mudra-editor__panel-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* A leaf's currently-visible panel host must actually grow to fill the leaf's own space (below
+   its optional tab strip) for `height: 100%`, above, to resolve against anything — a plain
+   `.mudra-editor__panel-section` isn't a flex item anywhere else, so this is scoped to exactly
+   where it is one. */
+.mudra-layout__leaf > .mudra-editor__panel-section {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* The header (spec 010 correction pass, item 2) spans edge to edge for its grip styling; the
+   panel's own content keeps the padding the section used to apply to everything. */
+.mudra-editor__panel-section > :not(.mudra-layout__panel-header) {
+  padding: 12px;
 }
 
 .mudra-editor__panel-title {
@@ -844,6 +1176,40 @@ body button:disabled {
 
 /* ---------- Inspector — header, field groups, presets ---------- */
 
+.mudra-editor__inspector-heading-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* Lock toggle (spec 010 FR-015, FR-017): the checked state must read at a glance without
+   relying on the tooltip, so it gets its own colour + border, not only the swapped glyph. */
+.mudra-editor__inspector-lock {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--mudra-editor-dim);
+  cursor: pointer;
+}
+
+.mudra-editor__inspector-lock:hover {
+  border-color: var(--mudra-editor-border);
+}
+
+.mudra-editor__inspector-lock[data-locked='true'] {
+  border-color: var(--mudra-editor-accent);
+  background: rgba(110, 231, 249, 0.15);
+  color: var(--mudra-editor-accent);
+}
+
 .mudra-editor__inspector-header {
   display: flex;
   align-items: center;
@@ -870,11 +1236,39 @@ body button:disabled {
 }
 
 .mudra-editor__field-group-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   margin: 0 0 6px;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--mudra-editor-dim);
+}
+
+/* Section collapse (spec 010 FR-020, FR-023): only rendered when a selection resolves to more
+   than one group, so a single-section action never shows a control with nothing to do. */
+.mudra-editor__field-group-toggle {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--mudra-editor-dim);
+  cursor: pointer;
+}
+
+.mudra-editor__field-group-toggle:hover {
+  color: var(--mudra-editor-fg);
+}
+
+.mudra-editor__field-group[data-collapsed='true'] {
+  padding-bottom: 0;
 }
 
 .mudra-editor__field[hidden] {

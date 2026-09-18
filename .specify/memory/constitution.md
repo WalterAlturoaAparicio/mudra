@@ -1,6 +1,145 @@
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 1.8.0 → 1.9.0
+Rationale: A third round of Mudra Web editor work is authorized, all scoped to the existing
+effect editor and none of it a new top-level milestone: panel docking and tabs over the editor's
+existing named-region panel registry, a lockable/contextual Inspector, collapsible panels and
+sections, and an explicit editor-preview isolation rule correcting a runtime-matching gap found
+while using the shipped editor (an unrelated saved effect could be accidentally triggered by live
+pose detection while a different effect was being edited/tested). MINOR — one authorization entry
+refining and extending Milestone 2's already-granted editor UI, plus one clarifying addition to
+the Web applications standards subsection; no principle is removed, weakened, or redefined
+incompatibly.
+
+Modified in this amendment (1.9.0):
+  - Principle VI (Scope Discipline) — extends the Mudra Web Milestone 2 authorization (v1.7.0)
+    with: (a) panel docking — a small, fixed set of predefined layouts, each defining its own
+    docking zones; zones persist and occupy their defined space whether or not a panel is
+    currently docked into them (an empty zone MUST NOT collapse, and no neighboring zone MUST
+    expand to fill it); a panel is relocated between a layout's valid zones by drag-and-drop, with
+    a keyboard-operable equivalent required alongside it; (b) tabs — a zone MAY hold more than one
+    panel, presented as switchable tabs, one visible at a time; (c) a lockable Inspector — the
+    Inspector continues to follow the editor's one existing selection model by default, and MAY be
+    explicitly locked to hold its current content across further selection changes until
+    unlocked; (d) collapsible panels and sections — a whole panel and, independently, a panel's
+    own internal sections MAY be collapsed and expanded, session-scoped, without removing the
+    panel from its zone or the View menu; and (e) editor-preview isolation — while an effect is
+    selected for editing, only that effect's own playback (explicit Play/Play Selected/Test
+    Trigger, or the author genuinely performing its own pose live) may start in the editor's
+    preview session; a live-detected pose matching a different, unselected effect's trigger MUST
+    NOT start that effect's playback, though the effect's own saved definition is untouched and
+    becomes eligible again the moment it is itself selected. Two rules are binding as part of this
+    authorization, the same way Milestone 1/2's architectural rules were: **panel docking is
+    predefined zones only** — an arbitrary, freely-splittable docking surface (nested rows/
+    columns, user-defined splits, floating/undocked windows) is explicitly NOT authorized by this
+    amendment and would need its own; and **editor-preview isolation is scoped to the editor's own
+    runtime instance only** — it MUST NOT change how effects are triggered, matched, or played on
+    the public-facing default experience, whose existing "every matching effect plays, nothing
+    picks a winner" behavior is unaffected.
+  - Technology & Code Quality Standards, "Web applications" subsection — NEW bullet naming panel
+    docking/tabs/Inspector-lock/collapse state as editor-only presentation-layer state (never
+    domain state, never part of a saved project document), extending the existing "editor-only
+    state is application/presentation state" rule to name these specifically.
+
+Principles I–VI: unchanged in intent. Principle VI's Milestone 2 entry is extended, not replaced;
+no principle text is weakened.
+
+Templates requiring updates:
+  - ✅ .specify/templates/plan-template.md — Constitution Check is principle-generic; the extended
+    authorization is evaluated by the existing gate with no edit.
+  - ✅ .specify/templates/spec-template.md — no mandatory section added or removed.
+  - ✅ .specify/templates/tasks-template.md — no new principle-driven task category.
+
+Deferred / follow-up TODOs:
+  - Arbitrary/freely-splittable docking (nested splits, user-defined ratios, floating panels) —
+    explicitly not authorized here; would require its own amendment if a later need is
+    demonstrated.
+  - Timeline multi-select and per-particle/sprite textures — both named in
+    specs/008-effect-editor/future-work.md Section C alongside docking/tabs — remain unauthorized;
+    this amendment grants none of them, by the requesting specification's own explicit choice.
+  - The specs/010-editor-workspace-refinements feature specification itself is the separate SDD
+    artifact this amendment authorizes work on; it does not substitute for it.
+
+--- previous report (1.8.0 → 1.9.0 supersedes the report below it; both are new in this pass) ---
+Version change: 1.7.0 → 1.8.0
+Rationale: Reconstructed 2026-09-17. This amendment existed and was implemented — specs/009's own
+artifacts cite "constitution v1.8.0" as their authorization throughout, and
+specs/008-effect-editor/tasks.md records a README follow-up "recorded in the constitution's v1.8.0
+sync report" — but the amendment itself was never durably committed before a disk failure lost it;
+the recovery that followed restored the *implementation* (specs/009's code, now shipped) without
+restoring the constitution entry that had licensed it. This text is rebuilt from that surviving
+evidence — specs/009's spec.md, plan.md, tasks.md, research.md and contracts/, and
+specs/008-effect-editor/future-work.md Section C (undo/redo) and Section B (the five things a
+capture-mode amendment "would need to state, at minimum," which specs/009's own checklist confirms
+this authorization covered) — not reauthored from present intent. Where the original wording could
+not be recovered with confidence, this text says so rather than inventing detail. MINOR — a new
+authorized-milestone entry and one clarifying addition to the Web applications standards
+subsection; no principle is removed, weakened, or redefined incompatibly.
+
+Modified in this amendment (1.8.0):
+  - Principle VI (Scope Discipline) — adds the Mudra Web Milestone 3 authorization: **Gated Web
+    Capture Mode** — a build-time-gated third entry point (enabled only by an explicit build flag,
+    never a runtime conditional, so an unflagged build contains none of this code) collecting
+    additional hand-landmark pose samples directly from the browser and exporting them in the
+    exact same versioned pose-sample JSON schema Engine and Mudra Capture already write — a
+    web-specific schema variant is not authorized. Persistence is bounded to exactly four data
+    categories: (1) raw camera imagery, video, canvas pixels, screenshots, and thumbnails — NEVER
+    persisted; (2) transient detector/segmentation result objects and camera-surface handles —
+    NEVER persisted; (3) per-hand landmark coordinates (canonical-raw and normalized), handedness,
+    and confidence — persistable, inside the one permitted storage location only; and (4) minimal
+    session metadata (pose identity, a self-chosen contributor label, session/sample identifiers,
+    timestamps, frame dimensions, countdown context, application/detector versions) — persistable,
+    at the minimum needed for dataset provenance. The mode requires its own, separate,
+    unmistakable consent distinct from the ordinary camera-start gesture, with a visible
+    indication while active; export is local-only, by explicit user action; every stored sample is
+    enumerable and deletable by the person who recorded it; and its "record"/"capture" controls
+    are a narrowly-written exception to the standing prohibition on recording/capture/download/
+    share language elsewhere in the application, not a loosening of it. **Build-time gating is
+    feature gating, not deployment security**: no in-browser token, invite code, passphrase,
+    account, or identity system may be used or presented as access control — restricting who can
+    reach a deployed capture build is a hosting-layer concern outside this authorization. Also
+    authorized in this same amendment, as the one item `future-work.md` Section C named as ready
+    and explicitly granted alongside Capture Mode: **editor undo/redo** — a bounded snapshot stack
+    over the editor's existing pure `Project → Project` edit functions, editor-state only, never
+    persisted, adding no field to a saved project document.
+  - Technology & Code Quality Standards, "Web applications" subsection — NEW bullet naming Capture
+    Mode's own entry point (emitted only when its build flag is set), its own controller (runs no
+    recognition — Capture Mode cannot become a second recognition system), its own repository and
+    storage location (inside the one directory already permitted to touch persistence, as a
+    separate database from the editor's own), and its own schema serializer (verified against
+    Engine-generated golden fixtures, the same cross-language port discipline v1.6.0 established),
+    reusing the existing normalization implementation rather than re-deriving it.
+  - Principle II is restated as binding without exception on Capture Mode specifically, because it
+    is the first Mudra Web surface whose entire purpose is persisting camera-derived data: only
+    landmark coordinates and the named session metadata may be written; camera frames, video,
+    canvas pixels, detector result objects, the mirrored camera surface, and segmentation data
+    MUST NOT be persistable, and MUST NOT be representable in the persisted type at all.
+
+Principles I–VI: unchanged in intent. Principle VI gains one authorization entry; no principle
+text is weakened. Principle II is cited, not modified.
+
+Templates requiring updates:
+  - ✅ .specify/templates/plan-template.md — Constitution Check is principle-generic; the new
+    authorization is evaluated by the existing gate with no edit.
+  - ✅ .specify/templates/spec-template.md — no mandatory section added or removed.
+  - ✅ .specify/templates/tasks-template.md — no new principle-driven task category.
+  - ⚠ README.md — pending at the time this amendment was originally in force: the Monorepo table
+    and Folder Structure section needed to list Mudra Web's capture entry point. Resolved
+    2026-09-17, in the same session that reconstructed this record — the Monorepo table now names
+    `index.html`/`editor.html`/`capture.html` as Mudra Web's three entry points.
+
+Deferred / follow-up TODOs:
+  - Uploading, syncing, public/crowdsourced contribution, accounts, authentication, and any
+    backend or database — none authorized by this amendment.
+  - Reconstruction note: the precise original prose of this amendment (exact wording, any detail
+    beyond what specs/009 and future-work.md Section B/C evidence directly support) could not be
+    recovered — no pre-failure git history for this file survives (verified: `git log --all` for
+    this path shows nothing between the Phase-1-era commits and the post-recovery commit). What is
+    recorded above is reconstructed from what specs/009's own artifacts already depend on and cite
+    as true of v1.8.0, not reauthored from scratch.
+
+--- previous report (1.6.0 → 1.7.0) -------------------------------------------
 Version change: 1.6.0 → 1.7.0
 Rationale: Mudra Web's second milestone is authorized: a visual effect editor and Person
 Segmentation as a capability-gated addition, both explicitly excluded by v1.6.0. This amendment
@@ -460,6 +599,113 @@ captured imagery to a project file, to local storage, or to any exported artifac
 is effect data — timelines, action parameters, asset references, and pose/trigger selections — and
 nothing else.
 
+**Mudra Web — Milestone 3: Gated Web Capture Mode, and editor undo/redo (authorized, added in
+v1.8.0)**: two further additions to `apps/web/` are authorized. First, **Gated Web Capture Mode**:
+a build-time-gated third entry point, alongside the existing default experience and editor
+entries, for collecting additional hand-landmark pose samples directly from the browser. Second,
+**editor undo/redo**, the one Section C item `specs/008-effect-editor/future-work.md` predicted
+was ready to build: every authoring edit was already a pure `Project → Project` function, so an
+undo stack is a list of snapshots and a pair of commands rather than a redesign.
+
+This authorization permits exactly: a third build entry point present in the built output **only**
+when an explicit build-time flag is set — never a runtime conditional, so an unflagged build
+contains no trace of this code, checkable by inspecting the emitted output rather than by trusting
+a flag; a capture controller that constructs no matcher, no effect runtime, and no pose-event
+emitter — Capture Mode MUST NOT become a second recognition system; export of collected samples in
+the exact same versioned pose-sample JSON schema Engine and Mudra Capture already write, by
+explicit local user action only; and, for the editor, a bounded snapshot stack of prior project
+states reachable through an Edit menu and standard undo/redo keyboard accelerators, discarding the
+redo branch on a new edit and bounded to a configured depth.
+
+Persistence under this authorization is bounded to exactly four data categories: (1) raw camera
+imagery, video, canvas pixels, screenshots, and thumbnails — **never** persisted; (2) transient
+detector/segmentation result objects and camera-surface handles — **never** persisted; (3) per-hand
+landmark coordinates (canonical-raw and normalized), handedness, and confidence — persistable,
+inside the one storage location Principle-II-compliant persistence already uses; and (4) minimal
+session metadata (pose identity, a self-chosen contributor label — dataset provenance, never an
+identity or account — session/sample identifiers, timestamps, frame dimensions, countdown context,
+and application/detector versions) — persistable, at the minimum needed for that provenance.
+Capture Mode requires its own, separate, unmistakable consent, distinct from the ordinary
+camera-start gesture already used elsewhere, with a visible indication while active; every stored
+sample MUST be enumerable and deletable by the person who recorded it; and its "record"/"capture"
+controls are a narrowly-scoped exception to the standing prohibition on recording/capture/download/
+share language and affordances elsewhere in the application — a loosening of that prohibition
+anywhere else is not authorized.
+
+**Build-time gating is feature gating, not deployment security**, stated here because the
+distinction is load-bearing rather than assumed: no in-browser token, invite code, passphrase,
+account, or identity system may be used, or presented to a user, as access control for a deployed
+capture build. Restricting who can reach one is a hosting-layer concern — HTTP authentication, an
+access list, a private URL, or simply not deploying it to the public origin — outside this
+authorization. Editor undo/redo is, separately, **editor state only**: it MUST NOT be persisted,
+and MUST add no field to a saved project document — the previous project value already *is* the
+undo, so there is nothing to invert and nothing new to store.
+
+It explicitly does **not** authorize: uploading, syncing, or transmitting captured data in any
+form; public or crowdsourced contribution, contributor discovery, or any multi-user workflow;
+accounts, authentication, authorization, or any backend service or database; a second pose-sample
+schema or a web-specific landmark format; sequence capture (only pose samples are in scope);
+dataset management (browsing, editing, re-labelling, or regenerating the shipped exemplar bundle
+from captured samples) inside the browser; or persisting camera imagery in any form, including a
+thumbnail or preview of a captured sample. Each requires its own explicit authorization amendment
+before any behavior for it is implemented.
+
+**Principle II binds Milestone 3 without exception, restated because Capture Mode is the first
+Mudra Web surface whose entire purpose is persisting camera-derived data**: only categories 3 and 4
+above may be written; categories 1 and 2 MUST NOT be persistable, and MUST NOT be representable in
+the persisted type at all — not merely forbidden by convention, but absent from the type graph a
+compiler can check.
+
+**Mudra Web — Milestone 2 refinements: panel docking and tabs, a lockable Inspector, collapsible
+panels, and editor-preview isolation (authorized, added in v1.9.0)**: four further additions to the
+Milestone 2 editor (v1.7.0) are authorized, none of them a new top-level milestone — each extends a
+surface Milestone 2 already granted (the editor UI, the inspector, preview/test-trigger mode)
+rather than adding a new capability category.
+
+This authorization permits exactly: **panel docking**, over the editor's existing named-region
+panel registry, as a small, fixed set of predefined layouts, each explicitly defining its own set
+of docking zones — not an arbitrary, freely-splittable docking surface. A zone always exists and
+occupies its layout-defined space whether or not a panel is currently docked into it: an empty zone
+MUST NOT collapse, and no neighboring zone MUST expand to fill it. A panel is relocated between a
+layout's valid zones by drag-and-drop, with clear visual indication of valid drop targets during
+the drag and invalid zones never presented as drop targets, and a keyboard-operable equivalent MUST
+exist alongside the drag gesture — full simulated-drag keyboard equivalence (e.g. arrow-key-driven,
+matching the WAI-ARIA drag-and-drop pattern step for step) is not required. **Tabs**: a zone MAY
+hold more than one panel, presented as switchable tabs with exactly one visible at a time. A
+**lockable Inspector**: the Inspector continues to reflect the editor's one existing selection
+model by default — this authorization does not permit a second, parallel notion of "what is
+selected" — and MAY be explicitly locked to hold its current content across further selection
+changes elsewhere, until explicitly unlocked, with the locked/unlocked state visibly distinguishable
+at a glance. **Collapsible panels and sections**: a whole panel, and independently each of a
+panel's own internal sections, MAY be collapsed to a compact state and expanded again, with that
+state kept for the editor session, without removing the panel from its zone or from the existing
+View menu's list of panels.
+
+**Editor-preview isolation**, correcting a gap rather than adding a capability: while an effect is
+selected for editing in the editor, only that effect's own playback — started explicitly (Play,
+Play Selected, Test Trigger) or by the author genuinely performing that effect's own pose live in
+front of an attached camera — is eligible to start in the editor's preview session. A live-detected
+pose matching a *different*, unselected effect's trigger MUST NOT start that effect's playback; the
+excluded effect's own saved definition is untouched and becomes eligible again the moment it is
+itself selected. **This isolation is scoped to the editor's own runtime instance only** — it MUST
+NOT change how effects are triggered, matched, or played on the public-facing default experience,
+whose existing rule (every matching effect plays; nothing picks a winner) is unaffected and remains
+available to extend later (e.g. a future overlap/priority system) without this authorization having
+foreclosed it.
+
+It explicitly does **not** authorize: arbitrary, freely-splittable docking (nested rows/columns,
+user-defined splits or ratios, floating/undocked panel windows) — predefined zones only, for now;
+timeline multi-select; per-particle textures or sprite particles; or any change to recognition,
+matching, thresholds, hold semantics, or the shipped action catalog. Each of the docking-complexity
+items, like every exclusion before it in this principle, requires its own explicit authorization
+amendment, backed by a demonstrated need, before any behavior for it is implemented.
+
+**Editor-only state is restated, not newly introduced**: panel docking arrangement, tab-group
+membership, Inspector-lock state, and panel/section collapse state are all application/presentation
+state under the rule Milestone 2 already established ("editor-only state ... is application/
+presentation state, never domain state") — none of them is a project-document field, and none
+requires a Principle II restatement, since none of them touches imagery or camera data.
+
 **Rationale**: Discipline protects the foundation. Building recognition or gameplay on an
 unproven data pipeline would bake in assumptions before the ground truth (the dataset format)
 is stable. The Phase 2.75 exception stays narrow — deterministic matching only, no training,
@@ -475,7 +721,15 @@ stack, or a content ecosystem is designed on top of an assumption. Milestone 2 i
 because that answer came back yes: an editor is worth building over a runtime already proven to
 work, not a speculative one, and Person Segmentation is worth gating rather than assuming, because
 the inert-and-reported discipline Milestone 1 established for `person_visibility` is precisely what
-makes shipping a capability that may be unavailable safe rather than merely convenient.
+makes shipping a capability that may be unavailable safe rather than merely convenient. Milestone 3
+follows the same test: Capture Mode is worth authorizing because the schema and normalization it
+depends on were already proven correct by Engine and Mudra Capture, so a browser-based collection
+path adds a convenience without adding risk to the dataset itself — and undo/redo is authorized
+alongside it for the same reason `future-work.md` gave: the editor's edits were already pure
+functions, so the feature was shape-ready rather than speculative. The v1.9.0 refinements are
+narrower still: each corrects or extends a surface Milestone 2 already proved out (the editor UI,
+the inspector, preview mode) rather than opening a new one, which is why they are recorded as
+refinements to an existing authorization rather than a fourth milestone.
 
 ## Technology & Code Quality Standards
 
@@ -583,6 +837,18 @@ concrete language, layout, and tooling differ.
   never domain state. When Person Segmentation is enabled it is accessed behind the same
   replaceable detection-interface discipline already required for hand-landmark detection, using
   the MediaPipe Tasks Vision family.
+- **Capture Mode and editor undo/redo** (Milestone 3, added in v1.8.0): Capture Mode's own entry
+  point is emitted only when its build flag is set; its own controller constructs no matcher, no
+  effect runtime, and no pose-event emitter, so it cannot become a second recognition system; its
+  own repository and storage location sit inside the one directory already permitted to touch
+  persistence, as a database separate from the editor's own; and its own schema serializer is
+  verified against Engine-generated golden fixtures, reusing the existing normalization
+  implementation rather than re-deriving it.
+- **Editor chrome state** (Milestone 2 refinement, added in v1.9.0): panel docking arrangement,
+  tab-group membership, Inspector-lock state, and panel/section collapse state are editor-only
+  application/presentation state — never domain state, never a project-document field — extending
+  the rule the Editor and segmentation bullet above already states for open project/selection/
+  unsaved-edit state.
 - **Build tooling** (bundler, test runner, package manager) is a plan-level decision recorded in the
   application's README and its feature plan, not fixed here.
 
@@ -697,4 +963,4 @@ against this document. Any justified deviation MUST be recorded in the plan's Co
 Tracking with the simpler alternative that was rejected and why. Unjustified complexity is
 grounds for rejection.
 
-**Version**: 1.7.0 | **Ratified**: 2026-07-24 | **Last Amended**: 2026-08-24
+**Version**: 1.9.0 | **Ratified**: 2026-07-24 | **Last Amended**: 2026-09-17

@@ -43,6 +43,8 @@ import {
   withEffect,
   withTrigger,
 } from '../../domain/editor/project-edits';
+import { isolatedCatalog } from '../../domain/editor/isolated-catalog';
+import { EditHistory } from '../../domain/editor/edit-history';
 import { renameProject as renameProjectData } from '../../domain/editor/types';
 import type { Project } from '../../domain/editor/types';
 import type { ActionRegistry } from '../../domain/runtime/action-registry';
@@ -91,6 +93,25 @@ export interface EditorShellSlots {
  */
 export type EditorSurface = 'inspector' | 'effect' | 'project' | 'assets';
 
+/**
+ * The confirmation the shell asks before leaving an effect with unsaved changes (spec 010
+ * correction pass, item 6). Structural, like `project-panel.ts`'s `ProjectPrompts` — the real
+ * `DialogHost` satisfies it, and a test passes a plain fake with no DOM at all.
+ */
+export interface EffectSwitchPrompts {
+  chooseAction<T extends string>(options: {
+    readonly title: string;
+    readonly message: string;
+    readonly actions: readonly {
+      readonly label: string;
+      readonly value: T;
+      readonly tone?: 'normal' | 'danger';
+    }[];
+    readonly cancelLabel?: string;
+    readonly cancelValue: T;
+  }): Promise<T>;
+}
+
 export interface EditorShellOptions {
   readonly document: Document;
   readonly layout: EditorShellSlots;
@@ -111,6 +132,17 @@ export interface EditorShellOptions {
   readonly stageCanvas: HTMLCanvasElement;
   readonly initialProject: Project;
   readonly poses: readonly PoseOption[];
+  /** How many steps of undo/redo each editing context retains (spec 009 FR-075a). Defaults to
+   *  50 — every test but this feature's own history-scoping tests can ignore it entirely. */
+  readonly historyDepth?: number;
+  /**
+   * Asked before switching the active effect away from one with unsaved changes (spec 010
+   * correction pass, item 6). Omitted — as every existing test omits it — means a context
+   * switch with pending edits proceeds exactly as it always has: silently, keeping them. Only a
+   * real caller (`editor-main.ts`) supplies this, and only then does a dirty switch pause for an
+   * explicit Save/Discard/Cancel.
+   */
+  readonly dialogs?: EffectSwitchPrompts;
   /** Called after every committed edit, so the composition root can, e.g., enable "Save". */
   readonly onProjectChange?: (project: Project) => void;
   /**
@@ -141,6 +173,9 @@ const DEFAULT_NEW_ENTRY_DURATION_MS = 500;
 
 /** How long a toolbar status message stays before the next render clears it. */
 const STATUS_LINGER = 1;
+
+/** `EditorShellOptions.historyDepth`'s default, equal to `editor-main.ts`'s `UNDO_DEPTH`. */
+const DEFAULT_HISTORY_DEPTH = 50;
 
 /** The editor's main view. */
 export class EditorShell {
@@ -174,6 +209,29 @@ export class EditorShell {
   private capabilities: CapabilityRegistry;
   private selectedEffectId: string | null;
   private selectedEntryIndex: number | null = null;
+  /**
+   * What the Inspector holds while locked (FR-015 – FR-019, spec 010, data-model.md "Inspector
+   * lock"). `entryIndex: null` is itself a meaningful locked state — "this effect, no clip" —
+   * so every read of this field must use an explicit ternary, never `??`, or a locked
+   * effect-only selection would wrongly fall through to the live `selectedEntryIndex`.
+   */
+  private lockedSelection: { effectId: string; entryIndex: number | null } | null = null;
+  private readonly historyDepth: number;
+  private readonly dialogs: EffectSwitchPrompts | undefined;
+  /**
+   * Undo/redo, scoped to the active editing context (spec 010 correction pass, item 6 — this
+   * pass's fix to spec 009's undo/redo). `editingContextId` names which effect (or `null`, no
+   * effect selected) `history` belongs to; switching to a *different* effect always starts a
+   * fresh `EditHistory` seeded at the project as it stood the moment the switch happens
+   * (`beginEditingContext`), so `undo()`/`redo()` are structurally incapable of reaching an edit
+   * made in a different context — there is nothing else in `history` to reach. `contextBaseline`
+   * is what "Discard" (in the leave-with-unsaved-changes prompt) reverts to; kept as its own
+   * field rather than replayed via repeated `history.undo()` so it stays correct even once the
+   * bounded history has dropped its oldest entries.
+   */
+  private history: EditHistory;
+  private editingContextId: string | null;
+  private contextBaseline: Project;
   private cameraOn = false;
   private projectIsActive = false;
   /** Diagnostics from the most recent runtime frame, keyed `effectId\u0000actionType`. */
@@ -193,6 +251,11 @@ export class EditorShell {
     this.capabilities = { has: () => false, all: () => [] };
     this.selectedEffectId = this.project.catalog.effects[0]?.id ?? null;
     this.poses = options.poses;
+    this.historyDepth = options.historyDepth ?? DEFAULT_HISTORY_DEPTH;
+    this.dialogs = options.dialogs;
+    this.editingContextId = this.selectedEffectId;
+    this.contextBaseline = this.project;
+    this.history = new EditHistory(this.project, this.historyDepth);
 
     const slot = (named: HTMLElement | undefined): HTMLElement => named ?? options.layout.right;
 
@@ -314,6 +377,7 @@ export class EditorShell {
       registry: this.registry,
       onParamsChange: (params) => this.updateSelectedParams(params),
       onDurationChange: (durationMs) => this.updateSelectedDuration(durationMs),
+      onToggleLock: () => (this.inspectorLocked ? this.unlockInspector() : this.lockInspector()),
       ...(options.createPreview === undefined ? {} : { createPreview: options.createPreview }),
     });
     slot(options.layout.inspector).append(this.inspector.root);
@@ -405,12 +469,134 @@ export class EditorShell {
     return { effectId: this.selectedEffectId, entryIndex: this.selectedEntryIndex };
   }
 
-  /** Replace the whole project (Project panel's "load"/"import"). */
+  /** Whether the Inspector is currently held on a captured selection (FR-015). */
+  get inspectorLocked(): boolean {
+    return this.lockedSelection !== null;
+  }
+
+  /**
+   * Hold the Inspector on the current selection — a later selection change elsewhere no longer
+   * replaces its content (FR-016). A no-op when nothing is selected: there is nothing to hold.
+   */
+  lockInspector(): void {
+    if (this.selectedEffectId === null) {
+      return;
+    }
+    this.lockedSelection = { effectId: this.selectedEffectId, entryIndex: this.selectedEntryIndex };
+    this.renderInspector();
+  }
+
+  /** Return to showing whatever is currently selected live (FR-017). */
+  unlockInspector(): void {
+    this.lockedSelection = null;
+    this.renderInspector();
+  }
+
+  /** Whether the active editing context has an edit undo could step back to (spec 010
+   *  correction pass, item 6 — also what "this effect has unsaved changes" means). */
+  get canUndo(): boolean {
+    return this.history.state.canUndo;
+  }
+
+  /** Whether the active editing context has an undone edit redo could step forward to. */
+  get canRedo(): boolean {
+    return this.history.state.canRedo;
+  }
+
+  /**
+   * Step back one edit **within the active editing context only** (spec 010 correction pass,
+   * item 6). `this.history` belongs exclusively to `editingContextId` — there is no other
+   * context's edit for this call to reach, by construction, not by a check here. A context with
+   * nothing to undo makes this a no-op, the same as `EditHistory.undo()` already returning `null`.
+   */
+  undo(): void {
+    const previous = this.history.undo();
+    if (previous !== null) {
+      this.applyExternalProject(previous);
+    }
+  }
+
+  /** Step forward one undone edit, within the active editing context only. */
+  redo(): void {
+    const next = this.history.redo();
+    if (next !== null) {
+      this.applyExternalProject(next);
+    }
+  }
+
+  /** Start a fresh editing context — a new bounded undo/redo history seeded at `baseline`, and a
+   *  new discard target. Called on construction, on opening a different project, and every time
+   *  a context switch (see {@link requestContextSwitch}) actually proceeds. */
+  private beginEditingContext(effectId: string | null, baseline: Project): void {
+    this.editingContextId = effectId;
+    this.contextBaseline = baseline;
+    this.history = new EditHistory(baseline, this.historyDepth);
+  }
+
+  /**
+   * The gate every effect-selection change goes through (spec 010 correction pass, item 6):
+   * switching to a *different* effect while the current one has unsaved edits must not silently
+   * carry that history into the new context.
+   *
+   * Selecting the effect already active (`targetEffectId === editingContextId`), or a context
+   * with nothing undoable, or — deliberately — no `dialogs` configured at all, all take the
+   * synchronous fast path: apply the change immediately and start the new context, exactly the
+   * timing every call site had before this feature existed. Only a genuinely dirty context with
+   * a real `dialogs` host takes the async Save/Discard/Cancel branch; Cancel leaves everything
+   * exactly as it was (`apply` is never called), Discard reverts `this.project` to
+   * `contextBaseline` first, and both Save and Discard then proceed with the switch.
+   */
+  private requestContextSwitch(targetEffectId: string | null, apply: () => void): void {
+    if (targetEffectId === this.editingContextId) {
+      apply();
+      return;
+    }
+    if (!this.history.state.canUndo || this.dialogs === undefined) {
+      apply();
+      this.beginEditingContext(targetEffectId, this.project);
+      return;
+    }
+
+    const effectName = this.currentEffect()?.name ?? 'This effect';
+    void this.dialogs
+      .chooseAction<'save' | 'discard' | 'cancel'>({
+        title: 'Unsaved changes',
+        message:
+          '"' +
+          effectName +
+          '" has changes you haven’t left behind yet. Save them and continue, discard ' +
+          'them and continue, or stay on this effect?',
+        actions: [
+          { label: 'Save', value: 'save' },
+          { label: 'Discard', value: 'discard', tone: 'danger' },
+        ],
+        cancelLabel: 'Cancel',
+        cancelValue: 'cancel',
+      })
+      .then((choice) => {
+        if (choice === 'cancel') {
+          return;
+        }
+        if (choice === 'discard') {
+          this.project = this.contextBaseline;
+          this.pushCatalog();
+          this.renderAll();
+          this.onProjectChange?.(this.project);
+        }
+        apply();
+        this.beginEditingContext(targetEffectId, this.project);
+      });
+  }
+
+  /** Replace the whole project (Project panel's "load"/"import"). A different project's edit
+   *  history is never this one's — always a fresh editing context, never the leave-with-
+   *  unsaved-changes prompt (that prompt is about switching effects within one open project). */
   loadProject(project: Project): void {
     this.project = project;
     this.selectedEffectId = project.catalog.effects[0]?.id ?? null;
     this.selectedEntryIndex = null;
     this.diagnostics.clear();
+    this.beginEditingContext(this.selectedEffectId, this.project);
     this.pushCatalog();
     this.renderAll();
     this.onProjectChange?.(this.project);
@@ -443,6 +629,7 @@ export class EditorShell {
   /** Replace the project's asset library (the asset-library panel's "add"/"remove"). */
   updateAssetLibrary(library: Project['assetLibrary']): void {
     this.project = { ...this.project, assetLibrary: library };
+    this.history.record(this.project);
     this.renderAll();
     this.onProjectChange?.(this.project);
   }
@@ -450,6 +637,7 @@ export class EditorShell {
   /** Replace the project's camera-treatment settings (the camera panel's edits). */
   updateCameraTreatment(settings: Project['cameraTreatment']): void {
     this.project = { ...this.project, cameraTreatment: settings };
+    this.history.record(this.project);
     this.onProjectChange?.(this.project);
   }
 
@@ -463,6 +651,7 @@ export class EditorShell {
    */
   renameProject(name: string): void {
     this.project = renameProjectData(this.project, name);
+    this.history.record(this.project);
     this.onProjectChange?.(this.project);
   }
 
@@ -479,6 +668,7 @@ export class EditorShell {
     // Deliberately *not* routed through `editTimeline`: that would re-render the effect panel
     // mid-commit, and the panel is what called this.
     this.project = renameEffectData(this.project, this.selectedEffectId, name);
+    this.history.record(this.project);
     this.pushCatalog();
     this.renderAll();
     this.onProjectChange?.(this.project);
@@ -537,22 +727,32 @@ export class EditorShell {
     this.renderInspector();
   }
 
-  /** Make `effectId` the current effect, clearing the clip selection. */
+  /** Make `effectId` the current effect, clearing the clip selection. Gated by
+   *  {@link requestContextSwitch} when this actually leaves a dirty editing context (spec 010
+   *  correction pass, item 6). */
   selectEffect(effectId: string | null): void {
-    this.selectedEffectId = effectId;
-    this.selectedEntryIndex = null;
-    if (effectId !== null) {
-      this.onRevealSurface?.('effect');
-    }
-    this.renderAll();
+    this.requestContextSwitch(effectId, () => {
+      this.selectedEffectId = effectId;
+      this.selectedEntryIndex = null;
+      this.pushCatalog(); // re-scope editor-preview isolation to the new selection (FR-027)
+      if (effectId !== null) {
+        this.onRevealSurface?.('effect');
+      }
+      this.renderAll();
+    });
   }
 
-  /** Select one clip of one effect — what both the tree and the timeline do. */
+  /** Select one clip of one effect — what both the tree and the timeline do. Selecting a clip
+   *  that belongs to a *different* effect than the active one is itself a context switch, and
+   *  gated the same as {@link selectEffect}; selecting another clip of the same effect is not. */
   selectAction(effectId: string, entryIndex: number): void {
-    this.selectedEffectId = effectId;
-    this.selectedEntryIndex = entryIndex;
-    this.onRevealSurface?.('inspector');
-    this.renderAll();
+    this.requestContextSwitch(effectId, () => {
+      this.selectedEffectId = effectId;
+      this.selectedEntryIndex = entryIndex;
+      this.pushCatalog(); // re-scope editor-preview isolation to the new selection (FR-027)
+      this.onRevealSurface?.('inspector');
+      this.renderAll();
+    });
   }
 
   private requireEffectId(): string {
@@ -574,12 +774,14 @@ export class EditorShell {
    */
   private createEffect(): void {
     const effect = createNewEffect(this.project, this.poses);
-    this.project = withEffect(this.project, effect);
-    this.selectedEffectId = effect.id;
-    this.selectedEntryIndex = null;
-    this.pushCatalog();
-    this.renderAll();
-    this.onProjectChange?.(this.project);
+    this.requestContextSwitch(effect.id, () => {
+      this.project = withEffect(this.project, effect);
+      this.selectedEffectId = effect.id;
+      this.selectedEntryIndex = null;
+      this.pushCatalog();
+      this.renderAll();
+      this.onProjectChange?.(this.project);
+    });
   }
 
   private addAction(actionType: string): void {
@@ -643,13 +845,20 @@ export class EditorShell {
 
   private editTimeline(edit: (project: Project) => Project): void {
     this.project = edit(this.project);
+    this.history.record(this.project); // into the active editing context only (spec 010, item 6)
     this.pushCatalog();
     this.renderAll();
     this.onProjectChange?.(this.project);
   }
 
+  /**
+   * Feeds the runtime the catalog it should actually match live poses against — at most the
+   * effect currently selected for editing, never the whole project (FR-024 – FR-027, research
+   * D8). Called after every edit, and after every selection change: a selection change alone,
+   * with no edit, must re-scope isolation immediately.
+   */
   private pushCatalog(): void {
-    this.runtime.setCatalog(this.project.catalog);
+    this.runtime.setCatalog(isolatedCatalog(this.project.catalog, this.selectedEffectId));
   }
 
   /** Test Trigger (item 15) — inject the event, then report what the runtime actually did. */
@@ -819,10 +1028,29 @@ export class EditorShell {
   }
 
   private renderInspector(): void {
-    const effect = this.currentEffect();
+    // A locked target that stopped resolving (its effect or entry no longer exists — an edit,
+    // an undo/redo, or a project switch) auto-unlocks rather than showing stale/wrong content
+    // (FR-018, FR-019). This runs on every render, so it needs no separate call site.
+    if (this.lockedSelection !== null) {
+      const lockedEffect = findEffect(this.project, this.lockedSelection.effectId);
+      const stillResolves =
+        lockedEffect !== undefined &&
+        (this.lockedSelection.entryIndex === null ||
+          lockedEffect.timeline.entries[this.lockedSelection.entryIndex] !== undefined);
+      if (!stillResolves) {
+        this.lockedSelection = null;
+      }
+    }
+
+    const locked = this.lockedSelection;
+    const effectiveEffectId = locked !== null ? locked.effectId : this.selectedEffectId;
+    const effectiveEntryIndex = locked !== null ? locked.entryIndex : this.selectedEntryIndex;
+
+    const effect =
+      effectiveEffectId === null ? undefined : findEffect(this.project, effectiveEffectId);
     const selectedEntry =
-      effect !== undefined && this.selectedEntryIndex !== null
-        ? effect.timeline.entries[this.selectedEntryIndex]
+      effect !== undefined && effectiveEntryIndex !== null
+        ? effect.timeline.entries[effectiveEntryIndex]
         : undefined;
     if (selectedEntry === undefined || effect === undefined) {
       // Which empty this is, named rather than guessed — the three states need three answers.
@@ -837,6 +1065,7 @@ export class EditorShell {
         emptyReason,
         assetLibrary: this.project.assetLibrary.entries,
         cameraAttached: this.runtimeController.hasCamera,
+        locked: this.inspectorLocked,
         ...(this.resolveAsset === undefined ? {} : { resolveAsset: this.resolveAsset }),
       });
       return;
@@ -848,7 +1077,7 @@ export class EditorShell {
         actionType: selectedEntry.action.type,
         params: selectedEntry.action.params,
         effectId: effect.id,
-        entryIndex: this.selectedEntryIndex ?? 0,
+        entryIndex: effectiveEntryIndex ?? 0,
         diagnostics,
         ...(selectedEntry.durationMs === undefined ? {} : { durationMs: selectedEntry.durationMs }),
       },
@@ -856,6 +1085,7 @@ export class EditorShell {
         capabilities: this.capabilities,
         assetLibrary: this.project.assetLibrary.entries,
         cameraAttached: this.runtimeController.hasCamera,
+        locked: this.inspectorLocked,
         ...(this.resolveAsset === undefined ? {} : { resolveAsset: this.resolveAsset }),
       },
     );

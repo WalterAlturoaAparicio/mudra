@@ -67,18 +67,28 @@ describe('registering panels', () => {
 
 describe('showing and hiding', () => {
   it('hides a panel without unregistering it, so View can reopen it', () => {
-    const { layout, register } = buildLayout();
-    register('assets');
+    const { layout } = buildLayout();
+    const element = document.createElement('div');
+    const panelHost = layout.registerPanel({
+      id: 'assets',
+      label: 'assets',
+      region: 'left',
+      element,
+    });
 
     layout.setPanelVisible('assets', false);
 
     expect(layout.isPanelVisible('assets')).toBe(false);
-    expect(host(layout, 'assets').hidden).toBe(true);
+    expect(panelHost.hidden).toBe(true);
+    // A closed panel consumes no layout space at all (spec 010 correction pass, item 4) — its
+    // host is detached, not merely `hidden` in place.
+    expect(layout.root.contains(panelHost)).toBe(false);
     // Still listed — this is the whole point.
     expect(layout.listPanels().map((panel) => panel.id)).toContain('assets');
 
     layout.setPanelVisible('assets', true);
-    expect(host(layout, 'assets').hidden).toBe(false);
+    expect(panelHost.hidden).toBe(false);
+    expect(layout.root.contains(panelHost)).toBe(true);
   });
 
   it('toggles, and reports each change for persistence', () => {
@@ -145,7 +155,7 @@ describe('presets', () => {
 });
 
 describe('persistence', () => {
-  it('getLayout carries sizes, hidden panels and the preset as one record', () => {
+  it('getLayout carries sizes, hidden panels, the preset, and the docking arrangement as one record', () => {
     const { layout, register } = buildLayout();
     register('assets');
     layout.applyPreset('Wide stage');
@@ -155,6 +165,12 @@ describe('persistence', () => {
       ...LAYOUT_PRESETS['Wide stage'],
       hiddenPanels: ['assets'],
       preset: 'Wide stage',
+      // spec 010: added alongside sizes/hiddenPanels/preset, the same optional-field extension
+      // pattern those two already established (domain/ports/layout-store.ts). "assets" was the
+      // zone's only panel and is now closed, so its tree is empty — dropped from zoneLayouts
+      // entirely (a null tree is not persisted), not present as an empty stub.
+      activeLayoutId: 'standard',
+      zoneLayouts: {},
     });
   });
 

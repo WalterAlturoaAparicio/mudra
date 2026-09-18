@@ -25,6 +25,27 @@ export interface ConfirmDialogOptions {
   readonly tone?: 'normal' | 'danger';
 }
 
+/** One labeled action in a {@link DialogHost.chooseAction} choice. */
+export interface DialogAction<T> {
+  readonly label: string;
+  readonly value: T;
+  /** `danger` marks an action that discards something. */
+  readonly tone?: 'normal' | 'danger';
+}
+
+/** What a multi-way choice asks (spec 010 correction pass, item 6 — Save/Discard/Cancel when
+ *  leaving an effect with unsaved changes). */
+export interface ChooseActionOptions<T> {
+  readonly title: string;
+  readonly message: string;
+  /** Shown left-to-right, before the implicit Cancel button. */
+  readonly actions: readonly DialogAction<T>[];
+  readonly cancelLabel?: string;
+  /** What resolves the promise when the choice is cancelled (Escape, backdrop, or the Cancel
+   *  button) — named explicitly, since a 3+-way choice has no single obvious `false`. */
+  readonly cancelValue: T;
+}
+
 /** What a single-field prompt asks. */
 export interface PromptDialogOptions {
   readonly title: string;
@@ -107,6 +128,47 @@ export class DialogHost {
         () => this.finish(resolve, false),
       );
 
+      this.show();
+      this.focusFirst('button.mudra-dialog__confirm');
+    });
+  }
+
+  /**
+   * Ask a question with an arbitrary number of labeled actions plus an implicit Cancel (spec 010
+   * correction pass — Save/Discard/Cancel when leaving an effect with unsaved changes). The
+   * two-button `confirm()` above stays as it is for its own two callers; this is for the case a
+   * plain yes/no does not fit.
+   */
+  chooseAction<T>(options: ChooseActionOptions<T>): Promise<T> {
+    return new Promise<T>((resolve) => {
+      const body = this.beginDialog(options.title, resolve, options.cancelValue);
+
+      const message = this.document.createElement('p');
+      message.className = 'mudra-dialog__message';
+      message.textContent = options.message;
+      body.append(message);
+
+      const actions = this.document.createElement('div');
+      actions.className = 'mudra-dialog__actions';
+
+      const cancel = this.document.createElement('button');
+      cancel.type = 'button';
+      cancel.className = 'mudra-dialog__cancel';
+      cancel.textContent = options.cancelLabel ?? 'Cancel';
+      cancel.addEventListener('click', () => this.finish(resolve, options.cancelValue));
+      actions.append(cancel);
+
+      for (const action of options.actions) {
+        const button = this.document.createElement('button');
+        button.type = 'button';
+        button.className = 'mudra-dialog__confirm';
+        button.dataset['tone'] = action.tone ?? 'normal';
+        button.textContent = action.label;
+        button.addEventListener('click', () => this.finish(resolve, action.value));
+        actions.append(button);
+      }
+
+      body.append(actions);
       this.show();
       this.focusFirst('button.mudra-dialog__confirm');
     });

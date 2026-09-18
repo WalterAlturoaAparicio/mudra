@@ -21,6 +21,7 @@ import { EffectRuntime } from '../../src/domain/runtime/effect-runtime';
 import type { RenderCommand } from '../../src/domain/runtime/frame-output';
 import type { PoseMatcher } from '../../src/domain/recognition/types';
 import { EditorShell } from '../../src/presentation/editor/editor-shell';
+import type { EffectSwitchPrompts } from '../../src/presentation/editor/editor-shell';
 import type { PoseOption } from '../../src/presentation/editor/pose-trigger-panel';
 
 const registry = createActionRegistry();
@@ -276,5 +277,247 @@ describe('keyboard deletion of the selected clip (item 12)', () => {
     clip(layout).dispatchEvent(new MouseEvent('click', { bubbles: true }));
     keydown('a');
     expect(shell.currentProject.catalog.effects[0]!.timeline.entries).toHaveLength(1);
+  });
+});
+
+describe('Inspector lock (US4, spec 010 FR-015 – FR-019)', () => {
+  it('locking holds the Inspector’s content across a later selection change', () => {
+    const { shell, layout } = buildShell(projectWithEffects());
+    clip(layout).dispatchEvent(new MouseEvent('click', { bubbles: true })); // e1's screen_flash clip
+    const lockedLabels = inspectorFieldLabels(layout);
+    expect(lockedLabels).toContain('intensity');
+
+    shell.lockInspector();
+    const effectSelect = layout.center.querySelector<HTMLSelectElement>('select')!;
+    effectSelect.value = 'e2';
+    effectSelect.dispatchEvent(new Event('change', { bubbles: true })); // would normally clear the Inspector
+
+    expect(inspectorFieldLabels(layout)).toEqual(lockedLabels);
+    expect(shell.inspectorLocked).toBe(true);
+  });
+
+  it('unlocking immediately shows whatever is currently selected live', () => {
+    const { shell, layout } = buildShell(projectWithEffects());
+    clip(layout).dispatchEvent(new MouseEvent('click', { bubbles: true })); // e1's screen_flash clip
+    shell.lockInspector();
+
+    const effectSelect = layout.center.querySelector<HTMLSelectElement>('select')!;
+    effectSelect.value = 'e2';
+    effectSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    clip(layout).dispatchEvent(new MouseEvent('click', { bubbles: true })); // e2's particle_burst clip
+    expect(inspectorFieldLabels(layout)).toContain('intensity'); // still holding e1 while locked
+
+    shell.unlockInspector();
+
+    expect(inspectorFieldLabels(layout)).toContain('count');
+    expect(shell.inspectorLocked).toBe(false);
+  });
+
+  it('when the locked clip stops existing (e.g. an undo), the Inspector falls back to empty and unlocks', () => {
+    const { shell, layout } = buildShell(projectWithEffects());
+    clip(layout).dispatchEvent(new MouseEvent('click', { bubbles: true })); // e1's screen_flash clip
+    shell.lockInspector();
+
+    const effectSelect = layout.center.querySelector<HTMLSelectElement>('select')!;
+    effectSelect.value = 'e2';
+    effectSelect.dispatchEvent(new Event('change', { bubbles: true })); // live selection moves away
+
+    const effects = twoEffects();
+    const withoutLockedEntry = {
+      ...effects[0]!,
+      timeline: { ...effects[0]!.timeline, entries: [] },
+    };
+    const project = createProject(
+      { version: 1, effects: [withoutLockedEntry, effects[1]!] },
+      'p1',
+      'Project One',
+      1000,
+    );
+    shell.applyExternalProject(project); // exactly what undo/redo drives
+
+    expect(inspectorFieldLabels(layout)).toEqual([]);
+    expect(shell.inspectorLocked).toBe(false);
+  });
+});
+
+/**
+ * A minimal fake for `EffectSwitchPrompts` — resolves every `chooseAction` call with whatever
+ * `nextChoice` currently holds, and records every call it was given so a test can assert what
+ * was actually asked, not just what happened after.
+ */
+function fakeDialogs(): {
+  dialogs: EffectSwitchPrompts;
+  calls: { title: string; message: string }[];
+  nextChoice: 'save' | 'discard' | 'cancel';
+} {
+  const calls: { title: string; message: string }[] = [];
+  const state: { nextChoice: 'save' | 'discard' | 'cancel' } = { nextChoice: 'save' };
+  return {
+    calls,
+    get nextChoice() {
+      return state.nextChoice;
+    },
+    set nextChoice(value: 'save' | 'discard' | 'cancel') {
+      state.nextChoice = value;
+    },
+    dialogs: {
+      chooseAction: async <T extends string>(options: {
+        readonly title: string;
+        readonly message: string;
+      }): Promise<T> => {
+        calls.push({ title: options.title, message: options.message });
+        return state.nextChoice as unknown as T;
+      },
+    },
+  };
+}
+
+function buildShellWithDialogs(
+  project: Project,
+  dialogs: ReturnType<typeof fakeDialogs>['dialogs'],
+) {
+  const runtime = new EffectRuntime({
+    catalog: project.catalog,
+    registry,
+    capabilities: defaultCapabilities(),
+  });
+  const controller = new EditorRuntimeController({
+    runtime,
+    stage: new RecordingStage(),
+    matcher: unusedMatcher,
+    config: DEFAULT_SESSION_CONFIG,
+    now: () => 1000,
+    scheduleTick: () => {},
+  });
+  const layout = {
+    center: document.createElement('div'),
+    right: document.createElement('div'),
+    timeline: document.createElement('div'),
+  };
+  const projectChanges: Project[] = [];
+  const shell = new EditorShell({
+    document,
+    layout,
+    registry,
+    runtimeController: controller,
+    runtime,
+    stageCanvas: document.createElement('canvas'),
+    initialProject: project,
+    poses,
+    dialogs,
+    onProjectChange: (changed) => projectChanges.push(changed),
+  });
+  return { shell, layout, projectChanges };
+}
+
+async function flush(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
+describe('undo/redo is scoped to the active editing context (spec 010 correction pass, item 6)', () => {
+  it('editing effect A, switching to B, then undo never touches A (no dialogs configured — the common test/no-op-prompt path)', () => {
+    const { shell, layout } = buildShell(projectWithEffects());
+    clip(layout).dispatchEvent(new MouseEvent('click', { bubbles: true })); // select e1's clip
+    const before = shell.currentProject;
+
+    shell.selectEffect('e2'); // no `dialogs` configured — proceeds silently, exactly as before
+    shell.undo(); // e2's brand-new context has nothing to undo
+
+    expect(shell.currentProject).toBe(before); // unchanged — undo had nothing to do in e2's context
+    expect(shell.canUndo).toBe(false);
+  });
+
+  it('an edit made while B is active is undoable there, and does not resurrect after switching back to A', () => {
+    const { shell } = buildShell(projectWithEffects());
+    shell.selectEffect('e2');
+    shell.renameSelectedEffect('Renamed while on e2');
+    expect(shell.canUndo).toBe(true);
+
+    shell.selectEffect('e1'); // a fresh context for e1 — its own, separate history
+    expect(shell.canUndo).toBe(false); // nothing recorded in e1's brand-new context
+
+    shell.undo(); // no-op: nothing to undo here
+    expect(shell.currentProject.catalog.effects.find((e) => e.id === 'e2')?.name).toBe(
+      'Renamed while on e2',
+    ); // e2's edit was never touched by an undo issued while e1 is active
+  });
+
+  it('redo is likewise scoped — redoing after a context switch has nothing to reach for', () => {
+    const { shell } = buildShell(projectWithEffects());
+    shell.renameSelectedEffect('Renamed e1');
+    shell.undo();
+    expect(shell.canRedo).toBe(true);
+
+    shell.selectEffect('e2');
+    expect(shell.canRedo).toBe(false);
+    shell.redo();
+    expect(shell.currentProject.catalog.effects.find((e) => e.id === 'e1')?.name).not.toBe(
+      'Renamed e1',
+    ); // redo in e2's context did not resurrect e1's undone rename
+  });
+});
+
+describe('leaving an effect with unsaved changes prompts Save/Discard/Cancel (spec 010, item 6)', () => {
+  it('switching with no edit never prompts, even with dialogs configured', () => {
+    const fake = fakeDialogs();
+    const { shell } = buildShellWithDialogs(projectWithEffects(), fake.dialogs);
+
+    shell.selectEffect('e2');
+
+    expect(fake.calls).toHaveLength(0);
+    expect(shell.selection.effectId).toBe('e2');
+  });
+
+  it('Cancel leaves the author on the original effect with the edit intact', async () => {
+    const fake = fakeDialogs();
+    fake.nextChoice = 'cancel';
+    const { shell } = buildShellWithDialogs(projectWithEffects(), fake.dialogs);
+    shell.renameSelectedEffect('Edited e1');
+
+    shell.selectEffect('e2');
+    await flush();
+
+    expect(fake.calls).toHaveLength(1);
+    expect(shell.selection.effectId).toBe('e1'); // never switched
+    expect(shell.currentProject.catalog.effects.find((e) => e.id === 'e1')?.name).toBe('Edited e1');
+  });
+
+  it('Save keeps the edit and completes the switch', async () => {
+    const fake = fakeDialogs();
+    fake.nextChoice = 'save';
+    const { shell } = buildShellWithDialogs(projectWithEffects(), fake.dialogs);
+    shell.renameSelectedEffect('Edited e1');
+
+    shell.selectEffect('e2');
+    await flush();
+
+    expect(shell.selection.effectId).toBe('e2');
+    expect(shell.currentProject.catalog.effects.find((e) => e.id === 'e1')?.name).toBe('Edited e1');
+  });
+
+  it('Discard reverts the effect to how it was when this editing session began, then completes the switch', async () => {
+    const fake = fakeDialogs();
+    fake.nextChoice = 'discard';
+    const { shell } = buildShellWithDialogs(projectWithEffects(), fake.dialogs);
+    shell.renameSelectedEffect('Edited e1');
+
+    shell.selectEffect('e2');
+    await flush();
+
+    expect(shell.selection.effectId).toBe('e2');
+    expect(shell.currentProject.catalog.effects.find((e) => e.id === 'e1')?.name).toBe(
+      'First effect',
+    ); // back to its original, pre-edit name
+  });
+
+  it('selecting a different clip of the same effect never prompts, however dirty that effect is', () => {
+    const fake = fakeDialogs();
+    const { shell } = buildShellWithDialogs(projectWithEffects(), fake.dialogs);
+    shell.renameSelectedEffect('Edited e1');
+
+    shell.selectAction('e1', 0); // same effect, different (or same) clip — not a context switch
+
+    expect(fake.calls).toHaveLength(0);
   });
 });

@@ -11,7 +11,7 @@ import 'fake-indexeddb/auto';
 import { describe, expect, it } from 'vitest';
 
 import { IndexedDbLayoutStore } from '../../src/infrastructure/persistence/indexeddb-layout-store';
-import type { PanelSizes } from '../../src/domain/ports/layout-store';
+import type { EditorLayout, PanelSizes } from '../../src/domain/ports/layout-store';
 
 let dbCounter = 0;
 function uniqueDbName(): string {
@@ -47,5 +47,42 @@ describe('IndexedDbLayoutStore', () => {
 
     const second = new IndexedDbLayoutStore(name);
     expect(await second.load()).toEqual(sizes);
+  });
+});
+
+describe('docking arrangement fields (spec 010, contracts/docking-persistence.md)', () => {
+  it('a record with only sizes (no activeLayoutId/zoneLayouts) loads with both undefined', async () => {
+    // Simulates a record written before this feature existed: the caller supplies only the
+    // fields that always existed, exactly what an old EditorLayout value looked like.
+    const store = new IndexedDbLayoutStore(uniqueDbName());
+    const preFeature: PanelSizes = { leftWidth: 300, rightWidth: 260, timelineHeight: 180 };
+    await store.save(preFeature);
+
+    const loaded = await store.load();
+    expect(loaded?.activeLayoutId).toBeUndefined();
+    expect(loaded?.zoneLayouts).toBeUndefined();
+    expect(loaded).toEqual(preFeature);
+  });
+
+  it('round-trips a record with both new fields populated, dock trees included', async () => {
+    const store = new IndexedDbLayoutStore(uniqueDbName());
+    const layout: EditorLayout = {
+      leftWidth: 260,
+      rightWidth: 340,
+      timelineHeight: 220,
+      activeLayoutId: 'standard',
+      zoneLayouts: {
+        right: {
+          kind: 'split',
+          direction: 'column',
+          children: [
+            { kind: 'leaf', panelIds: ['inspector', 'trigger'] },
+            { kind: 'leaf', panelIds: ['diagnostics'] },
+          ],
+        },
+      },
+    };
+    await store.save(layout);
+    expect(await store.load()).toEqual(layout);
   });
 });

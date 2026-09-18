@@ -205,3 +205,12 @@ a resulting diff treated as a cross-application event to be handled deliberately
 - **Per-particle textures / sprite particles.** `drawCircles` carries points, radii, colour and
   optional per-point opacity. Sprites would mean a texture-aware command and the image-loading
   seam `drawMaskedImage` introduced; possible, not free.
+- **A unified toast/notification system.** Noticed while correcting spec 010 (2026-09-17): saving
+  displays a "saved" indication that does not reliably clear, so repeated saves can leave a stale
+  message with no way to tell it apart from a fresh one — concretely,
+  `presentation/editor/project-panel.ts`'s `setStatus()`/`statusText` just overwrites a persistent
+  line of text with no lifecycle of its own. The eventual fix is a small, centralized transient-
+  message system (likely anchored top-right) that every feature reports through — successful
+  saves, errors, warnings, informational events — instead of each surface growing its own status
+  line. Not designed or implemented as part of spec 010; that pass only documented the need and
+  left `project-panel.ts`'s existing behavior as-is.

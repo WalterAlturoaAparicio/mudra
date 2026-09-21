@@ -45,6 +45,10 @@ export interface EditorLayout extends PanelSizes {
    *  that shape was only ever produced by this same in-flight feature, never released, so no
    *  migration path is needed for it specifically (contracts/docking-persistence.md). */
   readonly zoneLayouts?: Readonly<Record<string, DockNodeData>>;
+  /** Which tab is active in each multi-tab group, keyed by the group's sorted member panel ids
+   *  joined with `|`. Optional: a record written before it existed loads with each group on
+   *  its first tab. */
+  readonly activeTabs?: Readonly<Record<string, string>>;
 }
 
 /** One docking zone's tree: either a tab group (a leaf, more than one panel id meaning more than

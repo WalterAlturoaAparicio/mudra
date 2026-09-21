@@ -1,6 +1,64 @@
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 1.9.0 → 1.10.0
+Rationale: A fourth Mudra Web milestone is authorized, in stages: Face Tracking and Face Effects.
+Every earlier authorization excluded it (v1.6.0 and v1.7.0 grant no face capability; specs/009 Out
+of Scope; future-work.md Section A), and a reconciliation audit on 2026-09-21 established the facts
+the amendment rests on: `@mediapipe/tasks-vision` 0.10.35 is already installed and exports
+`FaceLandmarker`; no face model, port, capability, anchor kind or command exists in the repository;
+`probeCapabilities` is shaped for one capability; `AnchorResolver` sees hands only; region masks
+are named `'person' | 'background'` and carry no geometry; the renderer is Canvas2D only; and the
+privacy scan gained `readPixels`/`convertToBlob`. MINOR — one new authorized-milestone entry
+(Principle VI) and one new Web-standards bullet; no principle is removed, weakened, or redefined.
+Principle II is restated as binding, not amended.
+
+Modified in this amendment (1.10.0):
+  - Principle VI (Scope Discipline) — NEW entry, "Mudra Web — Milestone 4: Face Tracking and Face
+    Effects (authorized in stages, added in v1.10.0)": (a) a `face_landmarks` capability, probed
+    like `person_segmentation` and independently of it; (b) reuse of the existing MediaPipe Tasks
+    Vision runtime, and a repository-level face model asset under the shared-asset rule with
+    stated provenance, no runtime model download, and no placeholder dependency; (c) a
+    framework-free domain face abstraction behind a replaceable port, MediaPipe types outside
+    `src/domain/`; (d) face anchors and regions through the one centralized anchor system, existing
+    actions reused rather than duplicated, and a generalized geometry/masking representation left
+    to the specification; (e) an initial non-mesh effect family Canvas2D can honestly perform;
+    (f) mesh deformation/warping explicitly NOT authorized, WebGL/WebGPU not committed to, a mesh
+    renderer to be evaluated by its own amendment; (g) Principle II restated: no readback,
+    screenshot, recording, image serialization, upload or face-image persistence, and face-derived
+    numeric data is transient and never persisted; (h) a recognition boundary — landmark tracking
+    and effects authorized; face recognition, identity matching, biometric identification and
+    attribute/expression inference not; (i) Capture Mode, the pose-sample schema, docking/tabs and
+    undo/redo untouched; (j) staging direction, smallest vertical slice first.
+  - Technology & Code Quality Standards, "Web applications" subsection — NEW bullet stating the
+    face backend/asset/domain-boundary rules as standing standards for `apps/web/`.
+  - Principle VI rationale — one passage added for Milestone 4.
+
+Principles I–VI: unchanged in intent. No earlier authorization is narrowed or widened, and the
+v1.7.0 rule that Canvas2D is the default and required renderer (no WebGL/Three.js/Pixi.js/3D
+stack) remains in force.
+
+Templates requiring updates:
+  - ✅ .specify/templates/plan-template.md — Constitution Check reads "[Gates determined based on
+    constitution file]"; it is principle-generic and evaluates the new entry with no edit.
+  - ✅ .specify/templates/spec-template.md — no mandatory section added or removed.
+  - ✅ .specify/templates/tasks-template.md — no new principle-driven task category.
+  - ⚠ future-work.md Section A.9 — still says constitutional authorization is "blocked"; update
+    it to "authorized in v1.10.0, in stages" (see follow-ups).
+
+Deferred / follow-up TODOs:
+  - future-work.md Section A.9: update the "blocked" line together with the Spec 011 work.
+  - The Face Landmarker model choice, version, provenance record, source and integrity identifier
+    — deliberately NOT selected here; the specification/plan picks them, and the asset is added
+    only in the feature that uses it.
+  - Whether an additional user-facing disclosure or opt-in beyond camera start is needed — this
+    amendment requires the specification to decide and state it; it does not pre-decide it.
+  - Mesh/deformation rendering (WebGL/WebGPU) — needs its own amendment with a demonstrated
+    Canvas2D incapability; not authorized here.
+  - Face recognition, identity or biometric matching, attribute/expression inference, face-driven
+    triggers, and face data in any persisted schema — not authorized here.
+
+--- previous report (1.9.0 supersedes the reports below it) ---
 Version change: 1.8.0 → 1.9.0
 Rationale: A third round of Mudra Web editor work is authorized, all scoped to the existing
 effect editor and none of it a new top-level milestone: panel docking and tabs over the editor's
@@ -706,6 +764,123 @@ state under the rule Milestone 2 already established ("editor-only state ... is 
 presentation state, never domain state") — none of them is a project-document field, and none
 requires a Principle II restatement, since none of them touches imagery or camera data.
 
+**Mudra Web — Milestone 4: Face Tracking and Face Effects (authorized in stages, added in
+v1.10.0)**: a fourth milestone is authorized for `apps/web/`. Face tracking and face effects were
+excluded by every earlier authorization; this amendment lifts exactly the following, and nothing
+else. It authorizes a *direction and its boundaries*, not a single deliverable: each stage below
+MAY be its own specification, and the first specification MUST define the **smallest viable
+vertical slice** rather than the whole direction.
+
+This authorization permits exactly:
+
+1. **A `face_landmarks` runtime capability**, one more entry in the capability registry Milestone
+   1 defined and Milestone 2 made runtime-probed. Availability MUST be determined by actually
+   attempting to construct what the capability needs — never assumed, never hardcoded — and each
+   capability MUST be probed independently, so the failure of one (a missing model, an
+   unsupported browser) never marks another unavailable. An action that requires `face_landmarks`
+   is inert and explicitly reported when it is unavailable, and MUST NOT be simulated (for
+   example by drawing a fixed oval over a full-frame camera image), exactly as Milestone 2
+   required for segmentation. Face tracking is a **capability that supplies geometry** —
+   landmarks, anchors, region shapes, and blendshape values — to effects. It is not a recognition
+   system, and it MUST NOT feed the pose matcher, the pose-event emitter, or effect triggering.
+2. **Reuse of the existing MediaPipe Tasks Vision runtime** (`@mediapipe/tasks-vision`, already a
+   dependency of `apps/web/`) for face landmarks, rather than a second ML runtime; a second
+   runtime requires its own amendment and a demonstrated incapability of the first. A face model
+   MAY be added as a **repository-level shared asset** under `assets/`, under the same rule as
+   `hand_landmarker.task` and `selfie_segmenter.tflite`: referenced from `assets/`, never copied
+   into `apps/web/`; absent-by-default, with the capability then reported unavailable rather than
+   a build or startup failure; and served from the application's own origin. The feature that
+   adds it MUST record its **provenance** — source, model name and version, and an integrity
+   identifier — beside the existing assets, and MUST obtain it deterministically (a pinned source,
+   by an explicit script). Models MUST NOT be downloaded at runtime from any other origin, and a
+   user-supplied or arbitrary model is not authorized, without a separately authorized design. No
+   dependency, model, or script MAY be added as a placeholder: each arrives in the change that
+   first uses it. *The model itself is deliberately not selected by this amendment.*
+3. **A framework-free domain abstraction for face landmarks**, analogous to the hand-landmark
+   value objects and the `HandDetector` port: a replaceable detector interface plus an immutable,
+   validated value object for one frame's face geometry, constructible in a plain test with no
+   browser. The specification decides the exact names and shape (`FaceDetector`/`FaceFrame` are
+   the anticipated ones) and whether a frame with no face is a value or an absence. MediaPipe
+   symbols and types MUST remain outside `src/domain/`, and the layering test that enforces this
+   MUST be extended to name the face symbols rather than rely only on the package name.
+4. **Face anchors and face regions through the one centralized anchor system.** `AnchorResolver`
+   remains the only place that turns an anchor into a point (FR-058–FR-060): an action MUST NOT
+   contain its own landmark or region lookup, for faces any more than for hands. Anchor kinds MAY
+   be extended to facial landmarks and named facial regions, with the same documented
+   unresolvable-anchor behaviour (hold the last position, else skip and report). Existing actions
+   that take an anchor MUST become face-anchorable by that extension rather than being duplicated
+   into face-specific variants; a new action is justified only where no existing action can
+   express the effect. Where a region needs more than a point, it MUST be carried by a
+   **generalized geometry/masking representation** — a region *name* alone carries no geometry —
+   whose form the specification chooses; this amendment mandates no particular polygon or mask
+   representation, and the existing `'person' | 'background'` region behaviour MUST NOT change.
+5. **An initial family of face effects that Canvas2D can honestly perform without a mesh**:
+   face-region tinting; eye-colour effects; landmark-anchored decals and overlays; overlays
+   modulated by blendshape values; and localized facial masks. These are authored as ordinary
+   effect data (action parameters, anchors, region names, colours, asset references) through the
+   editor and the `EffectRuntime` → `RenderCommand[]` → `Renderer` pipeline, with the Renderer the
+   only component that draws. A new render command is permitted only where the existing
+   vocabulary cannot express an effect, and MUST remain implementable by a renderer that is not
+   Canvas2D — the renderer-independence rule (FR-068) is unchanged. Blendshape values MAY modulate
+   a *running* effect's visual parameters as raw numbers; they MUST NOT be classified into named
+   expressions or emotions, and MUST NOT start, select, stop, or choose an effect.
+6. **Mesh deformation is NOT authorized.** Stylized deformation, warping, reshaping, and
+   animal-like facial transformation are mesh operations that Canvas2D cannot perform acceptably,
+   and MUST NOT be presented, specified, or implemented as if it could. They may require a
+   mesh-capable renderer (WebGL or WebGPU); this amendment does **not** commit the project to
+   either. The v1.7.0 rule stands: Canvas2D remains the default and required renderer, and
+   WebGL, WebGPU, Three.js, Pixi.js, or any 3D stack needs its own amendment backed by a concrete,
+   demonstrated Canvas2D incapability. Such a renderer would be evaluated separately, as another
+   implementation of the existing command vocabulary and not a change to it.
+
+**Principle II binds Milestone 4 without exception, restated because faces are the most sensitive
+data Mudra Web has touched**: face tracking MUST NOT create an exemption for image readback,
+screenshots, camera recording, arbitrary image serialization, upload, or the persistence of any
+face image. The readback and upload prohibitions in the architecture privacy test apply to every
+face-related module unchanged, with no exemption. **Face landmarks, blendshape values, transform
+matrices, and every value derived from them are transient per-frame runtime data**: they MUST NOT
+be persisted (not in a project document, not in the Capture Mode store, not in any exported
+artifact), and MUST NOT be transmitted. They are *not* among the v1.8.0 persistable categories,
+which name hand landmarks only, and being coordinates does not make them a licence to weaken the
+camera-image boundary. If a future mesh renderer must sample the camera, it MUST do so as a
+GPU-side rendering operation and MUST NOT read camera pixels back into application memory or
+expose them to any storage or transmission path — a condition on that later amendment, not a
+permission granted here. Face detection MUST NOT begin before the explicit camera-start gesture
+and MUST NOT run in the Capture Mode entry point; the specification MUST state when detection
+runs and what the user is told while it does, including whether an additional disclosure or
+opt-in beyond camera start is required.
+
+**The recognition boundary is preserved.** Three things are distinct: *face landmark tracking*
+(geometry), *face effects* (rendering driven by that geometry), and *face identity/recognition*.
+This amendment authorizes the first two. It does **not** authorize, implicitly or otherwise: face
+recognition, face identity matching or verification, biometric identification or templates,
+inference of attributes (age, gender, emotion, expression classes), face-driven pose or effect
+*triggers*, or any face-based extension of the pose matcher. Each requires its own explicit
+amendment.
+
+**Nothing else moves.** The versioned pose-sample schema remains the only contract between
+applications, and Web Capture is unchanged: this amendment adds no field to the pose-sample
+schema, authorizes no second (face) schema — that would need a specification that establishes and
+authorizes one — and gives Capture Mode no face capability. Editor docking, tabs, Inspector lock,
+panel collapse, and undo/redo semantics are unchanged; face-effect authoring adds project data
+only through the existing editing functions and history.
+
+**Staging is a direction, not a checklist.** The intended order is: capability → face-landmark
+domain abstraction → face anchors and regions → simple face effects → *separately evaluate*
+mesh/deformation. Reaching a later stage requires the earlier ones, but no single specification
+is required to deliver more than one, and Spec 011 is not required to deliver all of them. A
+specification under this authorization MUST state which stage it covers and MUST NOT add surface
+for a later stage (no dormant port, capability entry, render command, or action ahead of the
+stage that uses it).
+
+It explicitly does **not** authorize: mesh deformation, warping, or a mesh renderer; WebGL,
+WebGPU, or any 3D stack; face recognition, identity, biometric, attribute or expression
+inference; face-driven triggers; a second ML runtime; runtime model downloading or user-supplied
+models; persistence or transmission of any face-derived data or imagery; any change to the
+pose-sample schema, Capture Mode, or recognition semantics; or any placeholder face action, port,
+command, capability, dependency, or asset created ahead of the stage that needs it. Each requires
+its own explicit authorization amendment before any behavior for it is implemented.
+
 **Rationale**: Discipline protects the foundation. Building recognition or gameplay on an
 unproven data pipeline would bake in assumptions before the ground truth (the dataset format)
 is stable. The Phase 2.75 exception stays narrow — deterministic matching only, no training,
@@ -729,7 +904,13 @@ alongside it for the same reason `future-work.md` gave: the editor's edits were 
 functions, so the feature was shape-ready rather than speculative. The v1.9.0 refinements are
 narrower still: each corrects or extends a surface Milestone 2 already proved out (the editor UI,
 the inspector, preview mode) rather than opening a new one, which is why they are recorded as
-refinements to an existing authorization rather than a fourth milestone.
+refinements to an existing authorization rather than a fourth milestone. Milestone 4 is a
+new milestone because it adds a capability category, and it is authorized in stages for the same
+reason the earlier ones were vertical slices: the reusable infrastructure (capability gating, the
+detector-port pattern, central anchors, region compositing) is proven, but the parts faces
+genuinely need — geometry beyond a name, more than one probed capability — are not, and the one
+thing Canvas2D cannot do (mesh deformation) is kept out precisely so that it is decided on
+evidence rather than absorbed as an implementation detail.
 
 ## Technology & Code Quality Standards
 
@@ -849,6 +1030,13 @@ concrete language, layout, and tooling differ.
   application/presentation state — never domain state, never a project-document field — extending
   the rule the Editor and segmentation bullet above already states for open project/selection/
   unsaved-edit state.
+- **Face tracking and face effects** (Milestone 4, added in v1.10.0): face landmarks are one more
+  capability behind the same replaceable detection-interface discipline, using the MediaPipe Tasks
+  Vision runtime already installed and a repository-level model asset with recorded provenance and
+  no runtime download; face data is a framework-free domain value, transient and never persisted;
+  face anchors and regions resolve through the one central anchor system, never inside an action;
+  and Canvas2D remains the required renderer, so mesh deformation is out of scope until its own
+  amendment. Face landmarks supply geometry only — never recognition, identity, or triggers.
 - **Build tooling** (bundler, test runner, package manager) is a plan-level decision recorded in the
   application's README and its feature plan, not fixed here.
 
@@ -963,4 +1151,4 @@ against this document. Any justified deviation MUST be recorded in the plan's Co
 Tracking with the simpler alternative that was rejected and why. Unjustified complexity is
 grounds for rejection.
 
-**Version**: 1.9.0 | **Ratified**: 2026-07-24 | **Last Amended**: 2026-09-17
+**Version**: 1.10.0 | **Ratified**: 2026-07-24 | **Last Amended**: 2026-09-21

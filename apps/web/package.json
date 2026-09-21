@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "fetch-models": "node tools/fetch-selfie-segmenter.mjs",
+    "fetch-face-model": "node tools/fetch-face-landmarker.mjs",
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",

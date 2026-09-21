@@ -18,7 +18,25 @@ shared *code* directory would not be.
 |---|---|---|
 | `hand_landmarker.task` | MediaPipe Tasks Vision hand-landmark model | Downloaded on first run by Engine's `resolve_model_path`; Web streams it from here |
 | `selfie_segmenter.tflite` | MediaPipe Tasks Vision selfie-segmentation model | `cd apps/web && npm run fetch-models` |
+| `face_landmarker.task` | MediaPipe Tasks Vision Face Landmarker model (Mudra Web, Spec 011) | `cd apps/web && npm run fetch-face-model` — explicit, pinned and hash-verified; **not** part of `fetch-models` |
 | `poses/*.png` | Pose reference imagery, one per pose id | `python scripts/export_pose_images.py` |
+
+## Face Landmarker provenance (Spec 011)
+
+`face_landmarker.task` is **absent by default** and never fetched at run time; a developer provisions it once with `npm run fetch-face-model` (pinned source, SHA-256 verified, a mismatching or partial file is deleted). Until it is present, `face_landmarks` reports unavailable and face-anchored actions are inert and reported — an expected setup state, not a fault. A present model is also emitted into every build's `dist/` by the shared-asset plugin, although only the editor requests it.
+
+Every field below is **not yet provisioned** until the verification steps V1–V7 of `specs/011-face-landmark-anchors/plan.md` have been performed and recorded here (Spec 011 Definition of Done):
+
+| Field | Value |
+|---|---|
+| Source URL | not yet provisioned (pinned in `apps/web/tools/fetch-face-landmarker.mjs`: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`) |
+| Model name | Face Landmarker — not yet verified |
+| Precision | float16 (from the pinned path) — not yet verified |
+| Version path | `1` (from the pinned path) — not yet verified |
+| SHA-256 | not yet provisioned (`EXPECTED_SHA256` is `null` in the script) |
+| Licence | not yet provisioned (confirm against the official model card and record it with the date) |
+| Date fetched | not yet provisioned |
+| Observed landmark count | not yet provisioned (the code assumes 478 provisionally) |
 
 ## Nothing here is committed
 

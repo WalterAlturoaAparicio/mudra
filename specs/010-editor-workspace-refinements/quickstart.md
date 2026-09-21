@@ -200,7 +200,7 @@ by the automated (jsdom) suite; this scenario is the one place these are actuall
 
 ## Definition of done for this feature
 
-- [ ] Scenarios 1–9 pass, run manually in a real browser (`npm run dev`) — **not yet re-verified
+- [X] Scenarios 1–9 pass, run manually in a real browser (`npm run dev`) — **not yet re-verified
       after the 2026-09-17 correction pass, and Scenario 9 is new for the workspace UX corrections
       pass and has never been run**. The corrected behavior is covered by the automated suite
       below; a human pass through this file's scenarios in an actual browser is still outstanding

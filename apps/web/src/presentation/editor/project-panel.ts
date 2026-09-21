@@ -49,6 +49,9 @@ export interface ProjectPanelOptions {
   readonly getCurrentProject: () => Project;
   /** Called after a project is loaded/created/duplicated/imported, so the editor opens it. */
   readonly onProjectOpened: (project: Project) => void;
+  /** Called after an explicit Save writes the project, so the workspace arrangement is flushed
+   *  alongside it (the layout itself lives in the editor's one `LayoutStore`, not in the project). */
+  readonly onProjectSaved?: (project: Project) => void;
   /**
    * Commit a name edit for the currently open project (item 1/P3) — `EditorShell.
    * renameProject`, which validates/trims and throws `InvalidProjectNameError` for an
@@ -329,6 +332,7 @@ export class ProjectPanel {
     }
     this.currentOpenId = project.id;
     this.storedIds.add(project.id);
+    this.options.onProjectSaved?.(project);
     this.setStatus('Written.');
     await this.refresh();
   }

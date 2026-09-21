@@ -162,11 +162,9 @@ describe('review shows coordinates, never imagery (FR-052, research D8)', () => 
   });
 
   it('survives a collapsed hand without dividing by zero', () => {
-    // The degenerate-span case: every normalized point at the origin.
-    const flat = {
-      ...hand('right', 0),
-      normalized: Array.from({ length: 21 }, () => ({ x: 0, y: 0, z: 0 })),
-    };
+    // The degenerate-span case: every plotted point coincident.
+    const collapsed = Array.from({ length: 21 }, () => ({ x: 0.5, y: 0.5, z: 0 }));
+    const flat = { ...hand('right', 0), raw: collapsed, normalized: collapsed };
     const svg = landmarkThumbnail(document, [flat]);
     for (const circle of svg.querySelectorAll('circle')) {
       expect(Number.isFinite(Number(circle.getAttribute('cx')))).toBe(true);

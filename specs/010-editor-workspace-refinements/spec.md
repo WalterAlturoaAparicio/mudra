@@ -674,6 +674,23 @@ undone.
   Story 1), *and* the boundary undo/redo is scoped to (User Story 7): always exactly the selected
   effect or nothing, for both purposes, by the same one concept.
 
+## Amendment 2026-09-21 — Restore invariant, workspace persistence, popover layering
+
+Found while browser-validating Spec 011. Three defects and one clarification in the existing dock/persistence design; **no new persistence system** — the existing `LayoutStore` (`domain/ports/layout-store.ts`, IndexedDB `mudra-editor-layout`) is extended.
+
+**Root causes (verified in code, not assumed):**
+
+- *Open panels not visible after a restart/refresh.* `DockLayout.renderZone` sanitised a zone's tree against only the panels **registered so far** and cached the result back onto `zoneTrees`. The composition root registers panels one at a time, so a saved tab group such as `[project, explorer]` lost `explorer` the moment `project` registered; `explorer` then registered as "already placed by the saved arrangement" (so it was never re-added) — open in state, absent from every tree, never mounted. The next layout change persisted the damaged trees.
+- *Popover over File/Edit/View.* `.mudra-layout__panel-menu-popover { display: flex }` had no `[hidden]` override, so the `hidden` attribute was defeated: an empty bordered/shadowed box (and pointer surface) sat permanently under every panel header at `z-index: 30`, the same as the menu-bar dropdowns and later in DOM order, so it painted over them. It is **required** (it is the keyboard/menu path for "Move to …", FR-010) and is kept.
+- *Active tab was not persisted*, so a restored tab group always showed its first tab.
+
+- **FR-051 (restore invariant)**: After the editor mounts, every panel that is open MUST be mounted in exactly one zone's dock tree and be visible (or be a non-active tab of a tab group that is), regardless of the order panels register in and regardless of what a stored record contained. Trees are kept as stored until all panels have registered; `DockLayout.finishRestore()` then normalises once: drops unknown/closed ids, drops a panel named in a second zone, and appends any open panel found in no tree as a stacked leaf in its default zone. A record that needed healing is re-persisted. Existing arrangements are preserved, never reset.
+- **FR-052 (workspace persistence)**: The persisted `EditorLayout` MUST carry everything needed to rebuild the arrangement: sizes, closed panels, per-zone dock trees (regions, tab groups, order, split direction and sizes), preset, active docking layout, and **the active tab of each tab group** (`activeTabs`, keyed by the group's sorted member ids joined with `|`). Optional field — older records load with each group on its first tab. Transient runtime data (collapse state, drag state, camera/face data) is not persisted. It is saved on every layout change and additionally on an explicit project **Save** (`ProjectPanel.onProjectSaved`). *Decision:* the layout stays editor-chrome state in the one `LayoutStore`, **not** embedded in the `Project` wire format — that would create a second persistence path and change the project schema for UI state (FR/contract: layout-store.ts "never embedded in a Project"). It is therefore per-browser, shared across projects. Floating panels are not supported by this layout system and are out of scope.
+- **FR-053 (popover layering)**: The panel-menu popover MUST have no box and no pointer surface while closed, and MUST never stack above the menu bar: `.mudra-layout__menu` is its own stacking context above every panel-level popover (`z-index: 40`). Drag-and-drop is untouched.
+- **Verification**: `test/adapters/dock-layout-restore.test.ts` (any registration order; healing; duplicates; active tab round-trip; popover `[hidden]` and menu-over-popover stacking). Manual, in a browser: refresh, dev-server restart, project close/reopen, tabs/docked/moved/resized panels.
+
+---
+
 ## Success Criteria *(mandatory)*
 
 ### Measurable Outcomes

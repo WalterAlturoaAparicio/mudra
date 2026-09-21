@@ -14,11 +14,21 @@
  * {@link PersonSegmenter} — never assumed, never hardcoded.
  */
 
+import type { FaceDetector } from '../ports/face-detector';
 import type { PersonSegmenter } from '../ports/segmenter';
 import { Logger } from '../config/logger';
 
 /** The capability `person_visibility` (and future segmentation-dependent actions) need. */
 export const PERSON_SEGMENTATION = 'person_segmentation';
+
+/**
+ * The capability a face-landmark anchor needs (Spec 011, constitution v1.10.0 Milestone 4).
+ *
+ * Reported only by a runtime that supplied a face prober — the editor. A runtime that supplied
+ * none (the public experience, Capture Mode, existing callers and tests) reports no
+ * `face_landmarks` entry at all, and `has('face_landmarks')` is `false` there.
+ */
+export const FACE_LANDMARKS = 'face_landmarks';
 
 /** Answers whether a capability is available. */
 export interface CapabilityRegistry {
@@ -59,44 +69,69 @@ export function defaultCapabilities(): CapabilityRegistry {
   return new MapCapabilityRegistry(new Map([[PERSON_SEGMENTATION, false]]));
 }
 
-/** The two things one probe pass produces, together, so a segmenter is constructed once. */
+/** What one probe pass produces, together, so each backend is constructed once. */
 export interface CapabilityProbeResult {
   readonly capabilities: CapabilityRegistry;
   /** The constructed segmenter, ready to use, or `null` when the capability is unavailable. */
   readonly segmenter: PersonSegmenter | null;
+  /**
+   * The constructed face detector, or `null` when no face prober was supplied or it failed.
+   * Constructing it analyses nothing — detection needs a camera surface and happens only on
+   * demand, later.
+   */
+  readonly faceDetector: FaceDetector | null;
 }
 
 /**
  * Determine capability availability by **actually attempting** to construct what each one
  * needs — never a guess, never a fixed value (FR-041).
  *
- * One entry this milestone: `person_segmentation`, backed by `trySegmenter`. A future
- * capability is added the same way — one more attempted construction, one more registry
- * entry — never a branch keyed to what the capability is *for*.
+ * `person_segmentation` is backed by `trySegmenter`. `face_landmarks` (Spec 011) is backed by
+ * the optional `tryFace`. Each capability is probed in **its own** `try/catch`, so a failure of
+ * one never changes the other's availability, and each failure is logged naming its own
+ * capability. A future capability is added the same way — one more attempted construction, one
+ * more registry entry — never a branch keyed to what the capability is *for*.
  *
  * @param trySegmenter Constructs a `PersonSegmenter`, or rejects when this browser/device
  *   cannot run one (unsupported browser, model fetch failure, no compatible delegate).
- * @param logger Where the failure reason is recorded, at `warn` — degraded but survivable,
+ * @param logger Where each failure reason is recorded, at `warn` — degraded but survivable,
  *   never thrown past this point.
+ * @param tryFace Constructs a `FaceDetector`, or rejects. **Optional**: when omitted, no
+ *   `face_landmarks` entry is reported and the result is exactly what it was before faces
+ *   existed. Never invoked to analyse anything — probing constructs, it does not detect.
  */
 export async function probeCapabilities(
   trySegmenter: () => Promise<PersonSegmenter>,
   logger: Logger = new Logger(),
+  tryFace?: () => Promise<FaceDetector>,
 ): Promise<CapabilityProbeResult> {
+  const availability = new Map<string, boolean>();
+
+  let segmenter: PersonSegmenter | null = null;
   try {
-    const segmenter = await trySegmenter();
-    return {
-      capabilities: new MapCapabilityRegistry(new Map([[PERSON_SEGMENTATION, true]])),
-      segmenter,
-    };
+    segmenter = await trySegmenter();
+    availability.set(PERSON_SEGMENTATION, true);
   } catch (error) {
+    availability.set(PERSON_SEGMENTATION, false);
     logger.warn('Person Segmentation is unavailable in this session.', {
       capability: PERSON_SEGMENTATION,
       reason: error instanceof Error ? error.message : String(error),
     });
-    return {
-      capabilities: new MapCapabilityRegistry(new Map([[PERSON_SEGMENTATION, false]])),
-      segmenter: null,
-    };
   }
+
+  let faceDetector: FaceDetector | null = null;
+  if (tryFace !== undefined) {
+    try {
+      faceDetector = await tryFace();
+      availability.set(FACE_LANDMARKS, true);
+    } catch (error) {
+      availability.set(FACE_LANDMARKS, false);
+      logger.warn('Face Landmarks are unavailable in this session.', {
+        capability: FACE_LANDMARKS,
+        reason: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  return { capabilities: new MapCapabilityRegistry(availability), segmenter, faceDetector };
 }

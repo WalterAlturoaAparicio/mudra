@@ -191,6 +191,14 @@ same reason. For review thumbnails, SVG built from coordinates touches no canvas
 sample list is fully testable in jsdom, and there is structurally no place a camera pixel could
 appear in it (FR-052, the "no imagery in review" rule in Out of Scope).
 
+**Amendment (2026-09-21, FR-026a)**: the thumbnail plots each hand's `raw` landmarks (mirrored
+frame space) scaled by `frameWidth × frameHeight`, not `normalized`. `normalized` is wrist-relative,
+so plotting it drew every hand on the same origin and lost the arrangement of a two-handed pose. The
+investigation found no coordinate flip anywhere between detector, controller, store and serializer
+(`test/adapters/capture-orientation.test.ts` pins that with an asymmetric two-hand fixture); the
+thumbnail was the only stage whose picture disagreed with the live view. Nothing is stored
+differently — the fix is entirely at the presentation boundary.
+
 ---
 
 ## D9 — Fixture verification compares parsed structure, including key order

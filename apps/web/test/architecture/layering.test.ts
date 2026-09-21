@@ -14,6 +14,14 @@ import { SRC_ROOT, findMatches, readSources } from '../support/source-scan';
 const domain = readSources(join(SRC_ROOT, 'domain'));
 const presentation = readSources(join(SRC_ROOT, 'presentation'));
 
+/**
+ * Every MediaPipe symbol the domain must not name — hands, faces (Spec 011) and the shared
+ * runtime types. The face names are listed explicitly rather than relying on the package name
+ * alone, so a re-declared symbol is caught too.
+ */
+const MEDIAPIPE_SYMBOLS =
+  /@mediapipe|HandLandmarker|FaceLandmarker|FaceLandmarkerResult|NormalizedLandmark|FilesetResolver|WasmFileset/;
+
 /** Browser globals and DOM types the domain must not reach for. */
 const BROWSER_GLOBALS = [
   'document',
@@ -83,9 +91,23 @@ describe('src/domain', () => {
   it('names no MediaPipe symbol', () => {
     const offenders: string[] = [];
     for (const file of domain) {
-      offenders.push(...findMatches(file, /@mediapipe|HandLandmarker|FilesetResolver|WasmFileset/));
+      offenders.push(...findMatches(file, MEDIAPIPE_SYMBOLS));
     }
     expect(offenders, 'the detector is an interface, not a dependency').toEqual([]);
+  });
+
+  it('would notice a face symbol if one crossed into the domain (Spec 011, FR-012)', () => {
+    // Guards against the pattern above silently losing its face names: each of these, in a
+    // fake domain source, must be flagged by the very matcher the real scan uses.
+    for (const symbol of [
+      'FaceLandmarker',
+      'FaceLandmarkerResult',
+      'NormalizedLandmark',
+      "import x from '@mediapipe/tasks-vision'",
+    ]) {
+      const fake = { path: 'src/domain/fake.ts', raw: symbol, code: symbol };
+      expect(findMatches(fake, MEDIAPIPE_SYMBOLS), symbol).not.toEqual([]);
+    }
   });
 
   it('imports no Node built-in either', () => {

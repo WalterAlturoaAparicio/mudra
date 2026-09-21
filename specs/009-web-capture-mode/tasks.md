@@ -266,6 +266,11 @@ green. **Stop and validate here** against quickstart scenarios 1, 2, 3, 5, 6, 7,
 4. + US2 → review and deletion
 5. + US4 → editor undo/redo, independently droppable
 
+### Amendment 2026-09-21 — orientation consistency
+
+- [x] T-A01 [US2] Review thumbnail plots `raw` × frame size instead of wrist-normalized points (FR-026a) — `landmark-thumbnail.ts`, `sample-list.ts`
+- [x] T-A02 [US2] Add `test/adapters/capture-orientation.test.ts`: an asymmetric two-hand pose through controller → store → serializer → thumbnail, asserting no x flip and no handedness swap at any stage
+
 ### Risk note
 
 T014–T019 are first for a reason. If Engine's schema turns out to be harder to reproduce exactly than

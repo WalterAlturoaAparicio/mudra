@@ -263,6 +263,12 @@ state, redo them all forward, and confirm the resulting project is identical to 
 - **FR-027**: The `raw` landmark set MUST be the earliest **canonical** observation — the detector's
   output in the convention above — matching the meaning Mudra Capture's samples already carry. The
   `normalized` set MUST be the output of the existing normalization applied to that raw set.
+- **FR-026a** *(amendment 2026-09-21)*: Every downstream representation of a captured sample — the
+  stored record, the exported document, and the review thumbnail — MUST be in that same
+  convention. The review thumbnail plots `raw` (mirrored frame space) scaled by the sample's frame
+  size, so a two-handed pose keeps the hands' positions relative to each other and matches the live
+  view. It MUST NOT plot the wrist-relative `normalized` set (which stacks every hand on one
+  origin), and MUST NOT flip an x coordinate or change a handedness label or landmark index.
 - **FR-028**: The recorded normalization strategy and version MUST be the ones the application
   actually applied, and MUST match the values Engine records for the same strategy.
 

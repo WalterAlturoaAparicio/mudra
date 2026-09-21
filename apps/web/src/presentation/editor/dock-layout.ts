@@ -137,6 +137,9 @@ export interface DockLayoutOptions {
    *  does not have is dropped; a panel id it names that never registers, or that is closed, is
    *  sanitized out the first time that zone renders (contracts/docking-persistence.md). */
   readonly initialZoneLayouts?: Readonly<Record<string, DockNodeData>>;
+  /** Which tab was active in each tab group, keyed by the group's sorted member ids joined with
+   *  `|` (a readable form of `leafKey`). Absent or stale entries fall back to the group's first tab. */
+  readonly initialActiveTabs?: Readonly<Record<string, string>>;
   /** Called whenever the whole chrome state changes — visibility, preset, or docking, not
    *  drags/resizes. */
   readonly onLayoutChange?: (layout: EditorLayout) => void;
@@ -171,8 +174,9 @@ interface PanelEntry {
 
 /** A leaf's tab-group identity that survives a re-render: its member ids, order-independent, so
  *  the active tab stays chosen even though the wrapper element itself is rebuilt every render. */
+const LEAF_KEY_SEPARATOR = ' ';
 function leafKey(panelIds: readonly string[]): string {
-  return [...panelIds].sort().join(' ');
+  return [...panelIds].sort().join(LEAF_KEY_SEPARATOR);
 }
 
 /** The dock-like panel layout: menu bar + resizable left/center/right + timeline, each of the
@@ -229,6 +233,9 @@ export class DockLayout {
         : DEFAULT_LAYOUT_ID;
     for (const id of options.initialHiddenPanels ?? []) {
       this.closedPanelIds.add(id);
+    }
+    for (const [key, panelId] of Object.entries(options.initialActiveTabs ?? {})) {
+      this.activeTab.set(key.split('|').join(LEAF_KEY_SEPARATOR), panelId);
     }
 
     this.root = this.document.createElement('div');
@@ -587,7 +594,93 @@ export class DockLayout {
       preset: this.preset,
       activeLayoutId: this.activeLayoutId,
       zoneLayouts,
+      activeTabs: this.currentActiveTabs(),
     };
+  }
+
+  /** Active tab of every multi-tab group that currently exists — stale entries for groups that
+   *  no longer exist are not persisted. */
+  private currentActiveTabs(): Record<string, string> {
+    const result: Record<string, string> = {};
+    const visit = (node: DockNode | null): void => {
+      if (node === null) {
+        return;
+      }
+      if (node.kind === 'split') {
+        node.children.forEach(visit);
+        return;
+      }
+      const key = leafKey(node.panelIds);
+      const active = this.activeTab.get(key);
+      if (node.panelIds.length > 1 && active !== undefined && node.panelIds.includes(active)) {
+        result[key.split(LEAF_KEY_SEPARATOR).join('|')] = active;
+      }
+    };
+    for (const tree of this.zoneTrees.values()) {
+      visit(tree);
+    }
+    return result;
+  }
+
+  /** Persisted panel ids that have not registered yet — while any exist, the restored trees are
+   *  incomplete and must not be sanitized destructively (see `renderZone`). */
+  private hasPendingRestore(): boolean {
+    for (const id of this.persistedPanelZone.keys()) {
+      if (!this.panels.has(id)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Call once after every panel has registered. Establishes the restore invariant: every panel
+   * that is open is in exactly one zone's tree (so it is actually mounted and visible), and no
+   * tree names a panel that is unknown, closed, or already placed in another zone.
+   *
+   * Panels registered during construction can arrive in any order, while a saved tree names its
+   * members all at once; until this runs the trees are kept as saved. Persists only if
+   * normalisation actually changed the record.
+   */
+  finishRestore(): void {
+    const before = JSON.stringify(this.getLayout());
+    this.persistedPanelZone.clear();
+    const placed = new Set<string>();
+    for (const zoneId of this.zoneElements.keys()) {
+      const known = new Set(
+        [...this.panels.keys()].filter((id) => !this.closedPanelIds.has(id) && !placed.has(id)),
+      );
+      const tree = sanitize(this.zoneTrees.get(zoneId) ?? null, known);
+      this.zoneTrees.set(zoneId, tree);
+      for (const id of listPanelIds(tree)) {
+        placed.add(id);
+      }
+    }
+    for (const [id, entry] of this.panels) {
+      if (this.closedPanelIds.has(id) || placed.has(id)) {
+        continue;
+      }
+      const zoneId = this.zoneElements.has(entry.panel.region)
+        ? entry.panel.region
+        : (defaultZoneFor(this.activeLayoutId, id) ?? 'right');
+      this.zoneTrees.set(zoneId, appendStacked(this.zoneTrees.get(zoneId) ?? null, id));
+      this.panels.set(id, { ...entry, panel: { ...entry.panel, region: zoneId } });
+    }
+    // A panel's region must match the zone whose tree holds it (moves are persisted by tree only).
+    for (const [zoneId, tree] of this.zoneTrees) {
+      for (const id of listPanelIds(tree)) {
+        const entry = this.panels.get(id);
+        if (entry !== undefined && entry.panel.region !== zoneId) {
+          this.panels.set(id, { ...entry, panel: { ...entry.panel, region: zoneId } });
+        }
+      }
+    }
+    for (const zoneId of this.zoneElements.keys()) {
+      this.renderZone(zoneId);
+    }
+    if (JSON.stringify(this.getLayout()) !== before) {
+      this.onLayoutChange?.(this.getLayout());
+    }
   }
 
   /** Restore the shipped default sizes, and reopen every closed panel. Docking structure is
@@ -632,7 +725,12 @@ export class DockLayout {
     }
     const known = new Set([...this.panels.keys()].filter((id) => !this.closedPanelIds.has(id)));
     const sanitized = sanitize(this.zoneTrees.get(zoneId) ?? null, known);
-    this.zoneTrees.set(zoneId, sanitized);
+    // Only cache once every persisted panel has registered: until then the saved tree still names
+    // members that simply have not registered yet, and caching would drop them for good (the
+    // "panel is open but not visible after restart" bug). `finishRestore` settles it.
+    if (!this.hasPendingRestore()) {
+      this.zoneTrees.set(zoneId, sanitized);
+    }
 
     container.replaceChildren();
     if (sanitized !== null) {
@@ -721,6 +819,7 @@ export class DockLayout {
         tab.addEventListener('click', () => {
           this.activeTab.set(leafKey(node.panelIds), panelId);
           this.renderZone(entry.panel.region);
+          this.onLayoutChange?.(this.getLayout());
         });
         // Also the drag origin for reordering within this strip, or dragging out to undock
         // (spec 010 workspace UX corrections pass, item 3, FR-043) — the same `draggingPanelId`

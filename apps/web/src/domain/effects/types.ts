@@ -42,7 +42,12 @@ export type Anchor =
   /** The centroid of a hand's landmarks. */
   | { readonly kind: 'handCentroid'; readonly hand: HandSelector }
   /** One landmark of one hand. */
-  | { readonly kind: 'landmark'; readonly hand: HandSelector; readonly index: number };
+  | { readonly kind: 'landmark'; readonly hand: HandSelector; readonly index: number }
+  /**
+   * One landmark of the tracked face, by number (Spec 011). This is authored data — an integer
+   * the author chose — not face data: it is the only face-related thing ever saved.
+   */
+  | { readonly kind: 'faceLandmark'; readonly index: number };
 
 /** Which hand an anchor means. */
 export type HandSelector = Handedness | 'any' | 'first';

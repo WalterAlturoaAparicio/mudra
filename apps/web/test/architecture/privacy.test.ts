@@ -58,6 +58,10 @@ const READBACK_APIS = [
   'MediaRecorder',
   'getImageData',
   'createImageBitmap',
+  // GPU-side readback. Nothing uses WebGL today; listed so a future mesh renderer (future-work.md
+  // section A) must sample the camera texture on the GPU and can never read it back.
+  'readPixels',
+  'convertToBlob',
 ];
 
 /** Anything that would send data off the device (FR-006). */

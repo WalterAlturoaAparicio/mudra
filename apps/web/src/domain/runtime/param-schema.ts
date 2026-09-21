@@ -26,13 +26,31 @@ function isAnchor(value: unknown): value is Anchor {
     return false;
   }
   const kind = (value as { kind?: unknown }).kind;
-  return kind === 'screen' || kind === 'handCentroid' || kind === 'landmark';
+  return (
+    kind === 'screen' || kind === 'handCentroid' || kind === 'landmark' || kind === 'faceLandmark'
+  );
 }
 
 function validateAnchor(value: Anchor, where: string): Anchor {
   if (value.kind === 'screen') {
     if (typeof value.x !== 'number' || typeof value.y !== 'number') {
       throw new ParamError(where + ': a screen anchor needs numeric x and y.');
+    }
+    return value;
+  }
+  if (value.kind === 'faceLandmark') {
+    // Structural validation only. The model's landmark count is unverified, so it is never a
+    // load-time boundary: persisted data must not depend on it (spec D21, FR-015a). The range
+    // is enforced at authoring (the Inspector) and at runtime resolution (an index the detected
+    // face lacks resolves to no point).
+    const index = (value as { index?: unknown }).index;
+    if (typeof index !== 'number' || !Number.isInteger(index) || index < 0) {
+      throw new ParamError(
+        where +
+          ': a face landmark anchor needs a non-negative integer index, got ' +
+          String(index) +
+          '.',
+      );
     }
     return value;
   }

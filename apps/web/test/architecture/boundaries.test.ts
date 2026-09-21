@@ -135,3 +135,65 @@ describe('the build scripts', () => {
     expect(stray).toEqual([]);
   });
 });
+
+describe('the shared face-landmark model (Spec 011 FR-023–FR-027)', () => {
+  // The model is absent by default, so — unlike the segmentation model above — nothing here may
+  // assert that the file exists. These check the *wiring*: where it is served from, that no
+  // second copy is vendored, that it is provisioned only by its own explicit script, and that no
+  // dependency was added to get it.
+  const packageJson = JSON.parse(readFileSync(join(APP_ROOT, 'package.json'), 'utf-8')) as {
+    scripts: Record<string, string>;
+    dependencies: Record<string, string>;
+  };
+
+  it('is served from the repository-level assets/ directory at one URL, never vendored', () => {
+    const viteConfig = readFileSync(join(APP_ROOT, 'vite.config.ts'), 'utf-8');
+    expect(viteConfig).toMatch(/face_landmarker\.task/);
+    expect(viteConfig).toMatch(/resolve\(REPO_ROOT,\s*'assets'/);
+    expect(existsSync(join(APP_ROOT, 'public/face_landmarker.task'))).toBe(false);
+    expect(existsSync(join(APP_ROOT, 'assets/face_landmarker.task'))).toBe(false);
+  });
+
+  it('the adapter requests the same URL the dev server and build serve it at', () => {
+    const adapter = readFileSync(
+      join(APP_ROOT, 'src/infrastructure/detection/mediapipe-face-detector.ts'),
+      'utf-8',
+    );
+    const viteConfig = readFileSync(join(APP_ROOT, 'vite.config.ts'), 'utf-8');
+    expect(adapter).toMatch(/FACE_MODEL_URL\s*=\s*'\/face_landmarker\.task'/);
+    expect(viteConfig).toMatch(/FACE_MODEL_URL\s*=\s*'\/face_landmarker\.task'/);
+    expect(viteConfig).toMatch(/url:\s*'\/face_landmarker\.task'/);
+  });
+
+  it('is provisioned only by its own explicit script, and fetch-models is unchanged', () => {
+    expect(packageJson.scripts['fetch-face-model']).toBe('node tools/fetch-face-landmarker.mjs');
+    expect(packageJson.scripts['fetch-models']).toBe('node tools/fetch-selfie-segmenter.mjs');
+    for (const [name, command] of Object.entries(packageJson.scripts)) {
+      if (name !== 'fetch-face-model') {
+        expect(command, `${name} must not run the face-model fetch`).not.toMatch(
+          /fetch-face-landmarker|fetch-face-model/,
+        );
+      }
+    }
+  });
+
+  it('added no dependency', () => {
+    expect(packageJson.dependencies).toEqual({ '@mediapipe/tasks-vision': '^0.10.14' });
+  });
+
+  it('records its provenance fields in assets/readme.md', () => {
+    const readme = readFileSync(resolve(APP_ROOT, '../../assets/readme.md'), 'utf-8');
+    for (const field of [
+      'Source URL',
+      'Model name',
+      'Precision',
+      'Version path',
+      'SHA-256',
+      'Licence',
+      'Date fetched',
+      'Observed landmark count',
+    ]) {
+      expect(readme, field).toContain(field);
+    }
+  });
+});

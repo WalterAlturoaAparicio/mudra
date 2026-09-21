@@ -23,6 +23,8 @@ const REPO_ROOT = resolve(APP_ROOT, '../..');
 const SHARED_MODELS: ReadonlyArray<{ readonly file: string; readonly url: string }> = [
   { file: 'hand_landmarker.task', url: '/hand_landmarker.task' },
   { file: 'selfie_segmenter.tflite', url: '/selfie_segmenter.tflite' },
+  // Face Landmarker (Spec 011): absent by default, provisioned only by `npm run fetch-face-model`.
+  { file: 'face_landmarker.task', url: '/face_landmarker.task' },
 ];
 
 /**
@@ -47,6 +49,9 @@ export const POSE_IMAGE_URL_PREFIX = '/pose-images';
 
 /** Public URL the segmenter loads the shared selfie-segmentation model from, in dev and build alike. */
 export const SEGMENTER_MODEL_URL = '/selfie_segmenter.tflite';
+
+/** Public URL the face detector loads the shared face-landmark model from, in dev and build alike. */
+export const FACE_MODEL_URL = '/face_landmarker.task';
 
 function sharedModelPlugin(): Plugin {
   return {

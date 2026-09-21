@@ -11,10 +11,12 @@
  */
 
 import { AnchorResolver, anchorKey } from '../effects/anchor-resolver';
+import { requiredCapabilityOf } from '../effects/anchor-capability';
 import { conditionsMet } from '../effects/conditions';
 import type { EffectCatalog, EffectDefinition, TimelineEntry } from '../effects/types';
 import type { SegmentationFrame } from '../editor/segmentation-frame';
 import type { PoseEvent } from '../events/pose-events';
+import type { FaceFrame, FaceFrameSource } from '../landmarks/face';
 import type { LandmarkFrame } from '../landmarks/types';
 import type { ActionContext, ActionDescriptor, ActionRegistry } from './action-registry';
 import type { CapabilityRegistry } from './capabilities';
@@ -60,6 +62,27 @@ export interface RuntimeFrame extends FrameOutput {
   readonly started: readonly StartedPlayback[];
   /** Effect ids that first emitted a command on this frame. */
   readonly firstCommands: readonly string[];
+  /**
+   * `true` iff face analysis actually ran on this frame — i.e. the face source was invoked
+   * (Spec 011). It is the editor's indicator source of truth, and carries no face data.
+   */
+  readonly faceTracking: boolean;
+  /**
+   * One entry per face-anchored action that reached anchor resolution this frame (Spec 011 dev
+   * diagnostics). Observational only: it records what `AnchorResolver` already decided, and
+   * requesting it changes nothing — no face is analysed for it. `point` is the resolved
+   * landmark's position in surface pixels, a transient derived value, never stored.
+   */
+  readonly faceAnchors: readonly FaceAnchorTrace[];
+}
+
+/** What one face-anchored action's anchor resolution came to on one frame. */
+export interface FaceAnchorTrace {
+  readonly effectId: string;
+  readonly actionType: string;
+  readonly landmarkIndex: number;
+  readonly resolved: boolean;
+  readonly point: Point | null;
 }
 
 /** Runs effects. */
@@ -125,15 +148,21 @@ export class EffectRuntime {
    * @param segmentation This frame's person-segmentation output, or `null` when the
    *   capability is unavailable (constitution v1.7.0). Defaults to `null` so every existing
    *   call site from Milestone 1 continues to compile unchanged.
+   * @param faces Supplies this frame's face on demand (Spec 011), or `null` when face tracking
+   *   cannot run (no camera, no detector). Called **lazily, at most once per call**, and only
+   *   when an action scheduled on this frame has a face anchor and `face_landmarks` is
+   *   available — so nothing is analysed unless something needs a face right now. The face it
+   *   returns is used for anchor resolution and dropped; it is never stored or returned.
    */
   advance(
     events: readonly PoseEvent[],
     frame: LandmarkFrame,
     nowMs: number,
     segmentation: SegmentationFrame | null = null,
+    faces: FaceFrameSource | null = null,
   ): RuntimeFrame {
     const started = this.startTriggered(events, nowMs);
-    return { ...this.render(frame, nowMs, segmentation), started };
+    return { ...this.render(frame, nowMs, segmentation, faces), started };
   }
 
   /**
@@ -213,11 +242,25 @@ export class EffectRuntime {
     frame: LandmarkFrame,
     nowMs: number,
     segmentation: SegmentationFrame | null,
+    faces: FaceFrameSource | null,
   ): RuntimeFrame {
     const commands: RenderCommand[] = [];
     const audioCues: AudioCue[] = [];
     const diagnostics: Diagnostic[] = [];
     const firstCommands: string[] = [];
+    const faceAnchors: FaceAnchorTrace[] = [];
+
+    // The one place a face is ever requested: memoized, so a frame analyses at most once, and
+    // reached only from `resolveAnchor` for a face anchor whose capability is available.
+    let faceCalled = false;
+    let faceFrame: FaceFrame | null = null;
+    const faceNow = (): FaceFrame | null => {
+      if (!faceCalled) {
+        faceCalled = true;
+        faceFrame = faces?.() ?? null;
+      }
+      return faceFrame;
+    };
 
     // Iterated newest-last so overlapping effects composite in the order they started, and
     // completed playbacks are removed after the pass rather than during it.
@@ -257,7 +300,33 @@ export class EffectRuntime {
           playback.effect.id + '.' + descriptor.type,
         );
 
-        const anchorResolution = this.resolveAnchor(playback, item.index, params, frame);
+        // A face anchor makes *this instance* require `face_landmarks`, whatever the action type
+        // (Spec 011). Gated here, before any analysis can be requested; the same inert-and-
+        // reported treatment as a descriptor-level requirement, and non-face anchors are
+        // unaffected.
+        const anchorForGate = anchorParam(params, 'anchor');
+        const instanceCapability =
+          anchorForGate === null ? undefined : requiredCapabilityOf(anchorForGate);
+        if (instanceCapability !== undefined && !this.capabilities.has(instanceCapability)) {
+          diagnostics.push({
+            effectId: playback.effect.id,
+            actionType: descriptor.type,
+            reason: 'capability_unavailable',
+            detail: instanceCapability,
+          });
+          continue;
+        }
+
+        const anchorResolution = this.resolveAnchor(playback, item.index, params, frame, faceNow);
+        if (anchorResolution.faceLandmarkIndex !== null) {
+          faceAnchors.push({
+            effectId: playback.effect.id,
+            actionType: descriptor.type,
+            landmarkIndex: anchorResolution.faceLandmarkIndex,
+            resolved: anchorResolution.point !== null,
+            point: anchorResolution.point,
+          });
+        }
         if (anchorResolution.missing !== null) {
           diagnostics.push({
             effectId: playback.effect.id,
@@ -332,6 +401,8 @@ export class EffectRuntime {
       activePlaybacks: this.playbacks.length,
       started: [],
       firstCommands,
+      faceTracking: faceCalled && faces !== null,
+      faceAnchors,
     };
   }
 
@@ -349,18 +420,28 @@ export class EffectRuntime {
     entryIndex: number,
     params: ResolvedParams,
     frame: LandmarkFrame,
-  ): { point: Point | null; missing: string | null } {
+    faceNow: () => FaceFrame | null,
+  ): { point: Point | null; missing: string | null; faceLandmarkIndex: number | null } {
     const anchor = anchorParam(params, 'anchor');
     if (anchor === null) {
-      return { point: null, missing: null };
+      return { point: null, missing: null, faceLandmarkIndex: null };
     }
-    const resolution = playback.anchors.resolve(anchorKey(entryIndex, 'anchor'), anchor, frame);
+    const faceLandmarkIndex = anchor.kind === 'faceLandmark' ? anchor.index : null;
+    // Only a face anchor may cause a face to be requested.
+    const face = anchor.kind === 'faceLandmark' ? faceNow() : null;
+    const resolution = playback.anchors.resolve(
+      anchorKey(entryIndex, 'anchor'),
+      anchor,
+      frame,
+      face,
+    );
     if (resolution.point === null) {
       return {
         point: null,
         missing: resolution.unresolvedDetail ?? 'anchor could not be resolved',
+        faceLandmarkIndex,
       };
     }
-    return { point: resolution.point, missing: null };
+    return { point: resolution.point, missing: null, faceLandmarkIndex };
   }
 }

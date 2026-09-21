@@ -12,6 +12,7 @@
  * to the origin when a hand blinks out for two frames.
  */
 
+import type { FaceFrame } from '../landmarks/face';
 import type { LandmarkFrame, HandObservation } from '../landmarks/types';
 import type { Point } from '../runtime/frame-output';
 import type { Anchor, HandSelector } from './types';
@@ -58,8 +59,16 @@ export class AnchorResolver {
    *
    * @param key Identifies the anchor within this playback, so two actions anchored
    *   differently keep separate memories.
+   * @param face This frame's face, or `null` when there is none. Consulted **only** for a
+   *   `faceLandmark` anchor; every other kind ignores it. It is transient and never stored
+   *   here — only the resolved point is remembered.
    */
-  resolve(key: string, anchor: Anchor, frame: LandmarkFrame): AnchorResolution {
+  resolve(
+    key: string,
+    anchor: Anchor,
+    frame: LandmarkFrame,
+    face: FaceFrame | null = null,
+  ): AnchorResolution {
     const width = frame.width;
     const height = frame.height;
 
@@ -67,6 +76,22 @@ export class AnchorResolver {
       // A screen anchor is in normalized surface coordinates, so it survives a resize with
       // the effect still where the author put it (FR-011).
       const point = { x: anchor.x * width, y: anchor.y * height };
+      this.lastKnown.set(key, point);
+      return { point, stale: false };
+    }
+
+    if (anchor.kind === 'faceLandmark') {
+      if (face === null) {
+        return this.fallback(key, 'face is not in frame');
+      }
+      const landmark = face.points[anchor.index];
+      if (landmark === undefined) {
+        // Outside what the detected face has: no point. Never clamped, wrapped or remapped to
+        // another landmark, and never fabricated (spec D21, FR-015c).
+        return this.fallback(key, 'face landmark ' + anchor.index + ' does not exist');
+      }
+      // Scaled by the face's own surface size, in the same mirrored space as hands — no flip.
+      const point = { x: landmark.x * face.width, y: landmark.y * face.height };
       this.lastKnown.set(key, point);
       return { point, stale: false };
     }

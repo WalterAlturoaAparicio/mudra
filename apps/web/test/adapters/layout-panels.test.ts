@@ -171,6 +171,7 @@ describe('persistence', () => {
       // entirely (a null tree is not persisted), not present as an empty stub.
       activeLayoutId: 'standard',
       zoneLayouts: {},
+      activeTabs: {},
     });
   });
 

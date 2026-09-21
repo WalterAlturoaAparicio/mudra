@@ -13,11 +13,12 @@
  * action get meaningful status with no change to this file.
  */
 
+import { requiredCapabilityOf } from '../effects/anchor-capability';
 import type { ParamValue } from '../effects/types';
 import type { ActionDescriptor } from '../runtime/action-registry';
 import type { CapabilityRegistry } from '../runtime/capabilities';
 import type { Diagnostic } from '../runtime/frame-output';
-import { ParamError, resolveParams } from '../runtime/param-schema';
+import { ParamError, anchorParam, resolveParams } from '../runtime/param-schema';
 
 /** The states an authored action can be in, worst-first in the order they are reported. */
 export type ActionStatusKind =
@@ -104,6 +105,24 @@ export function evaluateActionStatus(input: ActionStatusInput): ActionStatus {
         capability +
         '" capability is unavailable. The clip stays fully editable and will run wherever the ' +
         'capability is present.',
+    };
+  }
+
+  // A capability an *authored anchor* needs (Spec 011): the same requirement the runtime gates
+  // on, read off the anchor's kind — so a face-anchored instance of an action is unavailable
+  // here while a hand-anchored instance of the same action type is ready. Keyed on the anchor,
+  // never on the action type.
+  const anchor = anchorParam(resolved, 'anchor');
+  const anchorCapability = anchor === null ? undefined : requiredCapabilityOf(anchor);
+  if (anchorCapability !== undefined && !input.capabilities.has(anchorCapability)) {
+    return {
+      kind: 'capability_unavailable',
+      label: 'Unavailable here',
+      detail:
+        'This clip anchors to a face, but the "' +
+        anchorCapability +
+        '" capability is unavailable here. The clip stays fully editable and will run wherever ' +
+        'the capability is present.',
     };
   }
 

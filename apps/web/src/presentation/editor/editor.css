@@ -78,6 +78,10 @@ body button:disabled {
   padding: 6px 10px;
   background: var(--mudra-editor-panel);
   border-bottom: 1px solid var(--mudra-editor-border);
+  /* Its own stacking context above every panel-level popover (z-index 30 and below), so the
+     File/Edit/View dropdowns can never be overlapped by panel chrome. */
+  position: relative;
+  z-index: 40;
 }
 
 .mudra-layout__left {
@@ -446,6 +450,12 @@ body button:disabled {
   border: 1px solid var(--mudra-editor-border);
   border-radius: 5px;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+}
+
+.mudra-layout__panel-menu-popover[hidden] {
+  /* `display: flex` above would otherwise defeat the `hidden` attribute, leaving an empty
+     bordered/shadowed box (and its pointer surface) under every panel header, always. */
+  display: none;
 }
 
 .mudra-layout__panel-menu-popover .mudra-layout__panel-menu-option {
@@ -1121,6 +1131,18 @@ body button:disabled {
   white-space: nowrap;
 }
 
+.mudra-editor__face-indicator {
+  align-self: center;
+  margin-left: 8px;
+  font-size: 12px;
+  color: var(--mudra-editor-accent);
+  white-space: nowrap;
+}
+
+.mudra-editor__face-indicator[data-state='finished'] {
+  color: var(--mudra-editor-dim);
+}
+
 .mudra-editor__toolbar-status[data-tone='warning'] {
   color: var(--mudra-editor-warning);
 }
@@ -1763,4 +1785,8 @@ body button:disabled {
 .mudra-dialog__confirm[data-tone='danger']:hover:not(:disabled) {
   border-color: var(--mudra-editor-danger);
   background: rgba(255, 107, 107, 0.12);
+}
+
+.mudra-editor__pipeline[hidden] {
+  display: none;
 }

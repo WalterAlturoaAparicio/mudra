@@ -174,6 +174,34 @@ const DEFAULT_NEW_ENTRY_DURATION_MS = 500;
 /** How long a toolbar status message stays before the next render clears it. */
 const STATUS_LINGER = 1;
 
+/**
+ * How long the face-tracking indicator stays visible after the last frame on which face analysis
+ * ran (Spec 011, D24, FR-019a).
+ *
+ * An instantaneous face-anchored action legitimately analyses about one frame, and an indicator
+ * visible for ~16 ms is not meaningful disclosure. So the *indicator* lingers for this fixed
+ * minimum — measured on the frame clock, with no timer — while the *analysis* is never extended:
+ * nothing here can request a face. This is a disclosure-perceptibility choice for a text
+ * indicator, not a performance figure.
+ */
+export const FACE_INDICATOR_HOLD_MS = 500;
+
+/** Appended to the camera control's help: when face tracking runs and what happens to it. */
+const FACE_HELP =
+  'Face tracking runs only while a face-anchored effect needs it; nothing is stored or sent.';
+
+/** The indicator text while analysis ran on the latest frame. */
+const FACE_INDICATOR_ON = 'Face tracking on';
+/** The indicator text during the post-analysis hold — it must not claim analysis is running. */
+const FACE_INDICATOR_FINISHED = 'Face tracking finished';
+
+/** The slice of a controller frame the indicator reads. Carries no face data. */
+export interface FaceIndicatorFrame {
+  /** The frame clock, in milliseconds. */
+  readonly nowMs: number;
+  readonly runtime: { readonly faceTracking: boolean };
+}
+
 /** `EditorShellOptions.historyDepth`'s default, equal to `editor-main.ts`'s `UNDO_DEPTH`. */
 const DEFAULT_HISTORY_DEPTH = 50;
 
@@ -193,6 +221,10 @@ export class EditorShell {
   private readonly playSelectedButton: HTMLButtonElement;
   private readonly testTriggerButton: HTMLButtonElement;
   private readonly statusLine: HTMLElement;
+  /** Shows that face analysis is running or just ran (Spec 011 FR-019). Hidden by default. */
+  private readonly faceIndicator: HTMLElement;
+  /** Frame-clock time of the last frame face analysis ran on; `null` until one has. */
+  private lastFaceAnalysisAtMs: number | null = null;
   /** The dataset's poses — read by `createEffect()` for a valid default trigger (P0.1), kept
    *  current via `setPoses()`, never written back to (same discipline `PoseTriggerPanel` uses). */
   private poses: readonly PoseOption[];
@@ -288,12 +320,17 @@ export class EditorShell {
       document: this.document,
       name: 'camera',
       label: 'Camera',
-      description: 'Attach the live camera, so a real pose can drive this effect.',
+      description: 'Attach the live camera, so a real pose can drive this effect. ' + FACE_HELP,
       onClick: () => {
         void options.onToggleCamera?.();
       },
     });
     this.cameraButton.disabled = options.onToggleCamera === undefined;
+
+    this.faceIndicator = this.document.createElement('span');
+    this.faceIndicator.className = 'mudra-editor__face-indicator';
+    this.faceIndicator.setAttribute('role', 'status');
+    this.faceIndicator.hidden = true;
 
     this.playButton = iconButton({
       document: this.document,
@@ -325,6 +362,7 @@ export class EditorShell {
       this.effectSelect,
       this.separator(),
       this.cameraButton,
+      this.faceIndicator,
       this.separator(),
       this.playButton,
       this.playSelectedButton,
@@ -674,6 +712,43 @@ export class EditorShell {
     this.onProjectChange?.(this.project);
   }
 
+  /**
+   * Reflect this frame's face-analysis state in the indicator (Spec 011 FR-019, FR-019a, D24).
+   *
+   * Three states, derived purely from the frame clock — no timer, so a fresh analysis frame
+   * simply restarts the hold:
+   * - **on**: analysis ran on this frame;
+   * - **finished**: none did, but the last one was less than {@link FACE_INDICATOR_HOLD_MS} ago —
+   *   distinct text, so the hold cannot be mistaken for active processing;
+   * - **hidden**: otherwise, and always before any analysis has happened.
+   *
+   * It only *displays*: it never causes or requests analysis, and a face anchor merely existing
+   * in the project never shows it.
+   */
+  reflectFaceTracking(frame: FaceIndicatorFrame): void {
+    if (frame.runtime.faceTracking) {
+      this.lastFaceAnalysisAtMs = frame.nowMs;
+      this.setFaceIndicator('on');
+      return;
+    }
+    const last = this.lastFaceAnalysisAtMs;
+    if (last !== null && frame.nowMs - last < FACE_INDICATOR_HOLD_MS) {
+      this.setFaceIndicator('finished');
+      return;
+    }
+    this.setFaceIndicator('hidden');
+  }
+
+  private setFaceIndicator(state: 'on' | 'finished' | 'hidden'): void {
+    this.faceIndicator.hidden = state === 'hidden';
+    this.faceIndicator.dataset['state'] = state;
+    const text =
+      state === 'on' ? FACE_INDICATOR_ON : state === 'finished' ? FACE_INDICATOR_FINISHED : '';
+    if (this.faceIndicator.textContent !== text) {
+      this.faceIndicator.textContent = text;
+    }
+  }
+
   /** Reflect whether the live camera is currently attached. */
   setCameraOn(on: boolean): void {
     this.cameraOn = on;
@@ -981,8 +1056,9 @@ export class EditorShell {
       this.cameraOn ? 'Turn Camera Off' : 'Turn Camera On',
     );
     this.cameraButton.title = this.cameraOn
-      ? 'Turn Camera Off — detach the live camera. Previews keep working without it.'
-      : 'Turn Camera On — attach the live camera, so a real pose can drive this effect.';
+      ? 'Turn Camera Off — detach the live camera. Previews keep working without it. ' + FACE_HELP
+      : 'Turn Camera On — attach the live camera, so a real pose can drive this effect. ' +
+        FACE_HELP;
     this.cameraButton.dataset['state'] = this.cameraOn ? 'on' : 'off';
 
     // A status message survives exactly as long as its own render pass: the next command

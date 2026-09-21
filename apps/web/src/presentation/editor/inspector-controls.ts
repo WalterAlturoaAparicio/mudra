@@ -15,6 +15,7 @@
  * and reconciled; see `inspector.ts`.
  */
 
+import { FACE_LANDMARK_COUNT } from '../../domain/landmarks/face';
 import type { Anchor, HandSelector, ParamValue } from '../../domain/effects/types';
 import type { AssetLibraryEntry } from '../../domain/editor/types';
 import type { ParamKind, ParamSpec } from '../../domain/runtime/action-registry';
@@ -43,7 +44,21 @@ export interface ControlContext {
 }
 
 const HAND_SELECTORS: readonly HandSelector[] = ['left', 'right', 'any', 'first', 'unknown'];
-const ANCHOR_KINDS = ['screen', 'handCentroid', 'landmark'] as const;
+const ANCHOR_KINDS = ['screen', 'handCentroid', 'landmark', 'faceLandmark'] as const;
+
+/**
+ * The message for an unacceptable face-landmark index, or `null` when it is fine.
+ *
+ * This is the **authoring** boundary of spec D21: the range comes from `FACE_LANDMARK_COUNT`,
+ * which is provisional until the model is verified. It is deliberately not applied when a
+ * project is loaded — persisted data must not depend on an unverified model fact.
+ */
+function faceIndexError(value: number): string | null {
+  if (Number.isInteger(value) && value >= 0 && value < FACE_LANDMARK_COUNT) {
+    return null;
+  }
+  return 'Face landmark must be a whole number from 0 to ' + (FACE_LANDMARK_COUNT - 1) + '.';
+}
 
 function labelled(document: Document, spec: ParamSpec, field: HTMLElement): HTMLElement {
   const wrapper = document.createElement('label');
@@ -257,6 +272,34 @@ function renderAnchor(ctx: ControlContext): Control {
       );
       return;
     }
+    if (anchor.kind === 'faceLandmark') {
+      // No hand selector: a face anchor has no hand. Only the landmark number is authored.
+      const message = ctx.document.createElement('span');
+      message.className = 'mudra-editor__field-hint';
+      message.setAttribute('role', 'alert');
+      message.hidden = true;
+      const input = ctx.document.createElement('input');
+      input.type = 'number';
+      input.className = 'mudra-editor__input mudra-editor__input--small';
+      input.title = 'face landmark index';
+      input.value = String(anchor.index);
+      input.addEventListener('change', () => {
+        // An empty field is not index 0: `Number('')` would say so, and quietly store it.
+        const parsed = input.value.trim() === '' ? Number.NaN : Number(input.value);
+        const problem = faceIndexError(parsed);
+        if (problem !== null) {
+          // Rejected: nothing is stored, the field returns to what is stored, and the range is named.
+          message.textContent = problem;
+          message.hidden = false;
+          input.value = String(anchor.index);
+          return;
+        }
+        message.hidden = true;
+        ctx.onChange({ ...anchor, index: parsed });
+      });
+      fields.append(input, message);
+      return;
+    }
     const handSelect = ctx.document.createElement('select');
     handSelect.className = 'mudra-editor__input mudra-editor__input--small';
     for (const hand of HAND_SELECTORS) {
@@ -286,7 +329,9 @@ function renderAnchor(ctx: ControlContext): Control {
         ? { kind, x: 0.5, y: 0.5 }
         : kind === 'handCentroid'
           ? { kind, hand: 'first' }
-          : { kind, hand: 'first', index: 0 };
+          : kind === 'faceLandmark'
+            ? { kind, index: 0 }
+            : { kind, hand: 'first', index: 0 };
     ctx.onChange(next);
   });
 

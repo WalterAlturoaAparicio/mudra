@@ -32,6 +32,7 @@ import { HtmlAudioSink } from './infrastructure/audio/audio-sink';
 import { GetUserMediaCamera } from './infrastructure/camera/get-user-media-camera';
 import { loadSessionConfig } from './infrastructure/config/session-config-loader';
 import { createMediaPipeDetector } from './infrastructure/detection/mediapipe-detector';
+import { createMediaPipeFaceDetector } from './infrastructure/detection/mediapipe-face-detector';
 import { loadEffectCatalog } from './infrastructure/effects/catalog-loader';
 import { loadExemplarBundle } from './infrastructure/exemplars/bundle-loader';
 import { IndexedDbAssetBlobStore } from './infrastructure/persistence/indexeddb-asset-blob-store';
@@ -57,7 +58,11 @@ import type { PoseOption } from './presentation/editor/pose-trigger-panel';
 import { ProjectPanel } from './presentation/editor/project-panel';
 import { ProjectStartScreen } from './presentation/editor/project-start-screen';
 import { DiagnosticsPanel } from './presentation/debug/diagnostics-panel';
+import { faceOverlayCommands } from './presentation/debug/face-overlay';
 import { landmarkOverlayCommands } from './presentation/debug/landmark-overlay';
+import { PipelineSection } from './presentation/debug/pipeline-section';
+import type { FaceAnchorTrace } from './domain/runtime/effect-runtime';
+import type { RenderCommand } from './domain/runtime/frame-output';
 import { Stage } from './presentation/stage/stage';
 
 declare const __DATASET_FINGERPRINT__: string | null;
@@ -149,8 +154,16 @@ async function bootstrap(): Promise<void> {
   // Rejects honestly — no model present, an unsupported browser, no compatible delegate —
   // and `probeCapabilities()` turns that into the same "unavailable, reported" state
   // FR-041/FR-042 already require; nothing here assumes the model was fetched.
-  const { capabilities, segmenter } = await probeCapabilities(() =>
-    createMediaPipePersonSegmenter({ wasmPath: WASM_PATH }),
+  //
+  // Face landmarks (Spec 011) are probed the same way, independently: a missing face model — the
+  // default until a developer provisions it — marks only `face_landmarks` unavailable. Probing
+  // only *constructs* the detector; nothing is analysed until a camera is attached and a
+  // scheduled face-anchored action needs a face. The detector is page-scoped and closed once,
+  // at `pagehide`, never by camera detach or by closing a project.
+  const { capabilities, segmenter, faceDetector } = await probeCapabilities(
+    () => createMediaPipePersonSegmenter({ wasmPath: WASM_PATH }),
+    undefined,
+    () => createMediaPipeFaceDetector({ wasmPath: WASM_PATH }),
   );
 
   const runtime = new EffectRuntime({
@@ -201,6 +214,9 @@ async function bootstrap(): Promise<void> {
       ...(savedLayout?.activeLayoutId === undefined
         ? {}
         : { initialActiveLayoutId: savedLayout.activeLayoutId }),
+      ...(savedLayout?.activeTabs === undefined
+        ? {}
+        : { initialActiveTabs: savedLayout.activeTabs }),
       ...(savedLayout?.zoneLayouts === undefined
         ? {}
         : { initialZoneLayouts: savedLayout.zoneLayouts }),
@@ -228,6 +244,15 @@ async function bootstrap(): Promise<void> {
       audioSkips: () => audio.skipped,
     });
 
+    const pipelineSection = new PipelineSection(document, capabilities);
+    /** The latest face-anchor resolutions and when they happened — feeds the FaceMark overlay,
+     *  which drops them once stale rather than drawing a frozen marker. */
+    let latestFaceAnchors: {
+      readonly traces: readonly FaceAnchorTrace[];
+      readonly atMs: number;
+    } | null = null;
+    const FACE_OVERLAY_FRESH_MS = 500;
+
     const stageCanvas = document.createElement('canvas');
     const stage = new Stage({ canvas: stageCanvas });
     const runtimeController = new EditorRuntimeController({
@@ -236,6 +261,7 @@ async function bootstrap(): Promise<void> {
       matcher,
       config,
       audio,
+      faceDetector,
       // FR-058/FR-059, SC-010, quickstart scenario 14: the same performance panel `main.ts`
       // uses, so the live pipeline's numeric budgets stay observable while the editor UI —
       // dragging a clip, opening a panel — is being interacted with.
@@ -246,6 +272,12 @@ async function bootstrap(): Promise<void> {
           snapshot.activePlaybacks,
         );
         shell.setRuntimeDiagnostics(snapshot.runtime.diagnostics);
+        // Spec 011: display-only — shows whether face analysis ran this frame, plus the fixed hold.
+        shell.reflectFaceTracking(snapshot);
+        if (snapshot.runtime.faceAnchors.length > 0) {
+          latestFaceAnchors = { traces: snapshot.runtime.faceAnchors, atMs: snapshot.nowMs };
+        }
+        pipelineSection.update(snapshot);
       },
     });
 
@@ -376,6 +408,7 @@ async function bootstrap(): Promise<void> {
       prompts: dialogs,
       onCreateProject,
       getCurrentProject: () => shell.currentProject,
+      onProjectSaved: () => persistLayout(dockLayout.getLayout()),
       onProjectOpened: (opened) => {
         // A different project's past is not this one's undo history — `EditorShell.loadProject`
         // starts a fresh editing context itself now (spec 010 correction pass, item 6).
@@ -419,7 +452,7 @@ async function bootstrap(): Promise<void> {
       initialProject.cameraTreatment,
     );
     cameraHost.append(panels.camera.root);
-    diagnosticsHost.append(diagnosticsPanel.root);
+    diagnosticsHost.append(diagnosticsPanel.root, pipelineSection.root);
 
     // Registration order is mount order within each region.
     dockLayout.registerPanel({
@@ -482,6 +515,8 @@ async function bootstrap(): Promise<void> {
       region: 'timeline',
       element: timelineHost,
     });
+    // Every panel is registered: settle the restored trees so each open panel is mounted.
+    dockLayout.finishRestore();
 
     /**
      * Debug mode in the editor (item 21).
@@ -492,14 +527,41 @@ async function bootstrap(): Promise<void> {
      * `Stage.present()` overlay argument that already exists. No second renderer, no debug
      * branch inside any effect, and nothing added to the normal user-facing UI.
      */
-    const setDebug = (enabled: boolean): void => {
-      debugEnabled = enabled;
+    let faceDebugEnabled = false;
+    /** FaceMark: only what the pipeline already analysed / resolved, and only while fresh. */
+    const faceOverlayNow = (nowMs: number): readonly RenderCommand[] => {
+      const analysis = runtimeController.lastFaceAnalysis;
+      const face =
+        analysis !== null && nowMs - analysis.atMs <= FACE_OVERLAY_FRESH_MS ? analysis.frame : null;
+      const anchors =
+        latestFaceAnchors !== null && nowMs - latestFaceAnchors.atMs <= FACE_OVERLAY_FRESH_MS
+          ? latestFaceAnchors.traces
+          : [];
+      return faceOverlayCommands(face, anchors);
+    };
+    const applyOverlays = (): void => {
       runtimeController.setOverlayProvider(
-        enabled
-          ? (frame) => landmarkOverlayCommands(frame, config.renderer, frame.width, frame.height)
+        debugEnabled || faceDebugEnabled
+          ? (frame) => [
+              ...(debugEnabled
+                ? landmarkOverlayCommands(frame, config.renderer, frame.width, frame.height)
+                : []),
+              ...(faceDebugEnabled ? faceOverlayNow(frame.timestampMs) : []),
+            ]
           : null,
       );
-      dockLayout.root.dataset['debug'] = enabled ? 'true' : 'false';
+      dockLayout.root.dataset['debug'] = debugEnabled ? 'true' : 'false';
+      dockLayout.root.dataset['faceDebug'] = faceDebugEnabled ? 'true' : 'false';
+      // The pipeline/FaceMark diagnostics are a debug surface: shown only while a debug toggle is on.
+      pipelineSection.root.hidden = !(debugEnabled || faceDebugEnabled);
+    };
+    const setDebug = (enabled: boolean): void => {
+      debugEnabled = enabled;
+      applyOverlays();
+    };
+    const setFaceDebug = (enabled: boolean): void => {
+      faceDebugEnabled = enabled;
+      applyOverlays();
     };
     setDebug(false);
 
@@ -569,6 +631,14 @@ async function bootstrap(): Promise<void> {
         isChecked: () => debugEnabled,
         onToggle: () => setDebug(!debugEnabled),
       },
+      {
+        kind: 'checkbox',
+        label: 'FaceMark Debug',
+        description:
+          "Draw the face mesh and each face-anchored action's resolved landmark. Editor-only; observes, never triggers face analysis.",
+        isChecked: () => faceDebugEnabled,
+        onToggle: () => setFaceDebug(!faceDebugEnabled),
+      },
     ];
 
     // Undo/redo (spec 009 P3, corrected by spec 010's correction pass, item 6): `EditorShell`
@@ -616,6 +686,8 @@ async function bootstrap(): Promise<void> {
     runtimeController.start();
     window.addEventListener('pagehide', () => {
       runtimeController.stop();
+      // The one terminal release of the face detector: end of the page, not of a camera session.
+      faceDetector?.close();
     });
   }
 

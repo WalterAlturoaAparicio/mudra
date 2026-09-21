@@ -92,7 +92,12 @@ export class SampleList {
     row.className = 'capture-samples__row';
     row.dataset['sampleId'] = sample.id;
 
-    row.appendChild(landmarkThumbnail(this.document, sample.hands));
+    row.appendChild(
+      landmarkThumbnail(this.document, sample.hands, {
+        width: sample.frameWidth,
+        height: sample.frameHeight,
+      }),
+    );
 
     const facts = this.document.createElement('div');
     facts.className = 'capture-samples__facts';

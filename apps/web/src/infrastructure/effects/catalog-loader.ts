@@ -169,9 +169,14 @@ function parseAnchor(raw: Json, where: string): Anchor {
         hand: handSelector(raw, where),
         index: number(raw, 'index', where),
       };
+    case 'faceLandmark':
+      return { kind: 'faceLandmark', index: number(raw, 'index', where) };
     default:
       throw new CatalogError(
-        where + '.kind must be screen, handCentroid, or landmark, got "' + kind + '".',
+        where +
+          '.kind must be screen, handCentroid, landmark, or faceLandmark, got "' +
+          kind +
+          '".',
       );
   }
 }
@@ -371,6 +376,8 @@ function serializeAnchor(anchor: Anchor): Json {
       return { kind: 'handCentroid', hand: anchor.hand };
     case 'landmark':
       return { kind: 'landmark', hand: anchor.hand, index: anchor.index };
+    case 'faceLandmark':
+      return { kind: 'faceLandmark', index: anchor.index };
   }
 }
 

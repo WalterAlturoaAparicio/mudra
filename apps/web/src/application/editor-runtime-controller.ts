@@ -22,7 +22,11 @@ import { PoseEventEmitter } from '../domain/events/pose-events';
 import type { PoseEvent } from '../domain/events/pose-events';
 import type { LandmarkFrame } from '../domain/landmarks/types';
 import { landmarkFrame } from '../domain/landmarks/types';
+import type { FaceFrame, FaceFrameSource } from '../domain/landmarks/face';
+import { PipelineTelemetry } from './pipeline-telemetry';
+import type { PipelineSnapshot } from './pipeline-telemetry';
 import type { CameraSession, MirroredSurface } from '../domain/ports/camera';
+import type { FaceDetector } from '../domain/ports/face-detector';
 import type { HandDetector } from '../domain/ports/detector';
 import type { PersonSegmenter } from '../domain/ports/segmenter';
 import type { SegmentationFrame } from '../domain/editor/segmentation-frame';
@@ -82,6 +86,29 @@ export interface EditorFrameSnapshot {
    * quickstart scenario 14 has somewhere to read these from while a clip is being dragged.
    */
   readonly performance: PerformanceSnapshot;
+  /** Render cadence versus each model's own inference cadence and cost (development
+   *  diagnostics; observational — reading it never causes a model to run). */
+  readonly pipeline: PipelineSnapshot;
+  /** What the face pipeline last did. Carries no landmark data — counts and statuses only. */
+  readonly face: FaceDebugStatus;
+}
+
+/** The face pipeline's observable state, without any face geometry. */
+export interface FaceDebugStatus {
+  /** Whether a face detector was supplied at all (`face_landmarks` was probed available). */
+  readonly detectorPresent: boolean;
+  /** Outcome of the most recent analysis: `never` until a face-anchored action asked for one. */
+  readonly lastResult: 'never' | 'detected' | 'no_face' | 'count_mismatch' | 'error';
+  /** Landmark count the model last returned (`null` if unknown) — on a mismatch, the number it
+   *  actually returned, which is what tells an author `FACE_LANDMARK_COUNT` is wrong. */
+  readonly landmarkCount: number | null;
+}
+
+/** The face most recently analysed and when — for the development overlay only. Transient,
+ *  in-memory, never stored; the overlay treats a stale one as absent. */
+export interface LatestFace {
+  readonly frame: FaceFrame | null;
+  readonly atMs: number;
 }
 
 /** Everything the controller is built from. Injected; nothing is a module singleton. */
@@ -122,6 +149,16 @@ export interface EditorRuntimeControllerOptions {
    * treatment having been lost.
    */
   readonly cameraTreatment?: CameraTreatmentSettings;
+  /**
+   * The page's face detector (Spec 011), or `null`/absent when face tracking is unavailable.
+   *
+   * **Borrowed, never owned**: the controller never closes it. It outlives any one camera
+   * attachment and any one controller (each opened project builds a new controller), so
+   * turning the camera off — or closing a project — stops face *processing* without releasing
+   * the detector. It is closed once, by the page, at teardown. This is deliberately separate
+   * from `attachCamera`, whose lifecycle (including what it closes) is unchanged.
+   */
+  readonly faceDetector?: FaceDetector | null;
 }
 
 /**
@@ -161,6 +198,7 @@ export class EditorRuntimeController {
   private readonly events: PoseEventEmitter;
   private readonly metrics = new SessionMetrics();
   private readonly syntheticInputWhenCameraless: boolean;
+  private readonly faceDetector: FaceDetector | null;
   private readonly frameListeners = new Set<(snapshot: EditorFrameSnapshot) => void>();
   private overlay: ((frame: LandmarkFrame) => readonly RenderCommand[]) | null = null;
 
@@ -168,6 +206,15 @@ export class EditorRuntimeController {
   private cameraTreatment: CameraTreatmentSettings;
   private lastFrame: LandmarkFrame;
   private lastSegmentation: SegmentationFrame | null = null;
+  private readonly telemetry = new PipelineTelemetry();
+  private latestFace: LatestFace | null = null;
+  /**
+   * Whether face analysis ran in an `advance` outside `tick` (Test Trigger, Play Timeline) since
+   * the last tick. Without this, a one-frame face-anchored action started from those paths would
+   * analyse a face and never be reported, so the disclosure indicator would never show. The next
+   * tick's snapshot reports it once, then it is cleared (Spec 011 FR-019).
+   */
+  private faceRanOutsideTick = false;
   private running = false;
   private stopTicking: (() => void) | null = null;
 
@@ -182,6 +229,7 @@ export class EditorRuntimeController {
     this.logger = options.logger ?? new Logger();
     this.audio = options.audio;
     this.syntheticInputWhenCameraless = options.syntheticInputWhenCameraless ?? true;
+    this.faceDetector = options.faceDetector ?? null;
     this.cameraTreatment = options.cameraTreatment ?? DEFAULT_CAMERA_TREATMENT;
     this.events = new PoseEventEmitter(options.config.events.holdDurationMs);
     this.lastFrame = landmarkFrame([], this.now(), NO_CAMERA_WIDTH, NO_CAMERA_HEIGHT);
@@ -253,6 +301,42 @@ export class EditorRuntimeController {
     }
     this.events.reset();
     this.metrics.reset();
+    this.telemetry.reset();
+    this.latestFace = null;
+  }
+
+  /** Last analysis outcome: the adapter's own status when it offers one (it can tell a count
+   *  mismatch from "no face"), else what the controller itself observed. Never runs the detector. */
+  private faceOutcome(): Pick<FaceDebugStatus, 'lastResult' | 'landmarkCount'> {
+    const status = this.faceDetector?.diagnostics?.();
+    if (status !== undefined) {
+      const lastResult: FaceDebugStatus['lastResult'] =
+        status.outcome === 'none-yet'
+          ? 'never'
+          : status.outcome === 'face'
+            ? 'detected'
+            : status.outcome === 'no-face'
+              ? 'no_face'
+              : status.outcome === 'count-mismatch'
+                ? 'count_mismatch'
+                : 'error';
+      return { lastResult, landmarkCount: status.pointCount };
+    }
+    return {
+      lastResult:
+        this.latestFace === null
+          ? 'never'
+          : this.latestFace.frame === null
+            ? 'no_face'
+            : 'detected',
+      landmarkCount: this.latestFace?.frame?.points.length ?? null,
+    };
+  }
+
+  /** The most recent face analysis, for the development overlay. Observational: it returns what
+   *  the runtime already asked for and never invokes the detector. */
+  get lastFaceAnalysis(): LatestFace | null {
+    return this.latestFace;
   }
 
   /**
@@ -315,10 +399,17 @@ export class EditorRuntimeController {
     // FR-058 is about (mirrors `Session.processFrame`'s own `metrics.recordFrame` call).
     if (this.camera !== null && outcome !== null) {
       this.metrics.recordFrame(nowMs, outcome.latencyMs);
+      this.telemetry.recordTick(nowMs);
     }
 
     const events = outcome === null ? [] : this.events.advance(outcome, nowMs);
-    const runtimeFrame = this.runtime.advance(events, frame, nowMs, segmentation);
+    const runtimeFrame = this.runtime.advance(
+      events,
+      frame,
+      nowMs,
+      segmentation,
+      this.faceSourceFor(nowMs),
+    );
     this.playCues(runtimeFrame.audioCues);
     this.present(runtimeFrame.commands, frame);
 
@@ -328,11 +419,16 @@ export class EditorRuntimeController {
       events,
       holdProgress: this.events.progressAt(nowMs),
       activePlaybacks: runtimeFrame.activePlaybacks,
-      runtime: runtimeFrame,
+      runtime: this.foldOutsideTickFaceAnalysis(runtimeFrame),
       cameraAttached: this.camera !== null,
       syntheticInput: synthetic,
       activePoseSet: this.config.activePoseSet,
       performance: this.metrics.snapshot(),
+      pipeline: this.telemetry.snapshot(nowMs),
+      face: {
+        detectorPresent: this.faceDetector !== null,
+        ...this.faceOutcome(),
+      },
     };
     this.onFrame?.(snapshot);
     for (const listener of this.frameListeners) {
@@ -350,6 +446,40 @@ export class EditorRuntimeController {
       this.lastSegmentation,
       this.cameraTreatment,
     );
+  }
+
+  /** Merge face analysis that ran between ticks into this tick's frame, then clear the flag. */
+  private foldOutsideTickFaceAnalysis(runtimeFrame: RuntimeFrame): RuntimeFrame {
+    const ranOutside = this.faceRanOutsideTick;
+    this.faceRanOutsideTick = false;
+    return ranOutside && !runtimeFrame.faceTracking
+      ? { ...runtimeFrame, faceTracking: true }
+      : runtimeFrame;
+  }
+
+  /**
+   * The face source handed to the runtime for one frame, or `null` when face analysis cannot
+   * run right now (Spec 011 FR-016–FR-018).
+   *
+   * Derived from **live state every frame**, never latched: with no camera attached, or no face
+   * detector, the answer is `null`, so turning the camera off stops face processing on that very
+   * frame without closing anything. When it is non-null it is still only a *closure* — the
+   * runtime calls it, at most once, and only if a scheduled action with a face anchor needs a
+   * face. Nothing here calls the detector itself.
+   */
+  private faceSourceFor(nowMs: number): FaceFrameSource | null {
+    const camera = this.camera;
+    const detector = this.faceDetector;
+    if (camera === null || detector === null) {
+      return null;
+    }
+    return () => {
+      const startedAt = this.now();
+      const face = detector.detect(camera.session.surface, nowMs);
+      this.telemetry.recordRun('face', nowMs, this.now() - startedAt);
+      this.latestFace = { frame: face, atMs: nowMs };
+      return face;
+    };
   }
 
   /**
@@ -388,8 +518,14 @@ export class EditorRuntimeController {
     const captureStart = this.now();
     const { session, detector, segmenter } = this.camera;
     session.surface.update();
+    const handStart = this.now();
     const frame = detector.detect(session.surface, nowMs);
+    this.telemetry.recordRun('hand', nowMs, this.now() - handStart);
+    const segmentationStart = this.now();
     const segmentation = segmenter?.segment(session.surface, nowMs) ?? null;
+    if (segmenter !== null) {
+      this.telemetry.recordRun('segmentation', nowMs, this.now() - segmentationStart);
+    }
     const outcome = classify(frame, {
       matcher: this.matcher,
       activePoseSet: this.config.activePoseSet,
@@ -421,7 +557,14 @@ export class EditorRuntimeController {
       progress: 1,
     };
     const frame = this.previewInputFrame(nowMs);
-    const runtimeFrame = this.runtime.advance([event], frame, nowMs, this.lastSegmentation);
+    const runtimeFrame = this.runtime.advance(
+      [event],
+      frame,
+      nowMs,
+      this.lastSegmentation,
+      this.faceSourceFor(nowMs),
+    );
+    this.faceRanOutsideTick ||= runtimeFrame.faceTracking;
     this.playCues(runtimeFrame.audioCues);
     this.present(runtimeFrame.commands, frame);
     return {
@@ -475,7 +618,14 @@ export class EditorRuntimeController {
    *  immediately rather than at the next scheduled tick. */
   private advanceAndPresent(nowMs: number): void {
     const frame = this.previewInputFrame(nowMs);
-    const runtimeFrame = this.runtime.advance([], frame, nowMs, this.lastSegmentation);
+    const runtimeFrame = this.runtime.advance(
+      [],
+      frame,
+      nowMs,
+      this.lastSegmentation,
+      this.faceSourceFor(nowMs),
+    );
+    this.faceRanOutsideTick ||= runtimeFrame.faceTracking;
     this.playCues(runtimeFrame.audioCues);
     this.present(runtimeFrame.commands, frame);
   }

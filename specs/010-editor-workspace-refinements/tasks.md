@@ -472,3 +472,14 @@ browser pass remains outstanding until actually run (see quickstart.md's Definit
 - Two files see the most cross-story traffic and are the most likely source of a merge conflict if
   worked in parallel: `dock-layout.ts` (US2, US3) and `editor-shell.ts` (US1, US4). Sequence work
   on each of those two files within its own set of stories.
+
+---
+
+## Amendment 2026-09-21 — restore invariant, persistence, popover (FR-051–FR-053)
+
+- [X] T074 Fix `DockLayout` restore: keep stored trees intact until every persisted panel has registered; add `finishRestore()` (drop unknown/closed/duplicate ids, mount orphaned open panels, re-persist only if healed); call it once in `editor-main.ts` after the last `registerPanel`. *(FR-051)*
+- [X] T075 Persist the active tab per tab group (`EditorLayout.activeTabs`, `DockLayoutOptions.initialActiveTabs`, save on tab click); flush the layout on explicit project Save (`ProjectPanel.onProjectSaved`). Extend `layout-panels.test.ts` (additive `activeTabs`). *(FR-052)*
+- [X] T076 Popover: `[hidden] { display: none }` and `.mudra-layout__menu { position: relative; z-index: 40 }` in `editor.css`. *(FR-053)*
+- [X] T077 `test/adapters/dock-layout-restore.test.ts`: registration-order matrix, healing, duplicates, active-tab round-trip, popover CSS contract. *(FR-051–053)*
+- [ ] T078 **Manual, human**: refresh; restart the dev server; close/reopen and switch projects; arrange left `Project|Explorer` tabs and right `Inspector|Effect|Actions` tabs + Camera/Diagnostics; Save; restart; confirm the same arrangement and every open panel visible; open File/Edit/View over panels and confirm no overlap. Not ticked until performed.
+
